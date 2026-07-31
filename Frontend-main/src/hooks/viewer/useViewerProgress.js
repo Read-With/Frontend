@@ -471,11 +471,6 @@ function settle(resolve, result) {
   return result;
 }
 
-function logWarn(message, detail) {
-  if (!import.meta.env.DEV) return;
-  errorUtils.logWarning(`${LOG_PREFIX} ${message}`, detail);
-}
-
 /** pagehide / beforeunload / visibility hidden 공통 구독 */
 function subscribePageExit(onExit, { onHidden } = {}) {
   const onVisibility = () => {
@@ -512,7 +507,7 @@ export function useProgressAutoSave({
     try {
       setCachedLocation(getCachedReaderProgress(bookId));
     } catch (error) {
-      logWarn('캐시된 위치 정보를 불러오는데 실패했습니다', error.message);
+      errorUtils.logWarning(`${LOG_PREFIX} 캐시된 위치 정보를 불러오는데 실패했습니다`, error.message);
       setCachedLocation(null);
     }
   }, [bookId]);
@@ -524,7 +519,7 @@ export function useProgressAutoSave({
       if (stored) setCachedLocation(stored);
       return stored;
     } catch (error) {
-      logWarn('캐시된 위치 정보를 저장하는데 실패했습니다', error.message);
+      errorUtils.logWarning(`${LOG_PREFIX} 캐시된 위치 정보를 저장하는데 실패했습니다`, error.message);
       return null;
     }
   }, [bookId]);
@@ -611,7 +606,10 @@ export function useProgressAutoSave({
         if (prevCached) setProgressToCache(prevCached);
         else removeProgressFromCache(id);
       }
-      logWarn('서버 저장 실패', err?.message ?? (typeof err === 'string' ? err : ''));
+      errorUtils.logWarning(
+        `${LOG_PREFIX} 서버 저장 실패`,
+        err?.message ?? (typeof err === 'string' ? err : ''),
+      );
       return settle(resolve, { isSuccess: false, message: err?.message });
     }
   }, []);
@@ -696,7 +694,10 @@ export function useProgressAutoSave({
       if (ok) {
         lastPayloadRef.current = payloadFingerprint(payload);
       } else {
-        logWarn('keepalive 저장 요청 생성 실패', String(liveRef.current.bookId ?? ''));
+        errorUtils.logWarning(
+          `${LOG_PREFIX} keepalive 저장 요청 생성 실패`,
+          String(liveRef.current.bookId ?? ''),
+        );
       }
     };
 

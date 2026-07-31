@@ -33,6 +33,7 @@ import {
   loadCachedXhtmlContent,
   XHTML_CACHE_INVALIDATED_EVENT,
 } from '../../utils/viewer/viewerLocator';
+import './XhtmlViewer.css';
 
 const XhtmlViewer = forwardRef(
   (
@@ -47,6 +48,7 @@ const XhtmlViewer = forwardRef(
       /** resume 점프 전 본문 깜빡임 방지(레이아웃·ruler는 유지) */
       suppressViewport = false,
       suppressMessage = '로딩 중...',
+      onToggleChrome = null,
     },
     ref
   ) => {
@@ -63,6 +65,9 @@ const XhtmlViewer = forwardRef(
     const [currentPageIndex, setCurrentPageIndex] = useState(0);
     const [reloadNonce, setReloadNonce] = useState(0);
     const touchStartX = useRef(0);
+    const touchStartY = useRef(0);
+    const suppressClickRef = useRef(false);
+    const wheelLockRef = useRef(false);
     const lastLocatorRef = useRef(null);
     const lastEmittedViewportLocatorJsonRef = useRef(null);
     const prevBidRef = useRef(null);
@@ -104,10 +109,7 @@ const XhtmlViewer = forwardRef(
       : currentPageIndex;
     const currentPage = safePageIndex + 1;
 
-    const currentSnap = useMemo(
-      () => getSnappedOffsetAndHeight(safePageIndex, pageHeight || 1),
-      [safePageIndex, pageHeight, lineBoundsVersion, getSnappedOffsetAndHeight]
-    );
+    const currentSnap = getSnappedOffsetAndHeight(safePageIndex, pageHeight || 1);
 
     const contentHtml = useMemo(() => (xhtmlContent ? { __html: xhtmlContent.bodyHTML } : { __html: '' }), [xhtmlContent]);
     const viewportStyle = useMemo(
@@ -211,6 +213,7 @@ const XhtmlViewer = forwardRef(
           setXhtmlContent(parsed);
         } catch (e) {
           if (!cancelled) {
+            errorUtils.logError('XhtmlViewer', e, { bookId: bid });
             setError(
               e?.status === 404
                 ? '정규화 본문을 찾을 수 없습니다. 잠시 후 다시 시도하거나 재정규화가 필요할 수 있습니다.'
@@ -380,38 +383,107 @@ const XhtmlViewer = forwardRef(
 
     const handleKeyDown = useCallback((e) => {
       if (e.target.closest('input, textarea, [contenteditable]')) return;
-      if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'PageUp' || e.key === 'PageDown') {
+      if (e.key === 'ArrowUp' || e.key === 'PageUp') {
         e.preventDefault();
+        prevPage();
+        return;
+      }
+      if (e.key === 'ArrowDown' || e.key === 'PageDown') {
+        e.preventDefault();
+        nextPage();
         return;
       }
       if (e.key === 'ArrowLeft') { e.preventDefault(); prevPage(); return; }
       if (e.key === 'ArrowRight') { e.preventDefault(); nextPage(); }
     }, [prevPage, nextPage]);
 
+    const WHEEL_COOLDOWN_MS = 280;
+    useEffect(() => {
+      const el = containerRef.current;
+      if (!el) return undefined;
+      const onWheel = (e) => {
+        e.preventDefault();
+        if (suppressViewport || wheelLockRef.current) return;
+        const absY = Math.abs(e.deltaY);
+        const absX = Math.abs(e.deltaX);
+        if (absY < 8 && absX < 8) return;
+        const delta = absY >= absX ? e.deltaY : e.deltaX;
+        if (!delta) return;
+        wheelLockRef.current = true;
+        if (delta > 0) nextPage();
+        else prevPage();
+        window.setTimeout(() => {
+          wheelLockRef.current = false;
+        }, WHEEL_COOLDOWN_MS);
+      };
+      el.addEventListener('wheel', onWheel, { passive: false });
+      return () => el.removeEventListener('wheel', onWheel);
+    }, [nextPage, prevPage, suppressViewport, xhtmlContent]);
+
     const SWIPE_THRESHOLD = 50;
+    const TAP_SLOP_PX = 12;
+    const TAP_ZONE_EDGE = 1 / 3;
+
+    const resolveTapAction = useCallback((clientX) => {
+      const el = containerRef.current;
+      if (!el) return 'chrome';
+      const { left, width } = el.getBoundingClientRect();
+      if (!(width > 0)) return 'chrome';
+      const ratio = (clientX - left) / width;
+      if (ratio < TAP_ZONE_EDGE) return 'prev';
+      if (ratio > 1 - TAP_ZONE_EDGE) return 'next';
+      return 'chrome';
+    }, []);
+
     const handleTouchStart = useCallback((e) => {
       const t = e.touches?.[0];
-      if (t) touchStartX.current = t.clientX;
+      if (!t) return;
+      touchStartX.current = t.clientX;
+      touchStartY.current = t.clientY;
     }, []);
     const handleTouchEnd = useCallback((e) => {
       const t = e.changedTouches?.[0];
       if (!t) return;
       const dx = t.clientX - touchStartX.current;
-      if (Math.abs(dx) < SWIPE_THRESHOLD) return;
-      if (dx > 0) prevPage();
-      else nextPage();
-    }, [prevPage, nextPage]);
+      const dy = t.clientY - touchStartY.current;
+      if (Math.abs(dx) >= SWIPE_THRESHOLD && Math.abs(dx) > Math.abs(dy)) {
+        suppressClickRef.current = true;
+        if (dx > 0) prevPage();
+        else nextPage();
+        return;
+      }
+      if (Math.abs(dx) <= TAP_SLOP_PX && Math.abs(dy) <= TAP_SLOP_PX) {
+        suppressClickRef.current = true;
+        if (suppressViewport) return;
+        const action = resolveTapAction(t.clientX);
+        if (action === 'prev') prevPage();
+        else if (action === 'next') nextPage();
+        else onToggleChrome?.();
+      }
+    }, [nextPage, onToggleChrome, prevPage, resolveTapAction, suppressViewport]);
+
+    const handleClick = useCallback((e) => {
+      if (suppressClickRef.current) {
+        suppressClickRef.current = false;
+        return;
+      }
+      if (suppressViewport) return;
+      const action = resolveTapAction(e.clientX);
+      if (action === 'prev') prevPage();
+      else if (action === 'next') nextPage();
+      else onToggleChrome?.();
+    }, [nextPage, onToggleChrome, prevPage, resolveTapAction, suppressViewport]);
 
     if (loading) {
       return (
-        <div className="flex items-center justify-center w-full h-full text-gray-600" role="status" aria-live="polite">
+        <div className="xhtml-viewer-status" role="status" aria-live="polite">
           로딩 중...
         </div>
       );
     }
     if (error) {
       return (
-        <div className="flex items-center justify-center w-full h-full text-red-600" role="alert">
+        <div className="xhtml-viewer-status xhtml-viewer-status--error" role="alert">
           {error}
         </div>
       );
@@ -425,39 +497,24 @@ const XhtmlViewer = forwardRef(
     return (
       <div
         ref={containerRef}
-        className="w-full h-full overflow-hidden bg-white relative"
+        className="xhtml-viewer"
         tabIndex={0}
         role="region"
         aria-label={`책 본문 뷰어, ${currentPage} / ${totalPages} 페이지`}
         aria-busy={suppressViewport || undefined}
         onKeyDown={handleKeyDown}
-        onWheel={(e) => e.preventDefault()}
+        onClick={handleClick}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
-        style={{ touchAction: 'pan-y' }}
       >
         {styleCss ? <style>{styleCss}</style> : null}
         <style>{`
           .xhtml-viewer-content {
             padding: ${contentPadding.padding}px;
             padding-bottom: ${contentPadding.paddingBottom}px;
-            box-sizing: border-box;
-            width: 100%;
-            max-width: 100%;
-            min-width: 0;
             font-size: ${baseFontSize}%;
             line-height: ${lineHeight};
             font-family: ${settings?.fontFamily || 'Noto Serif KR'}, 'Noto Serif', Georgia, serif;
-            overflow-wrap: break-word;
-            word-break: break-word;
-          }
-          .xhtml-viewer-ruler {
-            position: absolute;
-            visibility: hidden;
-            pointer-events: none;
-            left: 0;
-            top: 0;
-            width: 100%;
           }
         `}</style>
         <div ref={rulerRef} className="xhtml-viewer-ruler xhtml-viewer-content" dangerouslySetInnerHTML={contentHtml} aria-hidden />
@@ -471,11 +528,7 @@ const XhtmlViewer = forwardRef(
           <div ref={contentRef} className="xhtml-viewer-content" style={contentStyle} dangerouslySetInnerHTML={contentHtml} />
         </div>
         {suppressViewport ? (
-          <div
-            className="absolute inset-0 flex items-center justify-center bg-white text-gray-600"
-            role="status"
-            aria-live="polite"
-          >
+          <div className="xhtml-viewer-suppress" role="status" aria-live="polite">
             {suppressMessage}
           </div>
         ) : null}

@@ -1,7 +1,6 @@
 /** book-scope 그래프 API·manifest·관계 타임라인 (RelationGraph 전용) */
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { getBookScopeRelationshipGraph } from '../../utils/api/graphApi.js';
 import {
   loadGraphDataWithCache,
   hasMacroGraphStorageCache,
@@ -10,8 +9,8 @@ import {
   padSingleEvent,
   fetchRelationTimelineCumulative,
   fetchRelationTimelineViewer,
-  FETCH_STATUS,
 } from '../../utils/graph/graphFetch';
+import { getBookScopeRelationshipGraph, FETCH_STATUS } from '../../utils/api/graphApi.js';
 import { getMaxChapter } from '../../utils/common/cache/manifestCache';
 import { toPositiveNumberOrNull, toPositiveInt } from '../../utils/common/valueUtils';
 import {
@@ -32,6 +31,7 @@ export function useApiGraphData(serverBookId, currentChapter) {
     error: manifestLoadError,
   } = useManifestLoaded(serverBookId);
   const [apiBookGraphData, setApiBookGraphData] = useState(null);
+  const [loadedGraphKey, setLoadedGraphKey] = useState(null);
   const [userCurrentChapter, setUserCurrentChapter] = useState(null);
   const [isGraphLoading, setIsGraphLoading] = useState(false);
   const { handleError } = useErrorHandler('API Graph Data');
@@ -76,17 +76,12 @@ export function useApiGraphData(serverBookId, currentChapter) {
 
     if (bookChanged) {
       setApiBookGraphData(null);
+      setLoadedGraphKey(null);
       setUserCurrentChapter(null);
       loadedGraphKeyRef.current = null;
       return;
     }
-
-    if (!serverBookId) return;
-
-    if (!hasMacroSessionCache(serverBookId, currentChapter)) {
-      setApiBookGraphData(null);
-    }
-  }, [serverBookId, currentChapter]);
+  }, [serverBookId]);
 
   const loadMacroGraphData = useCallback(async () => {
     const chapter = toPositiveInt(currentChapter);
@@ -112,7 +107,6 @@ export function useApiGraphData(serverBookId, currentChapter) {
     const fail = (error, message, metadata) => {
       if (isStale(requestId)) return;
       loadedGraphKeyRef.current = null;
-      setApiBookGraphData(null);
       setApiError(handleError(error, message, { metadata }));
     };
 
@@ -135,6 +129,7 @@ export function useApiGraphData(serverBookId, currentChapter) {
           setApiError(null);
           setApiBookGraphData(enrichGraphPayload(data, targetBookId));
           loadedGraphKeyRef.current = graphKey;
+          setLoadedGraphKey(graphKey);
           if (data.userCurrentChapter !== undefined) {
             setUserCurrentChapter(data.userCurrentChapter);
           }
@@ -188,6 +183,7 @@ export function useApiGraphData(serverBookId, currentChapter) {
     },
     graph: {
       data: apiBookGraphData,
+      loadedKey: loadedGraphKey,
       maxChapter: apiMaxChapter,
       userCurrentChapter,
       isLoading: isGraphLoading,
@@ -271,6 +267,10 @@ export function useRelationData(mode, id1, id2, chapterNum, eventNum, bookId = n
     setError(null);
     setIncomplete(false);
     setUsedProbe(false);
+    // 다른 간선/이벤트 전환 시 이전 차트 잔상 제거
+    setTimeline([]);
+    setLabels([]);
+    setNoRelation(false);
 
     try {
       const result =

@@ -25,6 +25,7 @@ import {
   resolveViewerReadingPosition,
   userViewerReadingPath,
   userViewerBookmarksPath,
+  errorUtils,
 } from '../../utils/common/urlUtils';
 
 const EVENT_TRANSITION_FALLBACK_MS = 50;
@@ -39,6 +40,9 @@ function resetTransitionState(setTransitionState) {
 
 function reportSettingsSaveFailure(result, fallbackMessage) {
   if (result.success) return true;
+  errorUtils.logWarning('useViewerPage', result.message || fallbackMessage, {
+    action: 'saveSettings',
+  });
   toast.error(result.message || fallbackMessage);
   return false;
 }
@@ -196,8 +200,10 @@ function usePersistedViewerSettings() {
       if (e.key !== SETTINGS_STORAGE_KEY || e.newValue == null) return;
       try {
         setSettingsState(normalizeSettings(JSON.parse(e.newValue)));
-      } catch {
-        /* ignore */
+      } catch (err) {
+        errorUtils.logDebug('useViewerPage', '설정 storage 동기화 파싱 실패', {
+          message: err?.message,
+        });
       }
     };
     window.addEventListener('storage', onStorage);
@@ -244,7 +250,7 @@ export function useViewerPage() {
   const [failCount, setFailCount] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
-  const [showToolbar, setShowToolbar] = useState(false);
+  const [showToolbar, setShowToolbar] = useState(true);
   const [progress, setProgress] = useState(null);
   const progressRef = useRef(progress);
   progressRef.current = progress;
@@ -279,6 +285,7 @@ export function useViewerPage() {
     setIsDataReady,
     setIsGraphLoading,
     setEventGraphLoading,
+    setAppliedGraphKey,
     graphState,
     graphActions,
     graphViewerState,
@@ -369,6 +376,7 @@ export function useViewerPage() {
     setIsGraphLoading,
     setEventGraphLoading,
     setIsDataReady,
+    setAppliedGraphKey,
   });
 
   const { cachedLocation, flushProgressAsync } = useProgressAutoSave({
@@ -427,7 +435,11 @@ export function useViewerPage() {
       if (!ready) return false;
       await restoreViewerPosition(viewerRef, progressRef.current);
       return true;
-    } catch {
+    } catch (err) {
+      errorUtils.logWarning('useViewerPage', '레이아웃 전환 후 위치 복원 실패', {
+        action: 'restoreAfterLayout',
+        message: err?.message,
+      });
       return false;
     }
   }, []);
@@ -438,7 +450,7 @@ export function useViewerPage() {
 
     const restored = await restoreAfterViewerLayoutChange();
     if (!restored) {
-      toast.error('화면 모드 전환 중 오류가 발생했습니다.');
+      toast.error('보기 방식 전환 중 오류가 발생했습니다.');
     }
   }, [setSettings, restoreAfterViewerLayoutChange]);
 
@@ -448,8 +460,11 @@ export function useViewerPage() {
     if (!ready) return;
     try {
       await viewerRef.current.moveToProgress(value);
-    } catch {
-      /* ignore seek errors */
+    } catch (err) {
+      errorUtils.logDebug('useViewerPage', '진도 슬라이더 seek 실패', {
+        message: err?.message,
+        value,
+      });
     }
   }, []);
 
@@ -457,6 +472,10 @@ export function useViewerPage() {
     const apiId = resolveBookmarkApiBookId(book, bookKey || bookId);
     const path = userViewerBookmarksPath(apiId);
     if (!path) {
+      errorUtils.logWarning('useViewerPage', '북마크 목록 경로 생성 실패', {
+        action: 'openBookmarks',
+        bookId: apiId ?? bookId,
+      });
       toast.error('책 정보가 없어 북마크 목록을 열 수 없습니다.');
       return;
     }

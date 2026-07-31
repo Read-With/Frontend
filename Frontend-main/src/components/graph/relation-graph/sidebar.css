@@ -1,0 +1,107 @@
+/* ============================================================
+   Graph sidebar
+   ============================================================ */
+
+/* 그래프와 맞닿는 왼쪽 세로 구분 + 고정 패널 셸 */
+.graph-page-sidebar {
+  position: fixed;
+  top: 0;
+  width: 30rem; /* GRAPH_LAYOUT_CONSTANTS.TOOLTIP_SIDEBAR_WIDTH = 480 */
+  height: 100vh;
+  background: var(--rg-surface);
+  border-radius: 0;
+  z-index: 99999;
+  overflow: hidden;
+  transition: right 520ms cubic-bezier(0.4, 0, 0.2, 1);
+  border-left: 0.0625rem solid var(--rg-border-strong);
+  box-shadow: -0.25rem 0 0.75rem rgba(15, 23, 42, 0.08);
+}
+
+.graph-sidebar-panel {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--rg-surface);
+  overflow: hidden;
+  font-family: var(--font-family-primary);
+  box-sizing: border-box;
+  /* 천장·돌아가기/줌 행 아래부터 여유 있게 시작 */
+  padding-top: 3.75rem;
+}
+
+.graph-sidebar-panel .tooltip-close-btn {
+  top: 4.35rem;
+}
+
+.graph-sidebar-body .node-tooltip-header {
+  padding-top: 1.25rem;
+  padding-bottom: 1rem;
+}
+
+.graph-sidebar-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.graph-sidebar-body .business-card-description {
+  max-height: none;
+  flex: 0 0 auto;
+  font-size: 0.9375rem;
+  line-height: 1.65;
+}
+
+.sidebar-section {
+  background: transparent;
+  border: none;
+  border-top: 0.0625rem solid var(--rg-border);
+  border-radius: 0;
+  box-shadow: none;
+  padding: 1rem 1.25rem;
+  margin: 0;
+}
+
+.edge-tooltip-content--sidebar {
+  height: 100%;
+  max-height: none;
+  flex: 1;
+  min-height: 0;
+}
+
+.edge-tooltip-panel--sidebar {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  max-height: none;
+}
+
+/* Shared thin scrollbar (sidebar body + edge tooltip panels) */
+.edge-tooltip-body::-webkit-scrollbar,
+.graph-sidebar-body::-webkit-scrollbar,
+.edge-tooltip-panel--sidebar::-webkit-scrollbar {
+  width: 0.375rem;
+}
+
+.edge-tooltip-body::-webkit-scrollbar-track,
+.graph-sidebar-body::-webkit-scrollbar-track,
+.edge-tooltip-panel--sidebar::-webkit-scrollbar-track {
+  background: var(--rg-surface-gray);
+  border-radius: 0.1875rem;
+}
+
+.edge-tooltip-body::-webkit-scrollbar-thumb,
+.graph-sidebar-body::-webkit-scrollbar-thumb,
+.edge-tooltip-panel--sidebar::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 0.1875rem;
+}
+
+.edge-tooltip-body::-webkit-scrollbar-thumb:hover,
+.graph-sidebar-body::-webkit-scrollbar-thumb:hover,
+.edge-tooltip-panel--sidebar::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}

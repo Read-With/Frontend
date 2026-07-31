@@ -1,32 +1,35 @@
-import { useState, useEffect, useMemo, useCallback, memo, useRef } from 'react';
+import { createElement, useState, useEffect, useMemo, useCallback, memo, useRef } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import {
+  ArrowLeft,
+  ArrowRight,
+  Bookmark,
+  BookmarkPlus,
+  BookMarked,
+  CircleHelp,
+  Columns2,
+  Maximize2,
+  Menu,
+  Network,
+  Settings,
+  X,
+} from 'lucide-react';
 import { findViewerModeOption } from '../../utils/viewer/viewerSession';
 import { userViewerPath, userGraphPath } from '../../utils/common/urlUtils';
-import { COLORS } from '../../utils/styles/styles.js';
+import { useClickOutside } from '../../hooks/ui/tooltipHooks';
+import { toast } from 'react-toastify';
 import './ViewerToolbar.css';
 
-const PROGRESS_BAR_BG = COLORS.progressTrack;
 const SPLIT_STORAGE_KEY = 'viewer-graph-split-percent';
+const MODE_HINT_SESSION_KEY = 'rw-viewer-mode-hint-seen';
+const CHROME_HINT_SESSION_KEY = 'rw-viewer-chrome-hint-seen';
 const SPLIT_MIN = 32;
 const SPLIT_MAX = 68;
 const NARROW_MQ = '(max-width: 767px)';
-
-const TOOLBAR_BTN = {
-  backgroundColor: COLORS.white,
-  color: COLORS.primary,
-  border: `1px solid ${COLORS.borderMuted}`,
-};
-
-const mobileMenuClass = 'flex items-center justify-center gap-2 p-3 rounded-lg transition-colors';
-const iconMb = { marginBottom: '-2px' };
-const flexLabel = { display: 'flex', alignItems: 'center', gap: '0.45em' };
-const flexLabelCenter = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  gap: '0.45em',
-  width: '100%',
-};
+const ICON_SM = 18;
+const MODE_HINT_PANEL_ID = 'viewer-mode-hint-panel';
+const CHROME_HINT_PANEL_ID = 'viewer-chrome-hint-panel';
+const SHORTCUTS_PANEL_ID = 'viewer-shortcuts-panel';
 
 function readStoredSplitPercent() {
   try {
@@ -38,39 +41,127 @@ function readStoredSplitPercent() {
   return 50;
 }
 
+function readModeHintSeen() {
+  try {
+    return sessionStorage.getItem(MODE_HINT_SESSION_KEY) === '1';
+  } catch {
+    return true;
+  }
+}
+
+function markModeHintSeen() {
+  try {
+    sessionStorage.setItem(MODE_HINT_SESSION_KEY, '1');
+  } catch {
+    /* ignore */
+  }
+}
+
+function readChromeHintSeen() {
+  try {
+    return sessionStorage.getItem(CHROME_HINT_SESSION_KEY) === '1';
+  } catch {
+    return true;
+  }
+}
+
+function markChromeHintSeen() {
+  try {
+    sessionStorage.setItem(CHROME_HINT_SESSION_KEY, '1');
+  } catch {
+    /* ignore */
+  }
+}
+
 function ToolbarButton({
   onClick,
   title,
   ariaLabel,
-  style,
   className = 'xhtml-toolbar-btn',
   children,
+  ...rest
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       className={className}
-      style={style ? { ...TOOLBAR_BTN, ...style } : TOOLBAR_BTN}
       title={title}
       aria-label={ariaLabel || title}
+      {...rest}
     >
       {children}
     </button>
   );
 }
 
-function IconLabel({ icon, label, center = false, boldIcon = false }) {
+function IconLabel({ icon: Icon, label, center = false, strokeWidth = 2 }) {
   return (
-    <span style={center ? flexLabelCenter : flexLabel}>
-      <span
-        className="material-symbols-outlined"
-        style={boldIcon ? { ...iconMb, fontWeight: 'bold' } : iconMb}
-      >
-        {icon}
-      </span>
-      {label != null && <span style={center ? { fontWeight: '600' } : undefined}>{label}</span>}
+    <span className={`viewer-toolbar-label${center ? ' is-centered' : ''}`}>
+      {createElement(Icon, { size: ICON_SM, strokeWidth, 'aria-hidden': true })}
+      {label != null ? <span className="viewer-toolbar-label-text">{label}</span> : null}
     </span>
+  );
+}
+
+/** 본문만 ↔ 본문+그래프 토글 + 세션 1회 힌트 */
+function ScreenModeToggle({
+  showGraph,
+  onToggleGraph,
+  title,
+  className,
+  message,
+  hintSeen,
+  open,
+  onDismissHint,
+  menu = false,
+}) {
+  const rootRef = useClickOutside(() => {
+    if (open) onDismissHint();
+  }, open);
+
+  const handleClick = () => {
+    onDismissHint();
+    onToggleGraph?.();
+  };
+
+  const modeLabel = showGraph ? '본문+그래프' : '본문만';
+
+  return (
+    <div className={`viewer-mode-hint${menu ? ' is-menu' : ''}`} ref={rootRef}>
+      <ToolbarButton
+        onClick={handleClick}
+        title={title}
+        ariaLabel={`보기 방식 전환, 현재 ${modeLabel}`}
+        className={`${className}${!hintSeen ? ' has-hint' : ''}`}
+        aria-expanded={open}
+        aria-controls={open ? MODE_HINT_PANEL_ID : undefined}
+      >
+        {menu ? (
+          <>
+            {showGraph ? (
+              <Columns2 size={ICON_SM} strokeWidth={2.5} aria-hidden />
+            ) : (
+              <Maximize2 size={ICON_SM} aria-hidden />
+            )}
+            <span className="viewer-mobile-menu-label">{modeLabel}</span>
+          </>
+        ) : (
+          <IconLabel
+            icon={showGraph ? Columns2 : Maximize2}
+            label={modeLabel}
+            center
+            strokeWidth={showGraph ? 2.5 : 2}
+          />
+        )}
+        {!hintSeen ? <span className="viewer-mode-hint-dot" aria-hidden /> : null}
+      </ToolbarButton>
+      {open ? (
+        <p id={MODE_HINT_PANEL_ID} className="viewer-mode-hint-panel" role="status">
+          {message}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
@@ -78,6 +169,7 @@ const ViewerProgressBar = memo(function ViewerProgressBar({
   showToolbar,
   progress = null,
   onSliderChange,
+  currentChapter = 1,
   currentPage = 1,
   totalPages = 1,
   progressMetricsReady = true,
@@ -86,6 +178,7 @@ const ViewerProgressBar = memo(function ViewerProgressBar({
   const clamped = hasProgress ? Math.max(0, Math.min(Number(progress), 100)) : 0;
   const percentLabel =
     progressMetricsReady && hasProgress ? `${Math.round(clamped)}%` : '계산중';
+  const chapterLabel = `챕터 ${Math.max(1, Math.trunc(Number(currentChapter) || 1))}`;
 
   const onChange = (e) => {
     if (!progressMetricsReady || !onSliderChange) return;
@@ -94,20 +187,13 @@ const ViewerProgressBar = memo(function ViewerProgressBar({
 
   return (
     <div
-      className={`w-full z-20 px-6 py-2 flex justify-between items-center shadow-md transition-opacity duration-300 ${
-        showToolbar ? 'opacity-100' : 'opacity-0 pointer-events-none'
-      }`}
-      style={{
-        backdropFilter: 'blur(8px)',
-        background: 'rgba(255,255,255,0.92)',
-        borderRadius: 16,
-        boxShadow: '0 2px 16px rgba(92,111,92,0.10)',
-        margin: '0.5rem 0 0.5rem 1rem',
-        maxWidth: 700,
-      }}
+      className={`viewer-progress-bar${showToolbar ? '' : ' is-hidden'}`}
     >
-      <span style={{ fontWeight: 700, color: COLORS.nodeText, fontSize: '1.08rem', minWidth: 70 }}>
-        {currentPage} / {totalPages}
+      <span className="viewer-progress-primary">
+        <span className="viewer-progress-chapter">{chapterLabel}</span>
+        <span className="viewer-progress-page" title="뷰포트 기준 가상 페이지">
+          {currentPage}/{totalPages}
+        </span>
       </span>
       <input
         type="range"
@@ -116,33 +202,11 @@ const ViewerProgressBar = memo(function ViewerProgressBar({
         value={clamped}
         onChange={onChange}
         disabled={!progressMetricsReady}
-        style={{
-          width: '60%',
-          accentColor: COLORS.primary,
-          height: 6,
-          borderRadius: 8,
-          background: PROGRESS_BAR_BG,
-          boxShadow: '0 1px 6px rgba(92,111,92,0.07)',
-          outline: 'none',
-          appearance: 'none',
-          opacity: progressMetricsReady ? 1 : 0.55,
-          cursor: progressMetricsReady ? 'pointer' : 'not-allowed',
-        }}
         aria-label="진행률 슬라이더"
         aria-busy={!progressMetricsReady}
         className="progressbar-slider"
       />
-      <span
-        style={{
-          fontWeight: 700,
-          color: COLORS.primary,
-          fontSize: '1.08rem',
-          minWidth: 60,
-          textAlign: 'right',
-        }}
-      >
-        {percentLabel}
-      </span>
+      <span className="viewer-progress-pct">{percentLabel}</span>
     </div>
   );
 });
@@ -161,6 +225,7 @@ function ViewerToolbar({
   isFromLibrary = false,
   previousPage = null,
   onExitToMypage,
+  onToggleShortcuts,
 }) {
   const navigate = useNavigate();
   const { filename: bookId } = useParams();
@@ -170,6 +235,19 @@ function ViewerToolbar({
     () => typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches
   );
   const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [modeHintSeen, setModeHintSeen] = useState(readModeHintSeen);
+  const [modeHintOpen, setModeHintOpen] = useState(() => {
+    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches) {
+      return false;
+    }
+    return !readModeHintSeen();
+  });
+
+  const dismissModeHint = useCallback(() => {
+    markModeHintSeen();
+    setModeHintSeen(true);
+    setModeHintOpen(false);
+  }, []);
 
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 767px)');
@@ -183,11 +261,19 @@ function ViewerToolbar({
     if (!isMobile) setShowMobileMenu(false);
   }, [isMobile]);
 
+  useEffect(() => {
+    if (!isMobile || modeHintSeen) return;
+    setModeHintOpen(showMobileMenu);
+  }, [isMobile, showMobileMenu, modeHintSeen]);
+
   const viewMode = useMemo(() => findViewerModeOption(showGraph), [showGraph]);
+  const ModeIcon = viewMode.Icon;
   const bookmarkTitle = isBookmarked
     ? '현재 위치 북마크 제거'
     : '현재 위치에 북마크 추가';
-  const graphToggleTitle = showGraph ? '그래프 숨기기' : '그래프 표시';
+  const graphToggleTitle = showGraph
+    ? '본문만 보기로 전환'
+    : '본문+그래프로 전환';
 
   const handleGraphClick = useCallback(() => {
     const bookData =
@@ -224,250 +310,168 @@ function ViewerToolbar({
     []
   );
 
-  const graphToggleStyleMobile = useMemo(
-    () => ({
-      border: showGraph ? `2px solid ${COLORS.primary}` : TOOLBAR_BTN.border,
-      boxShadow: showGraph
-        ? '0 4px 12px rgba(92, 111, 92, 0.2)'
-        : '0 2px 4px rgba(92, 111, 92, 0.1)',
-      transform: showGraph ? 'scale(1.05)' : 'scale(1)',
-    }),
-    [showGraph]
-  );
-
-  const graphToggleStyleDesktop = useMemo(
-    () => ({
-      width: '9rem',
-      marginRight: '0.5rem',
-      border: showGraph ? `2px solid ${COLORS.primary}` : TOOLBAR_BTN.border,
-    }),
-    [showGraph]
-  );
-
-  const viewModeBadgeStyle = useMemo(
-    () => ({
-      padding: '0.5rem 1rem',
-      marginLeft: '1rem',
-      borderRadius: '1rem',
-      backgroundColor: showGraph ? COLORS.primaryLight : COLORS.primaryTintSoft,
-      color: COLORS.primary,
-      fontWeight: '600',
-      fontSize: '0.9rem',
-      display: 'flex',
-      alignItems: 'center',
-      gap: '0.5em',
-      border: showGraph ? `2px solid ${COLORS.primary}` : `1px solid ${COLORS.primary}`,
-      boxShadow: showGraph
-        ? '0 2px 8px rgba(92, 111, 92, 0.15)'
-        : '0 1px 3px rgba(92, 111, 92, 0.1)',
-      transition: 'all 0.2s ease',
-    }),
-    [showGraph]
-  );
+  const graphToggleClass = `xhtml-toolbar-btn xhtml-toolbar-btn--graph-toggle${
+    showGraph ? ' is-active' : ''
+  }`;
+  const mobileGraphToggleClass = `xhtml-toolbar-btn xhtml-toolbar-btn--menu${
+    showGraph ? ' is-active' : ''
+  }`;
 
   return (
-    <div
-      className={`w-full z-20 relative transition-all duration-300 ${
-        showToolbar ? 'opacity-100' : 'opacity-0 pointer-events-none'
-      }`}
-      style={{
-        backgroundColor: 'white',
-        backdropFilter: 'blur(4px)',
-        borderBottom: `1.5px solid ${COLORS.borderMuted}`,
-        padding: isMobile ? '0.5rem' : '0.4rem 0.7rem',
-      }}
-    >
+    <div className={`viewer-toolbar${showToolbar ? '' : ' is-hidden'}`}>
       {isMobile ? (
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
+        <div className="viewer-toolbar-mobile">
+          <div className="viewer-toolbar-mobile-nav">
             <ToolbarButton
               onClick={onPrev}
               title="이전 페이지"
-              className="p-2 rounded-lg transition-colors"
+              className="xhtml-toolbar-btn xhtml-toolbar-btn--compact"
             >
-              <span className="material-symbols-outlined">arrow_back</span>
+              <ArrowLeft size={ICON_SM} aria-hidden />
             </ToolbarButton>
             <ToolbarButton
               onClick={onNext}
               title="다음 페이지"
-              className="p-2 rounded-lg transition-colors"
+              className="xhtml-toolbar-btn xhtml-toolbar-btn--compact"
             >
-              <span className="material-symbols-outlined">arrow_forward</span>
+              <ArrowRight size={ICON_SM} aria-hidden />
             </ToolbarButton>
           </div>
-          <div className="flex-1 text-center">
-            <span className="text-xs text-gray-600 font-medium">{viewMode.label}</span>
-          </div>
+          <div className="viewer-toolbar-mobile-mode">{viewMode.label}</div>
           <ToolbarButton
             onClick={toggleMobileMenu}
             title={showMobileMenu ? '메뉴 닫기' : '메뉴 열기'}
             ariaLabel={showMobileMenu ? '메뉴 닫기' : '메뉴 열기'}
-            className="p-2 rounded-lg transition-colors"
+            className={`xhtml-toolbar-btn xhtml-toolbar-btn--compact${!modeHintSeen ? ' has-hint' : ''}`}
           >
-            <span className="material-symbols-outlined" aria-hidden>
-              {showMobileMenu ? 'close' : 'menu'}
-            </span>
+            {showMobileMenu ? (
+              <X size={ICON_SM} aria-hidden />
+            ) : (
+              <Menu size={ICON_SM} aria-hidden />
+            )}
+            {!modeHintSeen ? <span className="viewer-mode-hint-dot" aria-hidden /> : null}
           </ToolbarButton>
         </div>
       ) : (
-        <div
-          className="viewer-toolbar-group-wrap"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            width: '100%',
-            justifyContent: 'space-between',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center' }}>
-            <div
-              className="toolbar-group"
-              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginRight: '2rem' }}
-            >
+        <div className="viewer-toolbar-group-wrap">
+          <div className="viewer-toolbar-group-left">
+            <div className="toolbar-group toolbar-group--nav">
               <ToolbarButton onClick={onPrev} title="이전 페이지로 이동" ariaLabel="이전 페이지">
-                <IconLabel icon="arrow_back" label="이전" />
+                <IconLabel icon={ArrowLeft} label="이전" />
               </ToolbarButton>
               <ToolbarButton onClick={onNext} title="다음 페이지로 이동" ariaLabel="다음 페이지">
-                <span style={flexLabel}>
+                <span className="viewer-toolbar-label">
                   다음
-                  <span className="material-symbols-outlined" style={iconMb}>
-                    arrow_forward
-                  </span>
+                  <ArrowRight size={ICON_SM} aria-hidden />
                 </span>
               </ToolbarButton>
             </div>
 
-            <div
-              className="toolbar-group"
-              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginRight: '1rem' }}
-            >
+            <div className="toolbar-group toolbar-group--bookmark">
               <ToolbarButton
                 onClick={onAddBookmark}
                 title={bookmarkTitle}
                 ariaLabel="북마크"
-                style={{ width: '7rem' }}
+                className="xhtml-toolbar-btn xhtml-toolbar-btn--w-md"
               >
                 <IconLabel
-                  icon={isBookmarked ? 'bookmark' : 'bookmark_add'}
+                  icon={isBookmarked ? Bookmark : BookmarkPlus}
                   label="북마크"
                   center
+                  strokeWidth={isBookmarked ? 2.5 : 2}
                 />
               </ToolbarButton>
               <ToolbarButton
                 onClick={onToggleBookmarkList}
                 title="북마크 목록 열기"
                 ariaLabel="북마크 목록"
-                style={{ width: '9rem' }}
+                className="xhtml-toolbar-btn xhtml-toolbar-btn--w-lg"
               >
-                <IconLabel icon="bookmarks" label="북마크 목록" center />
+                <IconLabel icon={BookMarked} label="북마크 목록" center />
               </ToolbarButton>
             </div>
 
-            <div
-              className="toolbar-group"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                marginLeft: '1rem',
-                marginRight: '1rem',
-              }}
-            >
+            <div className="toolbar-group toolbar-group--mode">
               <ToolbarButton
                 onClick={handleGraphClick}
-                title="인물 관계도 페이지로 이동"
-                ariaLabel="인물 관계도"
-                style={{ width: '9rem' }}
+                title="챕터별 전체 관계도 페이지로 이동"
+                ariaLabel="전체 관계도"
+                className="xhtml-toolbar-btn xhtml-toolbar-btn--w-lg"
               >
-                <IconLabel icon="account_tree" label="인물 관계도" center />
+                <IconLabel icon={Network} label="전체 관계도" center />
               </ToolbarButton>
-              <ToolbarButton
-                onClick={onToggleGraph}
+              <ScreenModeToggle
+                showGraph={showGraph}
+                onToggleGraph={onToggleGraph}
                 title={graphToggleTitle}
-                ariaLabel="그래프 토글"
-                style={graphToggleStyleDesktop}
+                className={graphToggleClass}
+                message={
+                  showGraph
+                    ? '「본문+그래프」로 읽으면서 관계를 볼 수 있고, 「전체 관계도」는 챕터를 골라 탐색하는 별도 화면입니다.'
+                    : '인물 관계를 함께 보려면 「본문+그래프」를 켜 보세요. 「전체 관계도」는 챕터 탐색용 별도 화면입니다.'
+                }
+                hintSeen={modeHintSeen}
+                open={modeHintOpen}
+                onDismissHint={dismissModeHint}
+              />
+              <div
+                className={`viewer-view-mode-badge${showGraph ? ' is-graph-on' : ''}`}
+                title={viewMode.label}
               >
-                <IconLabel
-                  icon={showGraph ? 'view_column' : 'open_in_full'}
-                  label="화면 모드"
-                  center
-                  boldIcon={showGraph}
-                />
-              </ToolbarButton>
-              <div className="current-view-mode" title={viewMode.label} style={viewModeBadgeStyle}>
-                <span className="material-symbols-outlined" style={{ ...iconMb, fontWeight: 'bold' }}>
-                  {viewMode.icon}
-                </span>
-                <span style={{ fontWeight: '600' }}>{viewMode.label}</span>
+                <ModeIcon size={ICON_SM} strokeWidth={2.5} aria-hidden />
+                <span className="viewer-view-mode-badge-label">{viewMode.label}</span>
               </div>
             </div>
           </div>
 
-          <div className="toolbar-group-right" style={{ display: 'flex', alignItems: 'center' }}>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.35rem',
-                marginRight: '0.5rem',
-              }}
-            >
+          <div className="toolbar-group-right">
+            <div className="toolbar-group-right-inner">
+              <ToolbarButton
+                onClick={onToggleShortcuts}
+                title="단축키 안내 (?)"
+                ariaLabel="단축키 안내"
+                className="xhtml-toolbar-btn xhtml-toolbar-btn--icon"
+              >
+                <CircleHelp size={ICON_SM} aria-hidden />
+              </ToolbarButton>
               <ToolbarButton
                 onClick={onOpenSettings}
                 title="뷰어 설정 열기"
                 ariaLabel="설정"
-                style={{ width: '5.5rem' }}
+                className="xhtml-toolbar-btn xhtml-toolbar-btn--w-sm"
               >
-                <span
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '0.4em',
-                    flexDirection: 'row',
-                  }}
-                >
-                  <span
-                    className="material-symbols-outlined"
-                    style={{ marginBottom: '-2px', fontSize: '18px' }}
-                  >
-                    settings
-                  </span>
-                  <span style={{ fontSize: '13px', fontWeight: '700' }}>설정</span>
+                <span className="viewer-toolbar-settings-label">
+                  <Settings size={ICON_SM} aria-hidden />
+                  <span className="viewer-toolbar-settings-text">설정</span>
                 </span>
               </ToolbarButton>
               <ToolbarButton
                 onClick={onExitToMypage}
                 title="마이페이지로 돌아가기"
                 ariaLabel="닫기"
-                style={{ width: 40, minWidth: 40, padding: 0, justifyContent: 'center' }}
+                className="xhtml-toolbar-btn xhtml-toolbar-btn--icon"
               >
-                <span className="material-symbols-outlined" style={iconMb}>
-                  close
-                </span>
+                <X size={ICON_SM} aria-hidden />
               </ToolbarButton>
             </div>
           </div>
         </div>
       )}
 
-      {showMobileMenu && (
-        <div
-          className="absolute top-full left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-50"
-          role="menu"
-          aria-label="뷰어 메뉴"
-        >
-          <div className="p-4 grid grid-cols-2 gap-3">
+      {showMobileMenu ? (
+        <div className="viewer-mobile-menu" role="menu" aria-label="뷰어 메뉴">
+          <div className="viewer-mobile-menu-grid">
             <ToolbarButton
               onClick={runMobileAction(onAddBookmark)}
               title={bookmarkTitle}
-              className={mobileMenuClass}
+              className="xhtml-toolbar-btn xhtml-toolbar-btn--menu"
             >
-              <span className="material-symbols-outlined">
-                {isBookmarked ? 'bookmark' : 'bookmark_add'}
-              </span>
-              <span className="text-sm font-semibold">북마크</span>
+              {isBookmarked ? (
+                <Bookmark size={ICON_SM} aria-hidden />
+              ) : (
+                <BookmarkPlus size={ICON_SM} aria-hidden />
+              )}
+              <span className="viewer-mobile-menu-label">북마크</span>
             </ToolbarButton>
             <ToolbarButton
               onClick={runMobileAction(() => {
@@ -475,35 +479,47 @@ function ViewerToolbar({
                 onToggleBookmarkList?.();
               })}
               title="북마크 목록 보기"
-              className={mobileMenuClass}
+              className="xhtml-toolbar-btn xhtml-toolbar-btn--menu"
             >
-              <span className="material-symbols-outlined">bookmarks</span>
-              <span className="text-sm font-semibold">북마크 목록</span>
+              <BookMarked size={ICON_SM} aria-hidden />
+              <span className="viewer-mobile-menu-label">북마크 목록</span>
             </ToolbarButton>
             <ToolbarButton
               onClick={runMobileAction(() => {
                 closeMobileMenu();
                 handleGraphClick();
               })}
-              title="인물 관계도 페이지로 이동"
-              className={mobileMenuClass}
+              title="챕터별 전체 관계도 페이지로 이동"
+              className="xhtml-toolbar-btn xhtml-toolbar-btn--menu"
             >
-              <span className="material-symbols-outlined">account_tree</span>
-              <span className="text-sm font-medium">인물 관계도</span>
+              <Network size={ICON_SM} aria-hidden />
+              <span className="viewer-mobile-menu-label">전체 관계도</span>
             </ToolbarButton>
-            <ToolbarButton
-              onClick={runMobileAction(onToggleGraph)}
+            <ScreenModeToggle
+              menu
+              showGraph={showGraph}
+              onToggleGraph={onToggleGraph}
               title={graphToggleTitle}
-              className={`${mobileMenuClass} transition-all duration-200`}
-              style={graphToggleStyleMobile}
+              className={mobileGraphToggleClass}
+              message={
+                showGraph
+                  ? '「본문+그래프」는 분할 보기, 「전체 관계도」는 챕터 탐색용 별도 화면입니다.'
+                  : '인물 관계를 함께 보려면 「본문+그래프」를 켜 보세요. 「전체 관계도」는 챕터 탐색용입니다.'
+              }
+              hintSeen={modeHintSeen}
+              open={modeHintOpen}
+              onDismissHint={dismissModeHint}
+            />
+            <ToolbarButton
+              onClick={runMobileAction(() => {
+                closeMobileMenu();
+                onToggleShortcuts?.();
+              })}
+              title="단축키 안내"
+              className="xhtml-toolbar-btn xhtml-toolbar-btn--menu"
             >
-              <span
-                className="material-symbols-outlined"
-                style={showGraph ? { fontWeight: 'bold' } : undefined}
-              >
-                {showGraph ? 'view_column' : 'open_in_full'}
-              </span>
-              <span className="text-sm font-semibold">화면 모드</span>
+              <CircleHelp size={ICON_SM} aria-hidden />
+              <span className="viewer-mobile-menu-label">단축키</span>
             </ToolbarButton>
             <ToolbarButton
               onClick={runMobileAction(() => {
@@ -511,10 +527,10 @@ function ViewerToolbar({
                 onOpenSettings?.();
               })}
               title="뷰어 설정 열기"
-              className={mobileMenuClass}
+              className="xhtml-toolbar-btn xhtml-toolbar-btn--menu"
             >
-              <span className="material-symbols-outlined">settings</span>
-              <span className="text-sm font-medium">설정</span>
+              <Settings size={ICON_SM} aria-hidden />
+              <span className="viewer-mobile-menu-label">설정</span>
             </ToolbarButton>
             <button
               type="button"
@@ -522,16 +538,16 @@ function ViewerToolbar({
                 closeMobileMenu();
                 onExitToMypage?.();
               })}
-              className="flex items-center justify-center gap-2 p-3 bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition-colors"
+              className="viewer-mobile-menu-exit"
               title="마이페이지로 돌아가기"
               aria-label="닫기"
             >
-              <span className="material-symbols-outlined">close</span>
-              <span className="text-sm font-medium">닫기</span>
+              <X size={ICON_SM} aria-hidden />
+              <span className="viewer-mobile-menu-label">닫기</span>
             </button>
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -567,10 +583,41 @@ function ViewerLayout({
   );
   const [mobilePane, setMobilePane] = useState('reader');
   const [isSplitDragging, setIsSplitDragging] = useState(false);
+  const [chromeHintOpen, setChromeHintOpen] = useState(() => !readChromeHintSeen());
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const prevShowGraphRef = useRef(showGraph);
   const skipInitialLayoutSettleRef = useRef(true);
   const onViewerLayoutSettledRef = useRef(onViewerLayoutSettled);
   onViewerLayoutSettledRef.current = onViewerLayoutSettled;
+
+  const dismissChromeHint = useCallback(() => {
+    markChromeHintSeen();
+    setChromeHintOpen(false);
+  }, []);
+
+  const toggleShortcuts = useCallback(() => {
+    setShortcutsOpen((v) => !v);
+    dismissChromeHint();
+  }, [dismissChromeHint]);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.target.closest?.('input, textarea, [contenteditable], [role="dialog"]')) {
+        return;
+      }
+      if (e.key === '?' || (e.key === '/' && e.shiftKey)) {
+        e.preventDefault();
+        setShortcutsOpen((v) => !v);
+        dismissChromeHint();
+      }
+      if (e.key === 'Escape' && shortcutsOpen) {
+        e.preventDefault();
+        setShortcutsOpen(false);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [dismissChromeHint, shortcutsOpen]);
 
   useEffect(() => {
     const mq = window.matchMedia(NARROW_MQ);
@@ -580,7 +627,6 @@ function ViewerLayout({
     return () => mq.removeEventListener('change', onChange);
   }, []);
 
-  // 그래프 off → 탭 리셋. 처음 켤 때만 그래프 탭으로 이동하고, 이후에는 사용자 선택 유지.
   useEffect(() => {
     const wasShown = prevShowGraphRef.current;
     prevShowGraphRef.current = showGraph;
@@ -588,10 +634,13 @@ function ViewerLayout({
       setMobilePane('reader');
       return;
     }
-    if (!wasShown && showGraph) {
-      setMobilePane('graph');
+    if (!wasShown && showGraph && isNarrow) {
+      setMobilePane('reader');
+      toast.info('그래프가 켜졌어요. 「그래프」 탭에서 확인할 수 있어요.', {
+        autoClose: 3500,
+      });
     }
-  }, [showGraph]);
+  }, [showGraph, isNarrow]);
 
   const useMobileTabs = isNarrow && showGraph && !graphFullScreen;
   const showReaderPane = !useMobileTabs || mobilePane === 'reader';
@@ -679,65 +728,34 @@ function ViewerLayout({
     window.addEventListener('pointercancel', onEnd);
   }, []);
 
-  const chromeHiddenStyle = useMemo(
-    () => ({
-      opacity: graphFullScreen ? 0 : 1,
-      visibility: graphFullScreen ? 'hidden' : 'visible',
-      transition: 'opacity 0.3s ease, visibility 0.3s ease',
-      flexShrink: 0,
-      pointerEvents: graphFullScreen ? 'none' : 'auto',
-    }),
-    [graphFullScreen]
-  );
-
-  const readerPaneStyle = useMemo(() => {
-    if (graphFullScreen) {
-      return { width: '0%', display: 'none', minWidth: '0px', borderRight: 'none', flex: '0 0 0' };
-    }
+  const readerPaneClass = useMemo(() => {
+    const base = 'viewer-pane viewer-pane-reader';
+    if (graphFullScreen) return `${base} is-fullscreen-hidden`;
     if (useMobileTabs) {
-      return {
-        width: '100%',
-        display: showReaderPane ? 'block' : 'none',
-        minWidth: 0,
-        flex: '1 1 auto',
-        borderRight: 'none',
-      };
+      return `${base} is-mobile-tab${showReaderPane ? '' : ' is-hidden'}`;
     }
-    if (showGraph) {
-      return {
-        width: `${splitPercent}%`,
-        flex: `0 0 ${splitPercent}%`,
-        borderRight: 'none',
-        display: 'block',
-        minWidth: 0,
-      };
-    }
-    return { width: '100%', borderRight: 'none', display: 'block', minWidth: 'auto', flex: '1 1 auto' };
-  }, [showGraph, graphFullScreen, splitPercent, useMobileTabs, showReaderPane]);
+    if (showGraph) return `${base} is-split`;
+    return `${base} is-alone`;
+  }, [graphFullScreen, useMobileTabs, showReaderPane, showGraph]);
 
-  const graphPaneStyle = useMemo(() => {
-    if (useMobileTabs) {
-      return {
-        width: '100%',
-        display: showGraphPane ? 'block' : 'none',
-        position: 'relative',
-        boxShadow: 'none',
-        minWidth: 0,
-        flex: '1 1 auto',
-      };
-    }
-    return {
-      width: graphFullScreen ? '100%' : `${100 - splitPercent}%`,
-      flex: graphFullScreen ? '1 1 auto' : `0 0 ${100 - splitPercent}%`,
-      position: 'relative',
-      boxShadow: graphFullScreen ? 'none' : `-1px 0 0 ${COLORS.borderLight}`,
-      minWidth: 0,
-    };
-  }, [graphFullScreen, splitPercent, useMobileTabs, showGraphPane]);
+  const graphPaneClass = useMemo(() => {
+    const base = 'viewer-pane viewer-pane-graph';
+    if (!showGraphPane) return `${base} is-hidden`;
+    if (useMobileTabs) return `${base} is-mobile-tab`;
+    if (graphFullScreen) return `${base} is-fullscreen`;
+    return `${base} is-split`;
+  }, [showGraphPane, useMobileTabs, graphFullScreen]);
+
+  const splitRowStyle = useMemo(() => {
+    if (!showGraph || graphFullScreen || useMobileTabs) return undefined;
+    return { '--viewer-split-pct': `${splitPercent}%` };
+  }, [showGraph, graphFullScreen, useMobileTabs, splitPercent]);
+
+  const chromeClass = `viewer-chrome${graphFullScreen ? ' is-fullscreen-hidden' : ''}`;
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden">
-      <div style={{ ...chromeHiddenStyle, height: graphFullScreen ? '60px' : 'auto' }}>
+    <div className="viewer-layout">
+      <div className={chromeClass}>
         <ViewerToolbar
           showToolbar={showToolbar}
           currentChapter={currentChapter}
@@ -752,6 +770,7 @@ function ViewerLayout({
           isFromLibrary={isFromLibrary}
           previousPage={previousPage}
           onExitToMypage={onExitToMypage}
+          onToggleShortcuts={toggleShortcuts}
         />
       </div>
 
@@ -780,12 +799,11 @@ function ViewerLayout({
 
       <div
         ref={splitRowRef}
-        className={`flex-1 overflow-hidden flex${isSplitDragging ? ' is-split-dragging' : ''}`}
-        style={{ backgroundColor: '#fdfdfd' }}
+        className={`viewer-split-row${isSplitDragging ? ' is-split-dragging' : ''}`}
+        style={splitRowStyle}
       >
         <div
-          className="h-full overflow-hidden relative"
-          style={readerPaneStyle}
+          className={readerPaneClass}
           data-graph-fullscreen={graphFullScreen}
         >
           {children}
@@ -818,11 +836,7 @@ function ViewerLayout({
 
         {showGraph ? (
           <div
-            className="h-full overflow-hidden bg-white"
-            style={{
-              ...graphPaneStyle,
-              display: showGraphPane ? (graphPaneStyle.display ?? 'block') : 'none',
-            }}
+            className={graphPaneClass}
             data-graph-fullscreen={graphFullScreen}
             hidden={!showGraphPane}
           >
@@ -831,16 +845,79 @@ function ViewerLayout({
         ) : null}
       </div>
 
-      <div style={{ ...chromeHiddenStyle, height: graphFullScreen ? '80px' : 'auto' }}>
+      <div className={chromeClass}>
         <ViewerProgressBar
           showToolbar={showToolbar}
           progress={progress}
           onSliderChange={onSliderChange}
+          currentChapter={currentChapter}
           currentPage={currentPage}
           totalPages={totalPages}
           progressMetricsReady={progressMetricsReady}
         />
       </div>
+
+      {chromeHintOpen && !shortcutsOpen ? (
+        <div className="viewer-chrome-coach" role="status" aria-labelledby={CHROME_HINT_PANEL_ID}>
+          <p id={CHROME_HINT_PANEL_ID} className="viewer-chrome-coach-title">
+            가운데를 탭하면 도구모음을 열고 닫을 수 있어요
+          </p>
+          <p className="viewer-chrome-coach-desc">
+            좌·우 1/3을 탭하면 페이지를 넘깁니다. ←→·↑↓·휠·스와이프도 동일합니다. 단축키는 ? 키에서 볼 수 있습니다.
+          </p>
+          <div className="viewer-chrome-coach-actions">
+            <button type="button" className="viewer-chrome-coach-btn" onClick={toggleShortcuts}>
+              단축키 보기
+            </button>
+            <button
+              type="button"
+              className="viewer-chrome-coach-btn viewer-chrome-coach-btn--primary"
+              onClick={dismissChromeHint}
+            >
+              확인
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {shortcutsOpen ? (
+        <div
+          className="viewer-shortcuts-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={SHORTCUTS_PANEL_ID}
+          onClick={toggleShortcuts}
+        >
+          <div
+            className="viewer-shortcuts-panel"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="viewer-shortcuts-header">
+              <h2 id={SHORTCUTS_PANEL_ID} className="viewer-shortcuts-title">
+                뷰어 단축키
+              </h2>
+              <button
+                type="button"
+                className="viewer-shortcuts-close"
+                onClick={toggleShortcuts}
+                aria-label="단축키 안내 닫기"
+              >
+                <X size={18} aria-hidden />
+              </button>
+            </div>
+            <ul className="viewer-shortcuts-list">
+              <li><kbd>←</kbd><kbd>→</kbd><span>이전 / 다음 페이지</span></li>
+              <li><kbd>↑</kbd><kbd>↓</kbd><span>이전 / 다음 페이지</span></li>
+              <li><kbd>PgUp</kbd><kbd>PgDn</kbd><span>이전 / 다음 페이지</span></li>
+              <li><kbd>휠</kbd><span>페이지 넘김</span></li>
+              <li><kbd>T</kbd><span>도구모음 표시 / 숨김</span></li>
+              <li><kbd>?</kbd><span>이 안내 열기 / 닫기</span></li>
+              <li><span className="viewer-shortcuts-plain">좌·우 탭</span><span>이전 / 다음 페이지</span></li>
+              <li><span className="viewer-shortcuts-plain">가운데 탭</span><span>도구모음 표시 / 숨김</span></li>
+            </ul>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

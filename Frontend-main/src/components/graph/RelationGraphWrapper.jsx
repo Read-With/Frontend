@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import PropTypes from "prop-types";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
+import { ArrowLeft } from "lucide-react";
 
 import GraphCanvas from "./GraphCanvas";
 import ChapterSidebar from "./ChapterSidebar";
@@ -10,15 +10,16 @@ import { createGraphStylesheet, getEdgeStyle } from "../../utils/styles/graphSty
 import { COLORS } from "../../utils/styles/styles.js";
 import {
   GRAPH_LAYOUT_CONSTANTS,
-  GRAPH_ZOOM,
   resolveChapterSidebarWidth,
   calculateLastEventForChapter,
+  listChapterEventIndices,
+  resolveReadingEventNumForChapter,
 } from '../../utils/graph/graphCore';
 import {
   isGraphDragEndEvent,
-  fitGraphToNodes,
+  centerSelectionOnElementId,
 } from '../../utils/graph/graphCy';
-import { errorUtils, userViewerPath } from '../../utils/common/urlUtils';
+import { userViewerPath, errorUtils } from '../../utils/common/urlUtils';
 import {
   useGraphSearch,
   useGraphState,
@@ -28,21 +29,16 @@ import {
 import { useApiGraphData, useChapterPovSummaries } from '../../hooks/graph/useApiGraphData';
 import { resolveServerBookIdOrFallback, useLocalStorageNumber } from '../../hooks/common/hooksShared';
 import {
-  createCharacterMaps,
-  buildNodeWeights,
-  extractNodeWeightsFromElements,
-  convertRelationsToElements,
-  getGraphEventState,
-} from '../../utils/graph/graphModel';
-import { eventUtils, formatChapterOrderAndName, stripRedundantBookTitlePrefix, resolveChapterTitleMeta } from '../../utils/viewer/viewerCore';
-import { hasGraphPayload } from '../../utils/graph/graphFetch';
-import {
   convertGraphSourceToElements,
   commitVisibleGraphElements,
+  DEFAULT_GRAPH_TRANSFORM_DEPS,
 } from '../../utils/viewer/viewerGraph';
+import { extractNodeWeightsFromElements, getGraphEventState } from '../../utils/graph/graphModel';
+import { eventUtils, formatChapterOrderAndName, stripRedundantBookTitlePrefix, resolveChapterTitleMeta } from '../../utils/viewer/viewerCore';
+import { hasGraphPayload } from '../../utils/api/graphApi';
 import { toPositiveNumberOrNull } from '../../utils/common/valueUtils';
 import {
-  shouldIgnoreGraphPageOutsideClick,
+  shouldIgnoreGraphOutsideClick,
   useGraphTooltipSelection,
 } from '../../hooks/graph/useGraphCy';
 import {
@@ -73,50 +69,6 @@ const emptyGraphBannerStyle = {
 };
 
 const GRAPH_PAGE_EDGE_STYLE = getEdgeStyle('graph');
-const GRAPH_TRANSFORM_DEPS = { createCharacterMaps, buildNodeWeights, convertRelationsToElements };
-
-function ErrorToast({ error, onClose, duration = 5000 }) {
-  useEffect(() => {
-    if (!error || duration <= 0) return undefined;
-    const timer = setTimeout(onClose, duration);
-    return () => clearTimeout(timer);
-  }, [error, duration, onClose]);
-
-  if (!error) return null;
-
-  const message =
-    typeof error === 'string'
-      ? error
-      : errorUtils.getUserFriendlyMessage(error);
-
-  return (
-    <div className="graph-error-toast" role="alert" aria-live="assertive">
-      <span className="material-symbols-outlined graph-error-toast__icon">error</span>
-      <div className="graph-error-toast__body">
-        <div className="graph-error-toast__title">오류 발생</div>
-        <div className="graph-error-toast__message">{message}</div>
-      </div>
-      <button
-        type="button"
-        className="graph-error-toast__close"
-        onClick={onClose}
-        aria-label="메시지 닫기"
-      >
-        <span className="material-symbols-outlined">close</span>
-      </button>
-    </div>
-  );
-}
-
-ErrorToast.propTypes = {
-  error: PropTypes.oneOfType([
-    PropTypes.string,
-    PropTypes.object,
-    PropTypes.instanceOf(Error),
-  ]),
-  onClose: PropTypes.func.isRequired,
-  duration: PropTypes.number,
-};
 
 function RelationGraphWrapper() {
   const navigate = useNavigate();
@@ -199,6 +151,7 @@ function RelationGraphWrapper() {
     manifest: { data: manifestData, ready: manifestReady },
     graph: {
       data: apiBookGraphData,
+      loadedKey: loadedGraphKey,
       maxChapter: apiMaxChapter,
       userCurrentChapter,
       isLoading: isGraphLoading,
@@ -266,7 +219,7 @@ function RelationGraphWrapper() {
       chapterDisplayLabel: formatChapterOrderAndName(currentChapter, displayName),
       chapterTitleTooltip: meta.raw || meta.tooltip || undefined,
     };
-  }, [serverBookId, currentChapter, bookTitle, manifestData]);
+  }, [serverBookId, currentChapter, bookTitle]);
 
   useEffect(() => {
     if (!manifestReady) return;
@@ -293,8 +246,13 @@ function RelationGraphWrapper() {
   }, [serverBookId, manifestReady, manifestData, currentChapter, currentEvent]);
 
   const graphApiPayload = hasGraphPayload(apiBookGraphData) ? apiBookGraphData : null;
+  const requestedGraphKey = serverBookId != null
+    ? `${serverBookId}:${Number(currentChapter)}`
+    : null;
+  const isGraphResponseCurrent = loadedGraphKey === requestedGraphKey;
 
   const apiElements = useMemo(() => {
+    if (!isGraphResponseCurrent) return null;
     if (!graphApiPayload) return [];
     try {
       const previousEventState =
@@ -305,17 +263,24 @@ function RelationGraphWrapper() {
         graphApiPayload,
         currentChapter,
         currentEvent,
-        GRAPH_TRANSFORM_DEPS,
+        DEFAULT_GRAPH_TRANSFORM_DEPS,
         extractNodeWeightsFromElements(previousEventState?.elements),
         { bookId: serverBookId },
       ).elements;
-    } catch {
+    } catch (error) {
+      errorUtils.logError('RelationGraphWrapper.convert', error, {
+        bookId: serverBookId,
+        chapter: currentChapter,
+        event: currentEvent,
+      });
       return [];
     }
-  }, [graphApiPayload, serverBookId, currentChapter, currentEvent]);
+  }, [isGraphResponseCurrent, graphApiPayload, serverBookId, currentChapter, currentEvent]);
 
   useEffect(() => {
+    if (apiElements == null) return;
     if (!apiElements.length) {
+      if (isGraphLoading) return;
       profileApplyTokenRef.current += 1;
       setElements([]);
       return;
@@ -323,7 +288,7 @@ function RelationGraphWrapper() {
     commitVisibleGraphElements(setElements, apiElements, {
       applyTokenRef: profileApplyTokenRef,
     });
-  }, [apiElements]);
+  }, [apiElements, isGraphLoading]);
 
   const { searchState, searchActions } = useGraphSearch(elements, currentChapterData);
   const { clearSearch } = searchActions;
@@ -341,20 +306,29 @@ function RelationGraphWrapper() {
     graphClearRef.current?.(options);
   }, []);
 
-  // 사이드바는 오버레이이므로 우측 예약 없이 전체 그래프를 캔버스에 유지 (겹침 허용)
-  const centerSelection = useCallback(() => {
-    fitGraphToNodes(cyRef.current, {
+  // 좌(챕터 레일)는 캔버스 offset으로 이미 제외. 우(정보 슬라이드바)는 오버레이라 예약.
+  const centerSelection = useCallback((elementId) => {
+    const cy = cyRef.current;
+    if (!cy || elementId == null || elementId === '') return;
+
+    const reserveLeft = isNarrow && isSidebarOpen
+      ? GRAPH_LAYOUT_CONSTANTS.SIDEBAR.OPEN_WIDTH
+      : 0;
+
+    centerSelectionOnElementId(cy, elementId, {
       duration: GRAPH_LAYOUT_CONSTANTS.FOCUS_PAN_MS,
+      reserveRight: GRAPH_LAYOUT_CONSTANTS.TOOLTIP_SIDEBAR_WIDTH,
+      reserveLeft,
+      padding: 40,
     });
-  }, []);
+  }, [isNarrow, isSidebarOpen]);
 
   const onClearTooltip = useCallback(() => {
     closeSidebar();
-    fitGraphToNodes(cyRef.current, { duration: GRAPH_ZOOM.FIT_DURATION_MS });
   }, [closeSidebar]);
 
   const dismissTooltip = useCallback(() => {
-    clearGraphSelection({ fitViewport: true });
+    clearGraphSelection({ fitViewport: false });
     startClosing();
   }, [clearGraphSelection, startClosing]);
 
@@ -372,7 +346,7 @@ function RelationGraphWrapper() {
     focusDelayMs: GRAPH_LAYOUT_CONSTANTS.FOCUS_PAN_DELAY_MS,
     tooltipOpen: hasOpenTooltip,
     onDismiss: dismissTooltip,
-    shouldIgnoreClick: shouldIgnoreGraphPageOutsideClick,
+    shouldIgnoreClick: (event) => shouldIgnoreGraphOutsideClick(event, 'page'),
     blockDragEndEvents: true,
   });
 
@@ -449,7 +423,7 @@ function RelationGraphWrapper() {
     activeTooltip,
     currentChapter,
     setCurrentChapter,
-    manifestData?.chapters,
+    manifestData,
     serverBookId,
     clearGraphSelection,
     startClosing,
@@ -472,6 +446,22 @@ function RelationGraphWrapper() {
     [apiMaxChapter],
   );
 
+  const chapterEventIndices = useMemo(
+    () => listChapterEventIndices(serverBookId, currentChapter, manifestData),
+    [serverBookId, currentChapter, manifestData],
+  );
+
+  const readingEventNum = useMemo(
+    () => resolveReadingEventNumForChapter(serverBookId, currentChapter),
+    [serverBookId, currentChapter],
+  );
+
+  const handleEventChange = useCallback((nextEvent) => {
+    const n = Number(nextEvent);
+    if (!Number.isFinite(n) || n < 1) return;
+    setCurrentEvent(Math.trunc(n));
+  }, []);
+
   useEffect(() => {
     const id = window.setTimeout(() => {
       window.dispatchEvent(new Event('resize'));
@@ -479,7 +469,7 @@ function RelationGraphWrapper() {
     return () => window.clearTimeout(id);
   }, [sidebarLayoutWidth]);
 
-  const isApiGraphEmpty = !isGraphLoading && !graphApiPayload;
+  const isApiGraphEmpty = !isGraphLoading && isGraphResponseCurrent && !graphApiPayload;
 
   useEffect(() => {
     if (!isGraphLoading) setHasShownGraphOnce(true);
@@ -487,7 +477,6 @@ function RelationGraphWrapper() {
 
   return (
     <div style={pageRootStyle}>
-      {apiError && <ErrorToast error={apiError} onClose={clearApiError} />}
       {(isApiGraphEmpty || apiError) && (
         <div style={emptyGraphBannerStyle}>
           {apiError
@@ -544,7 +533,7 @@ function RelationGraphWrapper() {
         onRetryPov={retryPov}
         apiBookGraphData={apiBookGraphData}
         bookId={serverBookId}
-        isLoading={isGraphLoading}
+        isLoading={isGraphLoading && elements.length === 0}
         hasShownGraphOnce={hasShownGraphOnce}
         onCanvasClick={handleCanvasClick}
         currentChapter={currentChapter}
@@ -569,12 +558,16 @@ function RelationGraphWrapper() {
             onClick={handleBackToViewer}
             aria-label="뷰어로 돌아가기"
           >
-            <span className="material-symbols-outlined" aria-hidden>
-              arrow_back
-            </span>
+            <ArrowLeft size={16} aria-hidden />
             돌아가기
           </button>
         )}
+        eventScrub={{
+          eventIndices: chapterEventIndices,
+          currentEvent,
+          onEventChange: handleEventChange,
+          readingEventNum,
+        }}
         floatingControls={{
           searchState,
           searchActions: floatingSearchActions,

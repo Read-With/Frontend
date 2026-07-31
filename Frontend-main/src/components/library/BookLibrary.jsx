@@ -4,8 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Heart, BookOpen, Network, MoreVertical, Info, Clock, Trash2, X } from 'lucide-react';
 import BookDetailModal, { AuthenticatedImage } from './BookDetailModal';
 import './BookLibrary.css';
-import { ensureGraphBookCache } from '../../utils/graph/graphFetch';
-import { USER_VIEWER_PREFIX, USER_GRAPH_PREFIX } from '../../utils/common/urlUtils';
+import { USER_VIEWER_PREFIX, USER_GRAPH_PREFIX, errorUtils } from '../../utils/common/urlUtils';
 import {
   formatLibraryRelativeDate,
   attachLibraryModalChrome,
@@ -32,10 +31,14 @@ async function prewarmGraphBookCache(book, options = {}) {
   if (!bookId) return null;
 
   try {
+    const { ensureGraphBookCache } = await import('../../utils/graph/graphModel');
     return await ensureGraphBookCache(bookId, options);
   } catch (error) {
     if (error?.name !== 'AbortError') {
-      console.warn('도서 그래프 캐시 준비 실패', { bookId, error });
+      errorUtils.logWarning('BookLibrary', '도서 그래프 캐시 준비 실패', {
+        bookId,
+        message: error?.message,
+      });
     }
     return null;
   }
@@ -139,6 +142,10 @@ const BookCard = memo(({ book, onToggleFavorite, onOpenBook, onBookDetailClick, 
     setOptimisticFavorite(null);
   }, [book.isFavorite]);
 
+  useEffect(() => {
+    setImageError(false);
+  }, [book.coverImgUrl]);
+
   const handleFavoriteClick = async (e) => {
     e.stopPropagation();
     if (!onToggleFavorite) return;
@@ -199,19 +206,28 @@ const BookCard = memo(({ book, onToggleFavorite, onOpenBook, onBookDetailClick, 
     <div 
       className={`book-card${viewMode === 'list' ? ' list-view' : ''}`}
       onMouseLeave={() => setShowContextMenu(false)}
-      onClick={handleCardClick}
     >
-      {/* 즐겨찾기 */}
       <button
+        type="button"
+        className="book-card-open"
+        onClick={handleCardClick}
+        aria-label={`${book.title} 읽기`}
+        disabled={isOpening}
+      />
+      <button
+        type="button"
         className={`book-favorite-btn ${displayFavorite ? 'favorited' : ''}`}
         onClick={handleFavoriteClick}
         title={displayFavorite ? '즐겨찾기 해제' : '즐겨찾기 추가'}
+        aria-label={displayFavorite ? '즐겨찾기 해제' : '즐겨찾기 추가'}
+        aria-pressed={displayFavorite}
       >
-        <Heart 
-          size={20} 
-          fill={displayFavorite ? '#ff6b6b' : 'none'} 
+        <Heart
+          size={20}
+          fill={displayFavorite ? '#ff6b6b' : 'none'}
           stroke={displayFavorite ? '#ff6b6b' : '#999'}
           strokeWidth={2}
+          aria-hidden
         />
       </button>
 
@@ -253,7 +269,7 @@ const BookCard = memo(({ book, onToggleFavorite, onOpenBook, onBookDetailClick, 
 
           {book.updatedAt && (
             <span className="book-meta-item">
-              <Clock size={14} />
+              <Clock size={14} aria-hidden />
               {formatLibraryRelativeDate(book.updatedAt)}
             </span>
           )}
@@ -261,49 +277,61 @@ const BookCard = memo(({ book, onToggleFavorite, onOpenBook, onBookDetailClick, 
       </div>
 
       <div className="book-card-actions">
-        <button 
+        <button
+          type="button"
           className="book-action-btn book-action-primary"
           onClick={handleReadClick}
           title="책 읽기"
+          aria-label={`${book.title} 읽기`}
           disabled={isOpening}
         >
-          <BookOpen size={16} className="book-action-icon" />
+          <BookOpen size={16} className="book-action-icon" aria-hidden />
           {isOpeningReader ? '준비중' : '읽기'}
         </button>
-        <button 
+        <button
+          type="button"
           className="book-action-btn book-action-secondary"
           onClick={handleGraphClick}
           title="인물 관계도 보기"
+          aria-label={`${book.title} 인물 관계도 보기`}
           disabled={isOpening}
         >
-          <Network size={16} className="book-action-icon" />
+          <Network size={16} className="book-action-icon" aria-hidden />
           {isOpeningGraph ? '준비중' : '관계도'}
         </button>
       </div>
 
       <div className="book-context-menu">
         <button
+          type="button"
           className="book-context-trigger"
           onClick={handleContextMenu}
           title="더보기"
+          aria-label={`${book.title} 더보기`}
+          aria-expanded={showContextMenu}
+          aria-haspopup="menu"
         >
-          <MoreVertical size={20} />
+          <MoreVertical size={20} aria-hidden />
         </button>
         
         {showContextMenu && (
-          <div className="book-context-dropdown">
+          <div className="book-context-dropdown" role="menu">
             <button
+              type="button"
               className="book-context-item"
+              role="menuitem"
               onClick={handleDetailClick}
             >
-              <Info size={18} className="book-context-icon" />
+              <Info size={18} className="book-context-icon" aria-hidden />
               상세 정보
             </button>
             <button
+              type="button"
               className="book-context-item book-context-item-danger"
+              role="menuitem"
               onClick={handleDeleteClick}
             >
-              <Trash2 size={18} className="book-context-icon" />
+              <Trash2 size={18} className="book-context-icon" aria-hidden />
               삭제
             </button>
           </div>
@@ -422,7 +450,7 @@ const BookLibrary = memo(({ books, onToggleFavorite, onBookDelete, viewMode = 'g
       try {
         await onBookDelete(deleteTargetBook.id);
       } catch (err) {
-        console.error('책 삭제 실패:', err);
+        errorUtils.logError('BookLibrary', err, { action: 'deleteBook' });
       }
     }
 

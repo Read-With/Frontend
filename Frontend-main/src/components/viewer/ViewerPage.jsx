@@ -46,10 +46,14 @@ function BookmarkDeleteConfirm({
         role="dialog"
         aria-modal="true"
         aria-labelledby="viewer-bookmark-delete-title"
+        aria-describedby="viewer-bookmark-delete-desc"
         onClick={(e) => e.stopPropagation()}
       >
         <p id="viewer-bookmark-delete-title" className="bm-confirm-title">
-          현재 위치의 북마크를 삭제하시겠습니까?
+          북마크를 삭제할까요?
+        </p>
+        <p id="viewer-bookmark-delete-desc" className="bm-confirm-desc">
+          현재 위치에 표시된 북마크가 제거됩니다.
         </p>
         <div className="bm-confirm-actions">
           <button
@@ -62,11 +66,12 @@ function BookmarkDeleteConfirm({
           </button>
           <button
             type="button"
-            className="bm-btn bm-btn-danger"
+            className="bm-btn bm-btn-confirm-delete"
             onClick={onConfirm}
             disabled={busy}
+            autoFocus
           >
-            삭제
+            {busy ? '삭제 중…' : '삭제'}
           </button>
         </div>
       </div>
@@ -148,19 +153,17 @@ const ViewerPage = () => {
   const graphClearRef = useRef(null);
 
   useEffect(() => {
-    const updateFromClientY = (clientY) => {
+    const revealIfHidden = (clientY) => {
+      if (showToolbarRef.current) return;
       const nearTop = clientY <= TOOLBAR_REVEAL_ZONE_PX;
       const nearBottom =
         clientY >= window.innerHeight - TOOLBAR_REVEAL_ZONE_PX;
-      const next = nearTop || nearBottom;
-      if (showToolbarRef.current !== next) {
-        setShowToolbar(next);
-      }
+      if (nearTop || nearBottom) setShowToolbar(true);
     };
-    const onMouseMove = (event) => updateFromClientY(event.clientY);
+    const onMouseMove = (event) => revealIfHidden(event.clientY);
     const onTouchStart = (event) => {
       const touch = event.touches?.[0];
-      if (touch) updateFromClientY(touch.clientY);
+      if (touch) revealIfHidden(touch.clientY);
     };
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('touchstart', onTouchStart, { passive: true });
@@ -169,6 +172,24 @@ const ViewerPage = () => {
       window.removeEventListener('touchstart', onTouchStart);
     };
   }, [setShowToolbar]);
+
+  const toggleToolbar = useCallback(() => {
+    setShowToolbar((prev) => !prev);
+  }, [setShowToolbar]);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.target.closest?.('input, textarea, [contenteditable], [role="dialog"]')) {
+        return;
+      }
+      if (e.key === 't' || e.key === 'T') {
+        e.preventDefault();
+        toggleToolbar();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [toggleToolbar]);
 
   const dismissDeleteConfirm = useCallback(() => {
     setToolbarDeleteConfirmId(null);
@@ -364,6 +385,7 @@ const ViewerPage = () => {
           suppressMessage={
             resumeAnchor ? '읽던 위치로 이동 중...' : '로딩 중...'
           }
+          onToggleChrome={toggleToolbar}
         />
         <ViewerSettings
           isOpen={showSettingsModal}

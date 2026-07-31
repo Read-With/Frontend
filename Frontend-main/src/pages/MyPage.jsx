@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, useId, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Book, Plus, Library, Heart, AlertCircle, Grid3X3, List, Upload, LogOut } from 'lucide-react';
 import BookLibrary from '../components/library/BookLibrary';
@@ -6,10 +6,11 @@ import FileUpload from '../components/library/FileUpload';
 import { useBooks } from '../hooks/books/bookHooks';
 import useAuth from '../hooks/auth/useAuth';
 import { EPUB_FILE_CONSTRAINTS } from '../utils/library/libraryUtils';
-import { READER_PROGRESS_CACHE_PREFIX } from '../utils/common/cache/cacheManager';
 import './MyPage.css';
 
 const MAX_EPUB_MB = Math.round(EPUB_FILE_CONSTRAINTS.MAX_SIZE / (1024 * 1024));
+const FOCUSABLE_SELECTOR =
+  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 const SORT_OPTIONS = [
   { value: 'recent', label: '최근 추가순' },
@@ -22,14 +23,14 @@ const SORT_OPTIONS = [
 function resolveHeaderDisplayName(userNickname, user) {
   if (userNickname) return userNickname;
   if (user?.name) return user.name;
-  return 'User';
+  return '사용자';
 }
 
 function HeaderBrand({ userName = null }) {
   return (
     <div className="header-brand">
       <div className="header-brand-icon" aria-hidden>
-        📖
+        <Book size={22} strokeWidth={2} />
       </div>
       <span className="header-brand-text" lang="en">ReadWith</span>
       {userName != null && (
@@ -43,31 +44,89 @@ function HeaderBrand({ userName = null }) {
 }
 
 function LogoutConfirmDialog({ open, onConfirm, onCancel }) {
+  const titleId = useId();
+  const descId = useId();
+  const dialogRef = useRef(null);
+  const previouslyFocusedRef = useRef(null);
+
   useEffect(() => {
     if (!open) return undefined;
 
-    const handleEscape = (event) => {
+    previouslyFocusedRef.current = document.activeElement;
+    const dialog = dialogRef.current;
+    if (!dialog) return undefined;
+
+    const getFocusable = () =>
+      Array.from(dialog.querySelectorAll(FOCUSABLE_SELECTOR)).filter(
+        (el) => el.offsetParent !== null || el === document.activeElement
+      );
+
+    const focusable = getFocusable();
+    (focusable[0] || dialog).focus();
+    document.body.style.overflow = 'hidden';
+
+    const onKeyDown = (event) => {
       if (event.key === 'Escape') {
+        event.stopPropagation();
         onCancel();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+
+      const items = getFocusable();
+      if (items.length === 0) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
       }
     };
 
-    document.addEventListener('keydown', handleEscape);
-    document.body.style.overflow = 'hidden';
+    document.addEventListener('keydown', onKeyDown);
 
     return () => {
-      document.removeEventListener('keydown', handleEscape);
-      document.body.style.overflow = 'unset';
+      document.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = '';
+      const prev = previouslyFocusedRef.current;
+      if (prev && typeof prev.focus === 'function') {
+        prev.focus();
+      }
     };
   }, [open, onCancel]);
 
   if (!open) return null;
 
   return (
-    <div className="logout-confirm-overlay" onClick={onCancel}>
-      <div className="logout-confirm-dialog" onClick={(event) => event.stopPropagation()}>
-        <h3 className="logout-confirm-title">로그아웃</h3>
-        <p className="logout-confirm-message">정말 로그아웃 하시겠습니까?</p>
+    <div
+      className="logout-confirm-overlay"
+      onClick={onCancel}
+      role="presentation"
+    >
+      <div
+        ref={dialogRef}
+        className="logout-confirm-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={descId}
+        tabIndex={-1}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <h3 id={titleId} className="logout-confirm-title">
+          로그아웃
+        </h3>
+        <p id={descId} className="logout-confirm-message">
+          정말 로그아웃 하시겠습니까?
+        </p>
         <div className="logout-confirm-buttons">
           <button type="button" className="logout-confirm-cancel" onClick={onCancel}>
             취소
@@ -102,7 +161,7 @@ function Header({ userNickname }) {
       <div className="user-topbar-right">
         <button type="button" className="user-topbar-logout" onClick={() => setShowLogoutConfirm(true)}>
           <LogOut size={16} strokeWidth={2} />
-          <span>Logout</span>
+          <span>로그아웃</span>
         </button>
       </div>
 
@@ -171,29 +230,10 @@ export default function MyPage() {
 
   const stats = useMemo(() => {
     const list = books || [];
-    const total = list.length;
-    const favorites = list.filter((book) => book.isFavorite).length;
-
-    const bookIds = new Set();
-    for (const book of list) {
-      if (book.id != null) bookIds.add(String(book.id));
-      if (book._bookId != null) bookIds.add(String(book._bookId));
-    }
-
-    let reading = 0;
-    try {
-      const matched = new Set();
-      for (const key of Object.keys(localStorage)) {
-        if (!key.startsWith(READER_PROGRESS_CACHE_PREFIX)) continue;
-        const bookId = key.slice(READER_PROGRESS_CACHE_PREFIX.length);
-        if (bookId && bookIds.has(bookId)) matched.add(bookId);
-      }
-      reading = Math.min(matched.size, total);
-    } catch {
-      /* ignore */
-    }
-
-    return { total, reading, favorites };
+    return {
+      total: list.length,
+      favorites: list.filter((book) => book.isFavorite).length,
+    };
   }, [books]);
 
   const filteredBooks = useMemo(() => {
@@ -249,21 +289,6 @@ export default function MyPage() {
                   모든 독서의 순간이 쌓여, 당신만의 이야기가 됩니다.
                 </p>
               </div>
-
-              <div className="hero-stats">
-                <div className="stat-card">
-                  <div className="stat-icon-wrapper">
-                    <Book className="stat-icon-svg" />
-                    <div className="stat-badge">총 {stats.total}권</div>
-                  </div>
-                  <div className="stat-content">
-                    <div className="stat-main">
-                      <span className="stat-number">{stats.reading}</span>
-                      <span className="stat-label">권 읽는 중</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
             </div>
           </section>
 
@@ -282,8 +307,10 @@ export default function MyPage() {
                   type="button"
                   className={`tab-button${activeTab === 'favorites' ? ' active' : ''}`}
                   onClick={() => setActiveTab('favorites')}
+                  aria-label={`즐겨찾기${stats.favorites > 0 ? `, ${stats.favorites}권` : ''}`}
                 >
-                  즐겨찾기 ❤️
+                  <Heart size={16} strokeWidth={2} aria-hidden />
+                  즐겨찾기
                   {stats.favorites > 0 && (
                     <span className="tab-badge">{stats.favorites}</span>
                   )}
@@ -336,22 +363,26 @@ export default function MyPage() {
                       ))}
                     </select>
 
-                    <div className="view-toggle">
+                    <div className="view-toggle" role="group" aria-label="보기 방식">
                       <button
                         type="button"
                         className={`view-toggle-btn${viewMode === 'grid' ? ' active' : ''}`}
                         onClick={() => setViewMode('grid')}
                         title="그리드 뷰"
+                        aria-label="그리드 뷰"
+                        aria-pressed={viewMode === 'grid'}
                       >
-                        <Grid3X3 size={18} />
+                        <Grid3X3 size={18} aria-hidden />
                       </button>
                       <button
                         type="button"
                         className={`view-toggle-btn${viewMode === 'list' ? ' active' : ''}`}
                         onClick={() => setViewMode('list')}
                         title="리스트 뷰"
+                        aria-label="리스트 뷰"
+                        aria-pressed={viewMode === 'list'}
                       >
-                        <List size={18} />
+                        <List size={18} aria-hidden />
                       </button>
                     </div>
                   </div>

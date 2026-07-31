@@ -252,7 +252,7 @@ export function useServerBookMatching(bookId, options = {}) {
 
 export const useBooks = () => {
   const queryClient = useQueryClient();
-  const [progressCacheEpoch, bumpProgressCacheEpoch] = useReducer((n) => n + 1, 0);
+  const [, bumpProgressCacheEpoch] = useReducer((n) => n + 1, 0);
   const [hiddenBookIds, setHiddenBookIds] = useState(readHiddenBookIds);
 
   useEffect(() => {
@@ -263,14 +263,15 @@ export const useBooks = () => {
 
   const { data, isLoading, error: queryError, refetch } = useBooksQuery();
 
-  const books = useMemo(() => {
-    return reconcileBooks(data?.books)
-      .filter((book) => book?.id != null && !hiddenBookIds.has(`${book.id}`))
-      .map((book) => ({
-        ...book,
-        progress: resolveLibraryReadingProgressPercent(book),
-      }));
-  }, [data, progressCacheEpoch, hiddenBookIds]);
+  const visibleBooks = useMemo(
+    () => reconcileBooks(data?.books)
+      .filter((book) => book?.id != null && !hiddenBookIds.has(`${book.id}`)),
+    [data, hiddenBookIds],
+  );
+  const books = visibleBooks.map((book) => ({
+    ...book,
+    progress: resolveLibraryReadingProgressPercent(book),
+  }));
 
   const toggleFavoriteMutation = useMutation({
     mutationFn: ({ bookId, favorite }) => toggleBookFavorite(bookId, favorite),
@@ -352,7 +353,7 @@ export const useBooks = () => {
           return next;
         });
       } catch (e) {
-        console.warn('addBook 실패:', e);
+        errorUtils.logWarning('addBook', e?.message || '실패');
       }
     },
     [queryClient]

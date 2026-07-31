@@ -1,13 +1,28 @@
-/** graphModel: 캐릭터·relations → elements 변환, diff, 필터 */
+/**
+ * graphModel: 캐릭터·relations → Cytoscape elements 변환 + 챕터/델타 캐시.
+ * (파일 분리 없이 섹션으로만 구분)
+ *
+ * 섹션:
+ * 1. Character maps / profile URL
+ * 2. Node weights
+ * 3. Elements build
+ * 4. Diff / fingerprints
+ * 5. Filter / subgraph / overlap
+ * 6. Chapter cache payload / reconstruct / book summary
+ * 7. Chapter discover / prefetch / ensure
+ * 8. Book relationship deltas
+ */
 
-import { sanitizeAssetUrl, resolveApiArtifactUrl } from '../common/urlUtils';
+import { sanitizeAssetUrl, resolveApiArtifactUrl, errorUtils } from '../common/urlUtils';
 import {
   isGraphEdgeElement,
   isGraphNodeElement,
   normalizeElementId,
   sortElementsByDataId,
   undirectedPairKey,
+  directedEdgeElementId,
   uniqueStrings,
+  sortedUniqueJoin,
   normalizeRelation,
   pickLastRelationLabel,
   mergeRelationLabelHistory,
@@ -19,10 +34,18 @@ import {
   isUsableCharacterDisplayName,
   enrichGraphCharacters,
   extractCharacterId,
+  resolveManifestEventId,
+  processRelations,
 } from './graphCore';
 import { eventUtils, cacheKeyUtils } from '../viewer/viewerCore';
-import { toPositiveInt } from '../common/valueUtils';
-
+import {
+  deepClone,
+  resolveChapterIndex,
+  toNumberOrNull,
+  toPositiveInt,
+  toPositiveNumberOrNull,
+  toTrimmedStringOrNull,
+} from '../common/valueUtils';
 import {
   sortDeltasForAccumulate,
   createDeltaAccumulateWalker,
@@ -44,16 +67,14 @@ import {
   hydrateCacheFromStorage,
   GRAPH_BOOK_CACHE_PREFIX,
   CHAPTER_EVENT_CACHE_MAX_AGE_MS,
+  CHAPTER_EVENT_CACHE_PREFIX,
   CHAPTER_GRAPH_CACHE_SOURCE,
+  isUnusableChapterGraphCacheSource,
 } from '../common/cache/cacheManager';
-import {
-  deepClone,
-  resolveChapterIndex,
-  toNumberOrNull,
-  toPositiveNumberOrNull,
-  toTrimmedStringOrNull,
-} from '../common/valueUtils';
 
+/* ═══════════════════════════════════════════════════════════════════════════
+ * 1. Character maps / profile URL
+ * ═══════════════════════════════════════════════════════════════════════════ */
 
 const createEmptyCharacterMaps = () => ({
   idToName: {},
@@ -70,7 +91,11 @@ const resolveCharacterArray = (characters) => {
   return Array.isArray(list) ? list : [];
 };
 
-/** 캐릭터 배열 → id 기반 lookup 맵 */
+/**
+ * 캐릭터 배열 → id 기반 lookup 맵.
+ * @param {Array|Object|null} characters
+ * @returns {{ idToName: Object, idToDesc: Object, idToDescKo: Object, idToMain: Object, idToNames: Object, idToProfileImage: Object }}
+ */
 export function createCharacterMaps(characters) {
   try {
     const maps = createEmptyCharacterMaps();
@@ -89,8 +114,14 @@ export function createCharacterMaps(characters) {
 
       const displayName = pickCharacterDisplayName(char);
       idToName[id] = displayName;
-      idToDesc[id] = char.description || char.profileText || '';
-      idToDescKo[id] = char.personalityText || '';
+      // 소개: personalityText 우선. profileText는 이미지/캐릭터 프롬프트라 제외
+      const personalityText =
+        typeof char.personalityText === 'string' ? char.personalityText.trim() : '';
+      const legacyDescription =
+        typeof char.description === 'string' ? char.description.trim() : '';
+      const bio = personalityText || legacyDescription;
+      idToDesc[id] = bio;
+      idToDescKo[id] = bio;
       idToMain[id] = !!char.isMainCharacter;
       idToNames[id] = char.names || [];
 
@@ -99,7 +130,7 @@ export function createCharacterMaps(characters) {
         if (validatedUrl) {
           idToProfileImage[id] = validatedUrl;
         } else if (import.meta.env.DEV) {
-          console.debug(`[이미지 검증 실패] 캐릭터 ID: ${id}`);
+          errorUtils.logDebug('graphModel', '이미지 검증 실패', { characterId: id });
         }
       } else {
         missingProfileImage += 1;
@@ -107,12 +138,12 @@ export function createCharacterMaps(characters) {
     });
 
     if (import.meta.env.DEV && missingProfileImage > 0) {
-      console.debug(`[이미지 없음] 캐릭터 ${missingProfileImage}명 (프로필 이미지 미설정)`);
+      errorUtils.logDebug('graphModel', '프로필 이미지 미설정 캐릭터', { count: missingProfileImage });
     }
 
     return maps;
   } catch (error) {
-    console.error('createCharacterMaps 실패:', error);
+    errorUtils.logError('createCharacterMaps', error);
     return createEmptyCharacterMaps();
   }
 }
@@ -133,7 +164,7 @@ function validateAndNormalizeProfileImageUrl(profileImage) {
       return trimmed;
     } catch {
       if (import.meta.env.DEV) {
-        console.debug(`[이미지 검증] 유효하지 않은 절대 URL`);
+        errorUtils.logDebug('graphModel', '유효하지 않은 절대 URL');
       }
       return null;
     }
@@ -145,7 +176,7 @@ function validateAndNormalizeProfileImageUrl(profileImage) {
       return resolved.origin + resolved.pathname + resolved.search + resolved.hash;
     } catch {
       if (import.meta.env.DEV) {
-        console.debug(`[이미지 검증] 유효하지 않은 프로토콜 상대 URL`);
+        errorUtils.logDebug('graphModel', '유효하지 않은 프로토콜 상대 URL');
       }
       return null;
     }
@@ -156,11 +187,20 @@ function validateAndNormalizeProfileImageUrl(profileImage) {
   }
 
   if (import.meta.env.DEV) {
-    console.debug(`[이미지 검증] 유효하지 않은 이미지 URL 형식`);
+    errorUtils.logDebug('graphModel', '유효하지 않은 이미지 URL 형식');
   }
   return null;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+ * 2. Node weights
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * 노드 weight가 양의 유한수인지 검사.
+ * @param {*} weight
+ * @returns {boolean}
+ */
 export function isValidNodeWeight(weight) {
   return typeof weight === 'number' && Number.isFinite(weight) && weight > 0;
 }
@@ -169,7 +209,7 @@ function isValidNodeCount(count) {
   return typeof count === 'number' && Number.isFinite(count) && count > 0;
 }
 
-export function isNodeWeightEntryVisible(entry) {
+function isNodeWeightEntryVisible(entry) {
   return Boolean(entry && isValidNodeWeight(entry.weight) && isValidNodeCount(entry.count));
 }
 
@@ -224,7 +264,11 @@ function mergeCharacterRecord(prev, char) {
   return merged;
 }
 
-/** Cytoscape elements → nodeWeights 맵 */
+/**
+ * Cytoscape elements → nodeWeights 맵.
+ * @param {Array} elements
+ * @returns {Object.<string, { weight: number, count: number }>}
+ */
 export function extractNodeWeightsFromElements(elements) {
   const nodeWeights = {};
   if (!Array.isArray(elements)) return nodeWeights;
@@ -243,7 +287,11 @@ export function extractNodeWeightsFromElements(elements) {
   return nodeWeights;
 }
 
-/** 이벤트별 캐릭터 ID 병합 (빈 필드는 이전 값 유지) */
+/**
+ * 이벤트별 캐릭터 ID 병합 (빈 필드는 이전 값 유지).
+ * @param {Array} eventList
+ * @returns {Map<string, Object>}
+ */
 export function aggregateCharactersFromEvents(eventList) {
   const charactersMap = new Map();
 
@@ -270,7 +318,12 @@ export function aggregateCharactersFromEvents(eventList) {
   return charactersMap;
 }
 
-/** weight·count → nodeWeights 맵 (직전 weight·count 상속, 없으면 노드 비표시) */
+/**
+ * weight·count → nodeWeights 맵 (직전 weight·count 상속, 없으면 노드 비표시).
+ * @param {Array} characters
+ * @param {Object|null} [previousNodeWeights]
+ * @returns {Object.<string, { weight: number, count: number }>}
+ */
 export function buildNodeWeights(characters, previousNodeWeights = null) {
   const nodeWeights = cloneNodeWeightsMap(previousNodeWeights);
 
@@ -295,12 +348,71 @@ export function buildNodeWeights(characters, previousNodeWeights = null) {
 }
 
 /** 빈 nodeWeights 맵은 null로 통일 (convertRelationsToElements 인자용) */
-export function toNodeWeightsOrNull(nodeWeights) {
+function toNodeWeightsOrNull(nodeWeights) {
   if (!nodeWeights || typeof nodeWeights !== 'object') return null;
   return Object.keys(nodeWeights).length > 0 ? nodeWeights : null;
 }
 
-const directedEdgeElementId = (fromId, toId) => `${String(fromId)}->${String(toId)}`;
+/* ═══════════════════════════════════════════════════════════════════════════
+ * 3. Elements build
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * characters + relations → cytoscape elements (표시·챕터 캐시 공통 진입점).
+ * processRelations → maps/weights → convertRelationsToElements 순서를 고정한다.
+ * @param {Object} params
+ * @param {Array} [params.characters]
+ * @param {Array} [params.relations]
+ * @param {Object|null} [params.eventData]
+ * @param {Object|null} [params.previousNodeWeights]
+ * @param {string|number|null} [params.bookId]
+ * @param {Object|null} [params.deps] 테스트용 override
+ * @returns {{ elements: Array, characters: Array }}
+ */
+export function buildElementsFromGraphPayload({
+  characters,
+  relations,
+  eventData = null,
+  previousNodeWeights = null,
+  bookId = null,
+  deps = null,
+} = {}) {
+  const mapsFn = deps?.createCharacterMaps ?? createCharacterMaps;
+  const weightsFn = deps?.buildNodeWeights ?? buildNodeWeights;
+  const convertFn = deps?.convertRelationsToElements ?? convertRelationsToElements;
+
+  const chars = enrichGraphCharacters(
+    Array.isArray(characters) ? characters : [],
+    { bookId }
+  );
+  const rels = processRelations(Array.isArray(relations) ? relations : []);
+  if (chars.length === 0 && rels.length === 0) {
+    return { elements: [], characters: chars };
+  }
+
+  const { idToName, idToDesc, idToDescKo, idToMain, idToNames, idToProfileImage } =
+    mapsFn(chars);
+  const nodeWeights = weightsFn(chars, previousNodeWeights);
+
+  const elements = convertFn({
+    relations: rels,
+    idToName,
+    idToDesc,
+    idToDescKo,
+    idToMain,
+    idToNames,
+    nodeWeights: toNodeWeightsOrNull(nodeWeights),
+    eventData,
+    idToProfileImage,
+    charactersOrphanMerge: chars.length > 0 ? chars : null,
+    bookId,
+  });
+
+  return {
+    elements: Array.isArray(elements) ? elements : [],
+    characters: chars,
+  };
+}
 
 function mergeEdgeLabels(a, b) {
   const t1 = String(a ?? '').trim();
@@ -321,7 +433,7 @@ function mergePositivity(a, b) {
 }
 
 function normalizedRelationTagKey(data) {
-  return uniqueStrings(Array.isArray(data?.relation) ? data.relation : []).sort().join('\x1e');
+  return sortedUniqueJoin(Array.isArray(data?.relation) ? data.relation : []);
 }
 
 function positivityToken(data) {
@@ -329,7 +441,6 @@ function positivityToken(data) {
   return Number.isFinite(n) ? n : null;
 }
 
-/** graphModel: 캐릭터·relations → elements 변환, diff, 필터
 /** 역방향 두 간선의 관계(태그·positivity)가 동일한지 — 동일하면 `-` 한 줄로 합침 */
 function relationPayloadEquivalent(d0, d1) {
   if (normalizedRelationTagKey(d0) !== normalizedRelationTagKey(d1)) {
@@ -474,112 +585,38 @@ function relationEventOrdinal(rel) {
   return 0;
 }
 
-const validateElements = (elements) => elements?.filter(e => e && normalizeElementId(e)) || [];
-const createElementMap = (elements) => new Map(elements.map(e => [normalizeElementId(e), e]));
-
-function deepEqual(obj1, obj2, depth = 0) {
-  const MAX_DEPTH = 10;
-  if (depth > MAX_DEPTH) {
-    return obj1 === obj2;
-  }
-
-  if (obj1 === obj2) return true;
-  if (obj1 == null || obj2 == null) return false;
-  if (typeof obj1 !== typeof obj2) return false;
-
-  if (typeof obj1 !== 'object') return obj1 === obj2;
-
-  if (Array.isArray(obj1) && Array.isArray(obj2)) {
-    if (obj1.length !== obj2.length) return false;
-    for (let i = 0; i < obj1.length; i++) {
-      if (!deepEqual(obj1[i], obj2[i], depth + 1)) return false;
-    }
-    return true;
-  }
-
-  if (Array.isArray(obj1) !== Array.isArray(obj2)) return false;
-
-  const keys1 = Object.keys(obj1);
-  const keys2 = Object.keys(obj2);
-
-  if (keys1.length !== keys2.length) return false;
-
-  const keys2Set = new Set(keys2);
-
-  for (const key of keys1) {
-    if (!keys2Set.has(key)) return false;
-    if (!deepEqual(obj1[key], obj2[key], depth + 1)) return false;
-  }
-
-  return true;
-}
-
-/**
- * 관계 데이터를 그래프 요소로 변환
- * @param {Object} params
- * @param {Array} params.relations
- * @param {Object} params.idToName
- * @param {Object} [params.idToDesc]
- * @param {Object} [params.idToDescKo]
- * @param {Object} [params.idToMain]
- * @param {Object} [params.idToNames]
- * @param {Object|null} [params.nodeWeights]
- * @param {Object|null} [params.eventData]
- * @param {Object|null} [params.idToProfileImage]
- * @param {Array|null} [params.charactersOrphanMerge]
- * @param {string|number|null} [params.bookId]
- * @returns {Array}
- */
-export function convertRelationsToElements({
-  relations,
-  idToName,
-  idToDesc = {},
-  idToDescKo = {},
-  idToMain = {},
-  idToNames = {},
-  nodeWeights = null,
-  eventData = null,
-  idToProfileImage = null,
-  charactersOrphanMerge = null,
-  bookId = null,
-} = {}) {
-  if (!Array.isArray(relations)) {
-    return [];
-  }
-
-  if (!idToName || typeof idToName !== 'object') {
-    return [];
-  }
-
+/** relations + orphan characters → 등장 노드 id 목록 */
+function collectRelationNodeIds(relations, charactersOrphanMerge) {
   const nodeSet = new Set();
-  const nodes = [];
-  const edges = [];
-
   const nodeIds = [];
+
+  const addId = (rawId) => {
+    const strId = rawId == null ? '' : String(rawId);
+    if (!strId || strId === '0') return;
+    if (!nodeSet.has(strId)) {
+      nodeSet.add(strId);
+      nodeIds.push(strId);
+    }
+  };
+
   relations.forEach((rel) => {
     const r = normalizeRelation(rel);
     if (!r) return;
-    [r.id1, r.id2].forEach((id) => {
-      const strId = String(id);
-      if (!strId || strId === '0') return;
-      if (!nodeSet.has(strId)) {
-        nodeSet.add(strId);
-        nodeIds.push(strId);
-      }
-    });
+    addId(r.id1);
+    addId(r.id2);
   });
 
   if (Array.isArray(charactersOrphanMerge) && charactersOrphanMerge.length > 0) {
     charactersOrphanMerge.forEach((char) => {
-      const strId = extractCharacterId(char);
-      if (!strId || strId === '0') return;
-      if (!nodeSet.has(strId)) {
-        nodeSet.add(strId);
-        nodeIds.push(strId);
-      }
+      addId(extractCharacterId(char));
     });
   }
 
+  return { nodeSet, nodeIds };
+}
+
+/** nodeSet 표시명 해석 (manifest / remember / fallback) */
+function resolveDisplayNamesForNodeSet(nodeSet, idToName, bookId) {
   const manifestLookup = bookId != null ? buildManifestCharacterNameLookup(bookId) : null;
   const resolvedIdToName = { ...idToName };
   for (const strId of nodeSet) {
@@ -599,46 +636,56 @@ export function convertRelationsToElements({
       resolvedIdToName[strId] = `인물 ${strId}`;
     }
   }
+  return resolvedIdToName;
+}
 
-  const randomCache = new Map();
-  function seededRandom(id, min, max) {
-    const cacheKey = `${id}-${min}-${max}`;
-    if (randomCache.has(cacheKey)) {
-      return randomCache.get(cacheKey);
-    }
+const SEEDED_RANDOM_MAX_CACHE = 500;
 
-    let hash = 0;
-    for (let i = 0; i < id.length; i++) {
-      hash = ((hash << 5) - hash) + id.charCodeAt(i);
-      hash |= 0;
-    }
-    const seed = Math.abs(hash) % 10000;
-    const result = min + (seed % (max - min));
-
-    const MAX_CACHE_SIZE = 500;
-    if (randomCache.size >= MAX_CACHE_SIZE) {
-      const entries = Array.from(randomCache.entries());
-      const toDelete = entries.slice(0, Math.floor(MAX_CACHE_SIZE / 2));
-      toDelete.forEach(([key]) => randomCache.delete(key));
-    }
-
-    randomCache.set(cacheKey, result);
-    return result;
+/** id 해시 기반 결정적 난수 (원형 배치용). cache Map은 호출측에서 재사용. */
+function seededRandom(randomCache, id, min, max) {
+  const cacheKey = `${id}-${min}-${max}`;
+  if (randomCache.has(cacheKey)) {
+    return randomCache.get(cacheKey);
   }
 
-  const validNodeIds = nodeIds.filter(
-    (strId) => strId && strId !== '0' && strId !== 'undefined' && strId !== 'null'
-  );
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) {
+    hash = ((hash << 5) - hash) + id.charCodeAt(i);
+    hash |= 0;
+  }
+  const seed = Math.abs(hash) % 10000;
+  const result = min + (seed % (max - min));
 
-  const visibleNodeIds = validNodeIds.filter((nodeId) => isNodeWeightEntryVisible(nodeWeights?.[nodeId]));
-  const visibleNodeIdSet = new Set(visibleNodeIds);
+  if (randomCache.size >= SEEDED_RANDOM_MAX_CACHE) {
+    const entries = Array.from(randomCache.entries());
+    const toDelete = entries.slice(0, Math.floor(SEEDED_RANDOM_MAX_CACHE / 2));
+    toDelete.forEach(([key]) => randomCache.delete(key));
+  }
 
+  randomCache.set(cacheKey, result);
+  return result;
+}
+
+/** weight가 유효한 노드만 원형 배치로 생성 */
+function buildVisibleNodes({
+  visibleNodeIds,
+  resolvedIdToName,
+  nodeWeights,
+  idToMain,
+  idToDesc,
+  idToDescKo,
+  idToNames,
+  idToProfileImage,
+  randomCache,
+}) {
+  const nodes = [];
   const centerX = 500;
   const centerY = 350;
   const radius = 320;
+
   visibleNodeIds.forEach((strId) => {
-    const angle = seededRandom(strId, 0, 360) * Math.PI / 180;
-    const r = radius * (0.7 + 0.3 * (seededRandom(strId, 0, 1000) / 1000));
+    const angle = seededRandom(randomCache, strId, 0, 360) * Math.PI / 180;
+    const r = radius * (0.7 + 0.3 * (seededRandom(randomCache, strId, 0, 1000) / 1000));
     const x = centerX + r * Math.cos(angle);
     const y = centerY + r * Math.sin(angle);
     const commonName = resolvedIdToName[strId];
@@ -672,7 +719,14 @@ export function convertRelationsToElements({
     });
   });
 
-  /** id1->id2 방향만; 역쌍은 관계 동일 시 `a-b`·bidirectional, 다르면 `a->b`·`b->a` 각각 */
+  return nodes;
+}
+
+/**
+ * id1→id2 방향만 누적; 역쌍은 finalizeDirectedEdges에서 합침.
+ * @returns {Array} finalized edges
+ */
+function accumulateDirectedEdges(relations, { nodeSet, visibleNodeIdSet, eventData }) {
   const edgeMap = new Map();
   const positivityByEdge = new Map();
 
@@ -705,7 +759,7 @@ export function convertRelationsToElements({
       positivityByEdge.set(edgeKey, info);
     }
 
-    let relationLabel = resolveEdgeDisplayLabel(r);
+    const relationLabel = resolveEdgeDisplayLabel(r);
     const relEv = relationEventOrdinal(rel);
     const snapshotEventId =
       eventData?.eventId ??
@@ -765,7 +819,74 @@ export function convertRelationsToElements({
     }
   }
 
-  edges.push(...finalizeDirectedEdges(edgeMap));
+  return finalizeDirectedEdges(edgeMap);
+}
+
+/**
+ * 관계 데이터를 그래프 요소로 변환.
+ * @param {Object} params
+ * @param {Array} params.relations
+ * @param {Object} params.idToName
+ * @param {Object} [params.idToDesc]
+ * @param {Object} [params.idToDescKo]
+ * @param {Object} [params.idToMain]
+ * @param {Object} [params.idToNames]
+ * @param {Object|null} [params.nodeWeights]
+ * @param {Object|null} [params.eventData]
+ * @param {Object|null} [params.idToProfileImage]
+ * @param {Array|null} [params.charactersOrphanMerge]
+ * @param {string|number|null} [params.bookId]
+ * @returns {Array}
+ */
+export function convertRelationsToElements({
+  relations,
+  idToName,
+  idToDesc = {},
+  idToDescKo = {},
+  idToMain = {},
+  idToNames = {},
+  nodeWeights = null,
+  eventData = null,
+  idToProfileImage = null,
+  charactersOrphanMerge = null,
+  bookId = null,
+} = {}) {
+  if (!Array.isArray(relations)) {
+    return [];
+  }
+
+  if (!idToName || typeof idToName !== 'object') {
+    return [];
+  }
+
+  const { nodeSet, nodeIds } = collectRelationNodeIds(relations, charactersOrphanMerge);
+  const resolvedIdToName = resolveDisplayNamesForNodeSet(nodeSet, idToName, bookId);
+  const randomCache = new Map();
+
+  const validNodeIds = nodeIds.filter(
+    (strId) => strId && strId !== '0' && strId !== 'undefined' && strId !== 'null'
+  );
+
+  const visibleNodeIds = validNodeIds.filter((nodeId) => isNodeWeightEntryVisible(nodeWeights?.[nodeId]));
+  const visibleNodeIdSet = new Set(visibleNodeIds);
+
+  const nodes = buildVisibleNodes({
+    visibleNodeIds,
+    resolvedIdToName,
+    nodeWeights,
+    idToMain,
+    idToDesc,
+    idToDescKo,
+    idToNames,
+    idToProfileImage,
+    randomCache,
+  });
+
+  const edges = accumulateDirectedEdges(relations, {
+    nodeSet,
+    visibleNodeIdSet,
+    eventData,
+  });
 
   return [
     ...sortElementsByDataId(nodes),
@@ -773,11 +894,54 @@ export function convertRelationsToElements({
   ];
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+ * 4. Diff / fingerprints
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+const validateElements = (elements) => elements?.filter(e => e && normalizeElementId(e)) || [];
+const createElementMap = (elements) => new Map(elements.map(e => [normalizeElementId(e), e]));
+
+function deepEqual(obj1, obj2, depth = 0) {
+  const MAX_DEPTH = 10;
+  if (depth > MAX_DEPTH) {
+    return obj1 === obj2;
+  }
+
+  if (obj1 === obj2) return true;
+  if (obj1 == null || obj2 == null) return false;
+  if (typeof obj1 !== typeof obj2) return false;
+
+  if (typeof obj1 !== 'object') return obj1 === obj2;
+
+  if (Array.isArray(obj1) && Array.isArray(obj2)) {
+    if (obj1.length !== obj2.length) return false;
+    for (let i = 0; i < obj1.length; i++) {
+      if (!deepEqual(obj1[i], obj2[i], depth + 1)) return false;
+    }
+    return true;
+  }
+
+  if (Array.isArray(obj1) !== Array.isArray(obj2)) return false;
+
+  const keys1 = Object.keys(obj1);
+  const keys2 = Object.keys(obj2);
+
+  if (keys1.length !== keys2.length) return false;
+
+  const keys2Set = new Set(keys2);
+
+  for (const key of keys1) {
+    if (!keys2Set.has(key)) return false;
+    if (!deepEqual(obj1[key], obj2[key], depth + 1)) return false;
+  }
+
+  return true;
+}
 
 /**
  * 그래프 diff 계산 (position까지 비교)
  */
-export function calcGraphDiff(prevElements, currElements) {
+function calcGraphDiff(prevElements, currElements) {
   if (!prevElements || !currElements) {
     return { added: [], removed: [], updated: [] };
   }
@@ -809,7 +973,12 @@ export function calcGraphDiff(prevElements, currElements) {
   return { added, removed, updated };
 }
 
-/** Cytoscape 동기화 스킵용: 동일 id의 시각적 data만 문자열화 */
+/**
+ * Cytoscape 동기화 스킵용: 동일 id의 시각적 data만 문자열화.
+ * 노드 image 포함 — blob resolve 전후 fingerprint가 달라져야 data 동기화가 스킵되지 않음.
+ * @param {Object} el
+ * @returns {string}
+ */
 export function visualElementSignature(el) {
   const d = el?.data;
   if (!d) return "";
@@ -818,10 +987,22 @@ export function visualElementSignature(el) {
     const topo = d.bidirectional ? "b" : d.reciprocalPair ? "r" : "";
     return `e:${rel}:${d.label ?? ""}:${d.positivity ?? ""}:${d.lineStyle ?? ""}:${d.width ?? ""}:${topo}`;
   }
-  return `n:${d.label ?? ""}:${d.weight ?? ""}:${d.count ?? ""}:${d.isMainCharacter ?? ""}:${d.positivity ?? ""}`;
+  const image = typeof d.image === 'string' ? d.image : '';
+  return `n:${d.label ?? ""}:${d.weight ?? ""}:${d.count ?? ""}:${d.isMainCharacter ?? ""}:${d.positivity ?? ""}\x1e${image}`;
 }
 
-/** props elements가 새 배열이어도 그래프 의미가 동일하면 effect·layout 재실행 생략 */
+/** visualElementSignature 노드 문자열에서 image 구간만 추출 (blob resolve 감지용) */
+export function visualSignatureImagePart(sig) {
+  if (typeof sig !== 'string' || !sig.startsWith('n:')) return '';
+  const sep = sig.indexOf('\x1e');
+  return sep >= 0 ? sig.slice(sep + 1) : '';
+}
+
+/**
+ * props elements가 새 배열이어도 그래프 의미가 동일하면 effect·layout 재실행 생략.
+ * @param {Array} elements
+ * @returns {string}
+ */
 export function buildElementsGraphFingerprint(elements) {
   if (!elements?.length) return "";
   const rows = elements
@@ -839,7 +1020,11 @@ export function buildElementsGraphFingerprint(elements) {
   return `${elements.length}\n${rows.join("\n")}`;
 }
 
-/** 노드 id + 간선(id·source·target)만으로 골격 동일 여부 판별(라벨·관계문구 변경 시에도 동일하면 펄스 생략) */
+/**
+ * 노드 id + 간선(id·source·target)만으로 골격 동일 여부 판별(라벨·관계문구 변경 시에도 동일하면 펄스 생략).
+ * @param {Array} elements
+ * @returns {string}
+ */
 export function buildElementsStructureFingerprint(elements) {
   if (!elements?.length) return "";
   const nodeIds = [];
@@ -859,10 +1044,18 @@ export function buildElementsStructureFingerprint(elements) {
   return `${nodeIds.join("\x1e")}\n${edgeRows.join("\x1e")}`;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+ * 5. Filter / subgraph / overlap
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
 /**
  * seed 노드에 연결된 edge(+endpoint 노드) 서브그래프.
+ * @param {Array} elements
+ * @param {Set|Iterable} seedNodeIds
+ * @param {Object} [options]
  * @param {'any'|'both'} [options.seedEdgeMode='any'] any=한쪽만 seed, both=양끝 모두 seed
  * @param {boolean} [options.includeIsolatedSeeds=true] seed에 간선이 없어도 노드 포함
+ * @returns {Array}
  */
 export function expandConnectedSubgraph(
   elements,
@@ -918,81 +1111,226 @@ export function filterMainCharacters(elements, filterStage) {
   return elements;
 }
 
+export function readNodeRadius(node, fallbackSize = 40) {
+  try {
+    const w = typeof node.outerWidth === 'function' ? node.outerWidth() : 0;
+    const h = typeof node.outerHeight === 'function' ? node.outerHeight() : 0;
+    if (Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0) {
+      return Math.max(w, h) / 2;
+    }
+  } catch {
+    /* ignore */
+  }
+  const size = typeof fallbackSize === 'number' && fallbackSize > 0 ? fallbackSize : 40;
+  return size / 2;
+}
+
+/** detectAndResolveOverlap / 호출부 공용 기본값 */
+export const OVERLAP_RESOLVE = Object.freeze({
+  FALLBACK_NODE_SIZE: 40,
+  PADDING: 8,
+  MAX_ITERATIONS: 8,
+  MAX_ITERATIONS_LIGHT: 3,
+  /** 메인 반복 후에도 겹치면 추가 패스 */
+  EXTRA_PASSES: 1,
+  /** 양측·편측 밀어내기 공통 여유(px) */
+  PUSH_EXTRA: 2,
+  /** 이 깊이(px) 이하의 본체 겹침은 시각적 안정성을 위해 허용 */
+  OVERLAP_TOLERANCE: 3,
+  /** 이 깊이(px) 이상이면 완전한 여유 간격까지 강하게 분리 */
+  SEVERE_OVERLAP: 12,
+  /** spatial hash로 검사하므로 일반적인 책 그래프는 전량 검사 */
+  MAX_NODES: 2000,
+});
+
+export const OVERLAP_PROFILES = Object.freeze({
+  /** 최초 로딩·전체 재배치: 본체 겹침 허용 없음 */
+  INITIAL: Object.freeze({ padding: 8, tolerance: 0, maxIterations: 16, extraPasses: 3 }),
+  /** 동시 등장 신규 노드끼리: 본체 겹침 허용 없음 */
+  APPEAR: Object.freeze({ padding: 8, tolerance: 0, maxIterations: 12, extraPasses: 2 }),
+  INCREMENTAL: Object.freeze({ padding: 6, tolerance: 3, maxIterations: 4, extraPasses: 1 }),
+  RESIZE: Object.freeze({ padding: 5, tolerance: 3, maxIterations: 2, extraPasses: 0 }),
+  /** 사용자 드래그: 본체 겹침 즉시 반응, 드래그 노드는 movableIds에서 제외해 자유 배치 유지 */
+  USER_DRAG: Object.freeze({
+    padding: 10,
+    tolerance: 0,
+    maxIterations: 8,
+    extraPasses: 1,
+    pushExtra: 2,
+    severeOverlap: 1,
+  }),
+});
+
+function cyNodesToArray(collection) {
+  const out = [];
+  if (!collection) return out;
+  collection.forEach((n) => out.push(n));
+  return out;
+}
+
 /**
- * 노드 겹침 감지 및 자동 조정
- * @param {Object} cy - Cytoscape 인스턴스
- * @param {number} nodeSize - 노드 크기
- * @param {Object} [options]
- * @param {Iterable<string>|null} [options.movableIds] - 지정 시 해당 노드만 이동(기존 노드 위치 유지)
- * @param {number} [options.maxIterations] - 밀어내기 반복 횟수
- * @returns {boolean} 겹침이 있었는지 여부
+ * 겹침 해결 대상 선정. MAX_NODES 이하면 visible(없으면 전체).
+ * 초과 시 movable → selected → movable 근처 → visible 균등 샘플.
  */
-export function detectAndResolveOverlap(cy, nodeSize = 40, options = {}) {
-  if (!cy) {
-    return false;
-  }
-  
-  if (typeof nodeSize !== 'number' || nodeSize <= 0) {
-    nodeSize = 40;
+function collectOverlapCandidateNodes(cy, movableIdSet, maxNodes, nodeSize, padding) {
+  let pool = cyNodesToArray(cy.nodes(':visible'));
+  if (pool.length === 0) pool = cyNodesToArray(cy.nodes());
+  if (pool.length <= maxNodes) return pool;
+
+  const chosen = new Map();
+  const addNode = (n) => {
+    if (!n || (typeof n.length === 'number' && n.length === 0)) return;
+    const id = String(typeof n.id === 'function' ? n.id() : '');
+    if (!id || chosen.has(id)) return;
+    chosen.set(id, n);
+  };
+
+  if (movableIdSet) {
+    for (const id of movableIdSet) {
+      addNode(cy.getElementById(id));
+    }
   }
 
-  const movableIdSet = options.movableIds
-    ? new Set([...options.movableIds].map(String).filter((id) => id !== ''))
-    : null;
-  if (movableIdSet && movableIdSet.size === 0) {
-    return false;
+  cyNodesToArray(cy.nodes(':selected')).forEach(addNode);
+
+  if (movableIdSet && movableIdSet.size > 0 && chosen.size < maxNodes) {
+    const anchors = [];
+    for (const id of movableIdSet) {
+      const n = chosen.get(id);
+      if (!n) continue;
+      anchors.push({ pos: n.position(), radius: readNodeRadius(n, nodeSize) });
+    }
+    const scored = [];
+    for (const n of pool) {
+      const id = String(n.id());
+      if (chosen.has(id)) continue;
+      const pos = n.position();
+      const r = readNodeRadius(n, nodeSize);
+      let minD = Infinity;
+      for (const a of anchors) {
+        const dx = pos.x - a.pos.x;
+        const dy = pos.y - a.pos.y;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d < minD) minD = d;
+      }
+      const neighborhood = anchors.reduce(
+        (m, a) => Math.max(m, a.radius + r + padding * 4),
+        0,
+      );
+      scored.push({ n, minD, near: minD <= neighborhood * 2 });
+    }
+    scored.sort((a, b) => {
+      if (a.near !== b.near) return a.near ? -1 : 1;
+      return a.minD - b.minD;
+    });
+    for (let i = 0; i < scored.length && chosen.size < maxNodes; i += 1) {
+      addNode(scored[i].n);
+    }
   }
 
-  const nodes = cy.nodes();
-  const NODE_SIZE = nodeSize;
-  const MIN_DISTANCE = NODE_SIZE * 1.0;
-  const maxIterations =
-    typeof options.maxIterations === 'number' && options.maxIterations > 0
-      ? options.maxIterations
-      : movableIdSet
-        ? 8
-        : 1;
+  if (chosen.size < maxNodes) {
+    const remaining = pool.filter((n) => !chosen.has(String(n.id())));
+    const need = maxNodes - chosen.size;
+    if (remaining.length <= need) {
+      remaining.forEach(addNode);
+    } else {
+      const step = remaining.length / need;
+      for (let i = 0; i < need; i += 1) {
+        addNode(remaining[Math.floor(i * step)]);
+      }
+    }
+  }
+
+  return Array.from(chosen.values());
+}
+
+function collectNearbyPairIndexes(nodePositions, padding) {
+  const maxRadius = nodePositions.reduce((max, item) => Math.max(max, item.radius), 1);
+  const cellSize = Math.max(1, maxRadius * 2 + padding);
+  const buckets = new Map();
+  nodePositions.forEach((item, index) => {
+    const x = Math.floor(item.pos.x / cellSize);
+    const y = Math.floor(item.pos.y / cellSize);
+    const key = `${x}:${y}`;
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(index);
+  });
+
+  const pairs = [];
+  nodePositions.forEach((item, i) => {
+    const x = Math.floor(item.pos.x / cellSize);
+    const y = Math.floor(item.pos.y / cellSize);
+    for (let dx = -1; dx <= 1; dx += 1) {
+      for (let dy = -1; dy <= 1; dy += 1) {
+        const candidates = buckets.get(`${x + dx}:${y + dy}`) || [];
+        for (const j of candidates) {
+          if (j <= i) continue;
+          pairs.push([i, j]);
+        }
+      }
+    }
+  });
+  return pairs;
+}
+
+function pairStillOverlaps(nodePositions, movableIdSet, padding, tolerance = 0) {
+  const pairs = collectNearbyPairIndexes(nodePositions, padding);
+  for (const [i, j] of pairs) {
+      const a = nodePositions[i];
+      const b = nodePositions[j];
+      const aMovable = !movableIdSet || movableIdSet.has(a.id);
+      const bMovable = !movableIdSet || movableIdSet.has(b.id);
+      if (!aMovable && !bMovable) continue;
+      const minDistance = Math.max(0, a.radius + b.radius - tolerance);
+      const dx = a.pos.x - b.pos.x;
+      const dy = a.pos.y - b.pos.y;
+      if (dx * dx + dy * dy < minDistance * minDistance) return true;
+  }
+  return false;
+}
+
+function runOverlapPushPasses(
+  nodePositions,
+  movableIdSet,
+  padding,
+  pushExtra,
+  maxIterations,
+  tolerance,
+  severeOverlap,
+) {
   let hasOverlap = false;
-  
-  // 성능 최적화: 노드가 많을 때는 겹침 감지를 건너뜀
-  const MAX_NODES_FOR_OVERLAP_DETECTION = 100;
-  if (nodes.length > MAX_NODES_FOR_OVERLAP_DETECTION) {
-    return false;
-  }
-
-  // 위치 캐싱으로 성능 개선
-  const nodePositions = nodes.map(node => ({
-    node,
-    id: String(node.id()),
-    pos: node.position()
-  }));
-
-  for (let iter = 0; iter < maxIterations; iter++) {
+  for (let iter = 0; iter < maxIterations; iter += 1) {
     let movedThisPass = false;
 
-    for (let i = 0; i < nodePositions.length; i++) {
-      for (let j = i + 1; j < nodePositions.length; j++) {
-        const { node: node1, id: id1, pos: pos1 } = nodePositions[i];
-        const { node: node2, id: id2, pos: pos2 } = nodePositions[j];
+    const pairs = collectNearbyPairIndexes(nodePositions, padding);
+    for (const [i, j] of pairs) {
+        const { node: node1, id: id1, pos: pos1, radius: r1 } = nodePositions[i];
+        const { node: node2, id: id2, pos: pos2, radius: r2 } = nodePositions[j];
 
         const node1Movable = !movableIdSet || movableIdSet.has(id1);
         const node2Movable = !movableIdSet || movableIdSet.has(id2);
         if (!node1Movable && !node2Movable) continue;
 
+        const bodyDistance = r1 + r2;
+        const activationDistance = Math.max(0, bodyDistance - tolerance);
         const dx = pos1.x - pos2.x;
         const dy = pos1.y - pos2.y;
         const distanceSquared = dx * dx + dy * dy;
 
-        if (distanceSquared >= MIN_DISTANCE * MIN_DISTANCE) continue;
+        if (distanceSquared >= activationDistance * activationDistance) continue;
 
         hasOverlap = true;
         movedThisPass = true;
         const distance = Math.sqrt(distanceSquared);
+        const penetration = bodyDistance - distance;
+        const severe = penetration >= severeOverlap;
+        const targetGap = severe ? padding : Math.min(padding, 2);
+        const targetSeparation = bodyDistance + targetGap + (severe ? pushExtra : 0);
         const angle =
           distance < 1e-6
             ? (i + j) * 0.7
             : Math.atan2(dy, dx);
-        const pushDistance = MIN_DISTANCE - distance + 20;
+        const pushDistance = targetSeparation - distance;
         const cos = Math.cos(angle);
         const sin = Math.sin(angle);
 
@@ -1005,47 +1343,228 @@ export function detectAndResolveOverlap(cy, nodeSize = 40, options = {}) {
           nodePositions[i].pos = newPos1;
           nodePositions[j].pos = newPos2;
         } else if (node1Movable) {
-          // 신규 노드만: 기존 노드에서 멀어지는 방향으로 전부 이동
           const newPos1 = {
-            x: pos2.x + cos * (MIN_DISTANCE + 20),
-            y: pos2.y + sin * (MIN_DISTANCE + 20),
+            x: pos2.x + cos * targetSeparation,
+            y: pos2.y + sin * targetSeparation,
           };
           node1.position(newPos1);
           nodePositions[i].pos = newPos1;
         } else {
           const newPos2 = {
-            x: pos1.x - cos * (MIN_DISTANCE + 20),
-            y: pos1.y - sin * (MIN_DISTANCE + 20),
+            x: pos1.x - cos * targetSeparation,
+            y: pos1.y - sin * targetSeparation,
           };
           node2.position(newPos2);
           nodePositions[j].pos = newPos2;
         }
-      }
     }
 
     if (!movedThisPass) break;
   }
-  
   return hasOverlap;
 }
 
-/* ─── chapter event / relationship deltas cache (from chapterEventCache) ─── */
-
-const cloneArray = (arr) => (Array.isArray(arr) ? arr.map(deepClone) : []);
-
-/** manifest / structure 이벤트에서 eventId 추출 */
-const resolveManifestEventId = (ev) =>
-  toTrimmedStringOrNull(eventUtils.resolveEventId(ev) ?? ev?.eventId ?? ev?.id);
-
-const safeCompare = (a, b) => {
-  if (a === b) return true;
-  if (a == null || b == null) return false;
-  try {
-    return JSON.stringify(a) === JSON.stringify(b);
-  } catch {
+/**
+ * 노드 겹침 감지 및 자동 조정
+ * @param {Object} cy - Cytoscape 인스턴스
+ * @param {number} [nodeSize=OVERLAP_RESOLVE.FALLBACK_NODE_SIZE] - 크기 읽기 실패 시 fallback (지름)
+ * @param {Object} [options]
+ * @param {Iterable<string>|null} [options.movableIds] - 지정 시 해당 노드만 이동(기존 노드 위치 유지)
+ * @param {number} [options.maxIterations] - 밀어내기 반복 횟수
+ * @param {number} [options.extraPasses] - 잔여 겹침 시 추가 반복
+ * @param {number} [options.padding] - 반경 합에 더하는 여유 간격
+ * @returns {boolean} 겹침이 있었는지 여부
+ */
+export function detectAndResolveOverlap(
+  cy,
+  nodeSize = OVERLAP_RESOLVE.FALLBACK_NODE_SIZE,
+  options = {},
+) {
+  if (!cy) {
     return false;
   }
-};
+
+  if (typeof nodeSize !== 'number' || nodeSize <= 0) {
+    nodeSize = OVERLAP_RESOLVE.FALLBACK_NODE_SIZE;
+  }
+
+  const movableIdSet = options.movableIds
+    ? new Set([...options.movableIds].map(String).filter((id) => id !== ''))
+    : null;
+  if (movableIdSet && movableIdSet.size === 0) {
+    return false;
+  }
+
+  const padding =
+    typeof options.padding === 'number' && options.padding >= 0
+      ? options.padding
+      : OVERLAP_RESOLVE.PADDING;
+  const pushExtra =
+    typeof options.pushExtra === 'number' && options.pushExtra >= 0
+      ? options.pushExtra
+      : OVERLAP_RESOLVE.PUSH_EXTRA;
+  const tolerance =
+    typeof options.tolerance === 'number' && options.tolerance >= 0
+      ? options.tolerance
+      : OVERLAP_RESOLVE.OVERLAP_TOLERANCE;
+  const severeOverlap =
+    typeof options.severeOverlap === 'number' && options.severeOverlap > 0
+      ? options.severeOverlap
+      : OVERLAP_RESOLVE.SEVERE_OVERLAP;
+  const maxIterations =
+    typeof options.maxIterations === 'number' && options.maxIterations > 0
+      ? options.maxIterations
+      : movableIdSet
+        ? OVERLAP_RESOLVE.MAX_ITERATIONS
+        : OVERLAP_RESOLVE.MAX_ITERATIONS_LIGHT;
+  const extraPasses =
+    typeof options.extraPasses === 'number' && options.extraPasses >= 0
+      ? options.extraPasses
+      : OVERLAP_RESOLVE.EXTRA_PASSES;
+
+  const nodes = collectOverlapCandidateNodes(
+    cy,
+    movableIdSet,
+    OVERLAP_RESOLVE.MAX_NODES,
+    nodeSize,
+    padding,
+  );
+  if (nodes.length < 2) {
+    return false;
+  }
+
+  const nodePositions = nodes.map((node) => ({
+    node,
+    id: String(node.id()),
+    pos: node.position(),
+    radius: readNodeRadius(node, nodeSize),
+  }));
+
+  let hasOverlap = false;
+  const apply = () => {
+    hasOverlap = runOverlapPushPasses(
+      nodePositions,
+      movableIdSet,
+      padding,
+      pushExtra,
+      maxIterations,
+      tolerance,
+      severeOverlap,
+    ) || hasOverlap;
+
+    if (pairStillOverlaps(nodePositions, movableIdSet, padding, tolerance) && extraPasses > 0) {
+      hasOverlap = runOverlapPushPasses(
+        nodePositions,
+        movableIdSet,
+        padding,
+        pushExtra,
+        extraPasses,
+        tolerance,
+        severeOverlap,
+      ) || hasOverlap;
+    }
+  };
+
+  if (typeof cy.batch === 'function') {
+    cy.batch(apply);
+  } else {
+    apply();
+  }
+
+  if (
+    pairStillOverlaps(nodePositions, movableIdSet, padding, tolerance)
+    && typeof import.meta !== 'undefined'
+    && import.meta.env?.DEV
+  ) {
+    errorUtils.logDebug('detectAndResolveOverlap', 'residual overlaps remain', {
+      candidates: nodePositions.length,
+      maxNodes: OVERLAP_RESOLVE.MAX_NODES,
+    });
+  }
+
+  return hasOverlap;
+}
+
+/**
+ * movableIds가 있으면 그중 하나 이상 포함된 쌍만 검사.
+ * @returns {boolean} 겹치는 쌍이 있으면 true
+ */
+export function hasOverlappingNodes(
+  cy,
+  nodeSize = OVERLAP_RESOLVE.FALLBACK_NODE_SIZE,
+  options = {},
+) {
+  if (!cy) return false;
+  if (typeof nodeSize !== 'number' || nodeSize <= 0) {
+    nodeSize = OVERLAP_RESOLVE.FALLBACK_NODE_SIZE;
+  }
+  const movableIdSet = options.movableIds
+    ? new Set([...options.movableIds].map(String).filter((id) => id !== ''))
+    : null;
+  if (movableIdSet && movableIdSet.size === 0) return false;
+
+  const padding =
+    typeof options.padding === 'number' && options.padding >= 0
+      ? options.padding
+      : OVERLAP_RESOLVE.PADDING;
+  const tolerance =
+    typeof options.tolerance === 'number' && options.tolerance >= 0
+      ? options.tolerance
+      : OVERLAP_RESOLVE.OVERLAP_TOLERANCE;
+
+  const nodes = collectOverlapCandidateNodes(
+    cy,
+    movableIdSet,
+    OVERLAP_RESOLVE.MAX_NODES,
+    nodeSize,
+    padding,
+  );
+  if (nodes.length < 2) return false;
+
+  const nodePositions = nodes.map((node) => ({
+    node,
+    id: String(node.id()),
+    pos: node.position(),
+    radius: readNodeRadius(node, nodeSize),
+  }));
+  return pairStillOverlaps(nodePositions, movableIdSet, padding, tolerance);
+}
+
+/** seedIds 기준 undirected N-hop 이웃(시드 포함) */
+export function collectNeighborhoodNodeIds(cy, seedIds, hops = 1) {
+  const seeds = [...(seedIds || [])].map(String).filter(Boolean);
+  const all = new Set(seeds);
+  if (!cy || hops < 1 || seeds.length === 0) return all;
+
+  let frontier = new Set(seeds);
+  for (let h = 0; h < hops; h += 1) {
+    const next = new Set();
+    for (const id of frontier) {
+      const node = cy.getElementById(id);
+      if (!node || node.length === 0) continue;
+      try {
+        node.neighborhood('node').forEach((n) => {
+          const nid = String(n.id());
+          if (!all.has(nid)) {
+            all.add(nid);
+            next.add(nid);
+          }
+        });
+      } catch {
+        /* ignore */
+      }
+    }
+    if (next.size === 0) break;
+    frontier = next;
+  }
+  return all;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * 6. Chapter cache payload / reconstruct / book summary
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+const cloneArray = (arr) => (Array.isArray(arr) ? arr.map(deepClone) : []);
 
 const computeCharacterDiff = (prevCharacters, nextCharacters) => {
   const prevMap = new Map();
@@ -1064,7 +1583,7 @@ const computeCharacterDiff = (prevCharacters, nextCharacters) => {
   nextMap.forEach((character, id) => {
     const prev = prevMap.get(id);
     if (!prev) added.push(deepClone(character));
-    else if (!safeCompare(prev, character)) updated.push(deepClone(character));
+    else if (!deepEqual(prev, character)) updated.push(deepClone(character));
   });
   prevMap.forEach((_character, id) => {
     if (!nextMap.has(id)) removedIds.push(id);
@@ -1072,39 +1591,30 @@ const computeCharacterDiff = (prevCharacters, nextCharacters) => {
   return { added, updated, removedIds };
 };
 
-const applyCharacterDiff = (prevCharacters, diff) => {
+/** map → remove → update → add. getKey는 item → string id */
+const applyKeyedDiff = (prevItems, diff, getKey) => {
   const map = new Map();
-  (Array.isArray(prevCharacters) ? prevCharacters : []).forEach((character) => {
-    const id = extractCharacterId(character);
-    if (id) map.set(id, deepClone(character));
+  (Array.isArray(prevItems) ? prevItems : []).forEach((item) => {
+    const id = getKey(item);
+    if (id) map.set(id, deepClone(item));
   });
   (diff?.removedIds || []).forEach((id) => id && map.delete(String(id)));
-  (diff?.updated || []).forEach((character) => {
-    const id = extractCharacterId(character);
-    if (id) map.set(id, deepClone(character));
+  (diff?.updated || []).forEach((item) => {
+    const id = getKey(item);
+    if (id) map.set(id, deepClone(item));
   });
-  (diff?.added || []).forEach((character) => {
-    const id = extractCharacterId(character);
-    if (id) map.set(id, deepClone(character));
+  (diff?.added || []).forEach((item) => {
+    const id = getKey(item);
+    if (id) map.set(id, deepClone(item));
   });
-  return Array.from(map.values());
+  return map;
 };
 
+const applyCharacterDiff = (prevCharacters, diff) =>
+  Array.from(applyKeyedDiff(prevCharacters, diff, extractCharacterId).values());
+
 const applyElementDiff = (prevElements, diff) => {
-  const map = new Map();
-  (Array.isArray(prevElements) ? prevElements : []).forEach((element) => {
-    const id = normalizeElementId(element);
-    if (id) map.set(id, deepClone(element));
-  });
-  (diff?.removedIds || []).forEach((id) => id && map.delete(String(id)));
-  (diff?.updated || []).forEach((element) => {
-    const id = normalizeElementId(element);
-    if (id) map.set(id, deepClone(element));
-  });
-  (diff?.added || []).forEach((element) => {
-    const id = normalizeElementId(element);
-    if (id) map.set(id, deepClone(element));
-  });
+  const map = applyKeyedDiff(prevElements, diff, normalizeElementId);
   const result = Array.from(map.values());
   result.sort((a, b) => {
     const aIsEdge = Boolean(a?.data?.source);
@@ -1115,11 +1625,47 @@ const applyElementDiff = (prevElements, diff) => {
   return result;
 };
 
+/** 이벤트 1건 → elements/characters/summary (캐시 payload 루프용) */
+function buildEventSnapshotRow(bookId, chapterIdx, event) {
+  let convertedElements = [];
+  let snapshotCharacters = [];
+  try {
+    const built = buildElementsFromGraphPayload({
+      characters: Array.isArray(event?.characters) ? event.characters : [],
+      relations: Array.isArray(event?.relations) ? event.relations : [],
+      eventData: event?.event ?? null,
+      bookId,
+    });
+    convertedElements = built.elements;
+    snapshotCharacters = built.characters;
+  } catch (error) {
+    errorUtils.logError('buildElementsFromGraphPayload', error);
+  }
+
+  const summaryEventNum = Number(event.eventNum);
+  const summaryIdx = Number(event.eventIdx) || 0;
+  const summary = {
+    bookId,
+    chapterIdx,
+    eventIdx: summaryIdx,
+    eventNum: Number.isFinite(summaryEventNum) && summaryEventNum > 0 ? summaryEventNum : summaryIdx,
+    eventId: eventUtils.resolveEventId(event) ?? eventUtils.resolveEventId(event?.event) ?? null,
+    startTxtOffset: event?.startTxtOffset ?? null,
+    endTxtOffset: event?.endTxtOffset ?? null,
+    title: event?.event?.name ?? event?.event?.title ?? event?.event?.eventName ?? null,
+    text: event?.event?.text ?? null,
+    hasCharacters: snapshotCharacters.length > 0,
+    hasRelations: Array.isArray(event?.relations) && event.relations.length > 0,
+  };
+
+  return { convertedElements, snapshotCharacters, summary };
+}
+
 const buildChapterCachePayload = (
   bookId,
   chapterIdx,
   events,
-  source = CHAPTER_GRAPH_CACHE_SOURCE.RUNTIME
+  source = CHAPTER_GRAPH_CACHE_SOURCE.API
 ) => {
   const timestamp = Date.now();
   const sortedEvents = eventUtils.sortEventsByIdx(events);
@@ -1145,33 +1691,11 @@ const buildChapterCachePayload = (
 
   sortedEvents.forEach((event, index) => {
     // API는 이벤트별 누적 스냅샷을 주므로 이어 붙이지 않고 해당 시점 값을 그대로 사용
-    const relations = Array.isArray(event?.relations) ? event.relations : [];
-    const snapshotCharacters = enrichGraphCharacters(
-      Array.isArray(event?.characters) ? event.characters : [],
-      { bookId }
+    const { convertedElements, snapshotCharacters, summary } = buildEventSnapshotRow(
+      bookId,
+      chapterIdx,
+      event
     );
-    const nodeWeights = buildNodeWeights(snapshotCharacters);
-    const { idToName, idToDesc, idToDescKo, idToMain, idToNames, idToProfileImage } =
-      createCharacterMaps(snapshotCharacters);
-
-    let convertedElements = [];
-    try {
-      convertedElements = convertRelationsToElements({
-        relations,
-        idToName,
-        idToDesc,
-        idToDescKo,
-        idToMain,
-        idToNames,
-        nodeWeights: toNodeWeightsOrNull(nodeWeights),
-        eventData: event?.event ?? null,
-        idToProfileImage,
-        charactersOrphanMerge: snapshotCharacters.length > 0 ? snapshotCharacters : null,
-        bookId,
-      });
-    } catch (error) {
-      console.error('convertRelationsToElements 실패:', error);
-    }
 
     const currentElements = cloneArray(convertedElements);
     const currentCharacters = cloneArray(snapshotCharacters);
@@ -1197,22 +1721,7 @@ const buildChapterCachePayload = (
     }
     prevElements = currentElements;
     prevCharacters = currentCharacters;
-
-    const summaryEventNum = Number(event.eventNum);
-    const summaryIdx = Number(event.eventIdx) || 0;
-    eventSummaries.push({
-      bookId,
-      chapterIdx,
-      eventIdx: summaryIdx,
-      eventNum: Number.isFinite(summaryEventNum) && summaryEventNum > 0 ? summaryEventNum : summaryIdx,
-      eventId: eventUtils.resolveEventId(event) ?? eventUtils.resolveEventId(event?.event) ?? null,
-      startTxtOffset: event?.startTxtOffset ?? null,
-      endTxtOffset: event?.endTxtOffset ?? null,
-      title: event?.event?.name ?? event?.event?.title ?? event?.event?.eventName ?? null,
-      text: event?.event?.text ?? null,
-      hasCharacters: snapshotCharacters.length > 0,
-      hasRelations: relations.length > 0,
-    });
+    eventSummaries.push(summary);
   });
 
   const maxEventIdx = sortedEvents.reduce(
@@ -1234,6 +1743,12 @@ const buildChapterCachePayload = (
   };
 };
 
+/**
+ * baseSnapshot + diffs → targetEventIdx 시점 그래프 상태.
+ * @param {Object} cachePayload
+ * @param {number} targetEventIdx
+ * @returns {{ elements: Array, characters: Array, eventMeta: Object|null, eventIdx: number }|null}
+ */
 export const reconstructChapterGraphState = (cachePayload, targetEventIdx) => {
   if (!cachePayload || typeof cachePayload !== 'object') return null;
   const baseSnapshot = cachePayload.baseSnapshot;
@@ -1300,7 +1815,7 @@ const readGraphBookCache = (bookId) => {
   try {
     return hydrateCacheFromStorage('graphBookCache', key, 'localStorage');
   } catch (error) {
-    console.warn('그래프 책 캐시 로드 실패:', error);
+    errorUtils.logDebug('graphModel', '그래프 책 캐시 로드 실패', { message: error?.message });
     return null;
   }
 };
@@ -1322,6 +1837,12 @@ const writeGraphBookCache = (bookId, payload) => {
   return normalized;
 };
 
+/**
+ * 책 단위 챕터 요약 캐시 빌드/보장. 메모리 + localStorage 기록.
+ * @param {string|number} bookId
+ * @param {{ signal?: AbortSignal }} [options]
+ * @returns {Promise<Object|null>}
+ */
 export const ensureGraphBookCache = async (bookId, { signal } = {}) => {
   const numericId = toPositiveNumberOrNull(bookId);
   if (numericId === null) return null;
@@ -1386,14 +1907,23 @@ export const ensureGraphBookCache = async (bookId, { signal } = {}) => {
   }
 };
 
-/** eventIdx 시점 누적 그래프 상태 복원 */
+/**
+ * book/chapter/eventIdx 누적 그래프 상태 조회 (챕터 TTL 캐시 기반).
+ * @param {string|number} bookId
+ * @param {number} chapterIdx
+ * @param {number} eventIdx
+ * @returns {{ elements: Array, characters: Array, eventMeta: Object|null, eventIdx: number }|null}
+ */
 export const getGraphEventState = (bookId, chapterIdx, eventIdx) => {
   const chapterPayload = getCachedChapterEvents(bookId, chapterIdx);
   if (!chapterPayload) return null;
   return reconstructChapterGraphState(chapterPayload, eventIdx);
 };
 
-/** deltas 누적 graph 결과 한 건 → 챕터 캐시 이벤트 행 */
+/**
+ * deltas 누적 graph 스냅샷 한 건 → 챕터 캐시 이벤트 행.
+ * (graphFetch.mapLegacyOrSummaryEvent와 별도; 입력은 deltas walker snapshot)
+ */
 const normalizeEventFromDeltasGraphResult = (
   bookId,
   chapterIdx,
@@ -1466,16 +1996,22 @@ const getChapterEventCacheKey = (bookId, chapterIdx) => {
   const bookIdNum = toPositiveNumberOrNull(bookId);
   const chapterIdxNum = toPositiveNumberOrNull(chapterIdx);
   if (bookIdNum === null || chapterIdxNum === null) return null;
-  return cacheKeyUtils.createChapterKey(bookIdNum, chapterIdxNum);
+  return `${CHAPTER_EVENT_CACHE_PREFIX}${cacheKeyUtils.createChapterKey(bookIdNum, chapterIdxNum)}`;
 };
 
+/**
+ * 챕터 이벤트 TTL 캐시 로드.
+ * @param {string|number} bookId
+ * @param {number} chapterIdx
+ * @returns {Object|null}
+ */
 export const getCachedChapterEvents = (bookId, chapterIdx) => {
   try {
     const cacheKey = getChapterEventCacheKey(bookId, chapterIdx);
     if (!cacheKey) return null;
     return loadTtlStorage(cacheKey, CHAPTER_EVENT_CACHE_MAX_AGE_MS, 'localStorage');
   } catch (error) {
-    console.error('챕터 이벤트 캐시 로드 실패:', error);
+    errorUtils.logDebug('graphModel', '챕터 이벤트 캐시 로드 실패', { message: error?.message });
     return null;
   }
 };
@@ -1504,10 +2040,241 @@ const setCachedChapterEvents = (bookId, chapterIdx, eventData) => {
     saveTtlStorage(cacheKey, cacheData, 'localStorage');
     return true;
   } catch (error) {
-    console.error('챕터 이벤트 캐시 저장 실패:', error);
+    errorUtils.logDebug('graphModel', '챕터 이벤트 캐시 저장 실패', { message: error?.message });
     return false;
   }
 };
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * 7. Chapter discover / prefetch / ensure
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+function loadManifestEventStructures(bookId, chapterIdx) {
+  try {
+    const manifestChapter = getChapterData(bookId, chapterIdx);
+    if (!manifestChapter?.events?.length) return [];
+    return manifestChapter.events
+      .map((rawEvent, index) => {
+        const eventIdx = eventUtils.resolveEventNum(rawEvent) || Number(index + 1);
+        const fromApi = Number(rawEvent.eventNum);
+        const eventNum = Number.isFinite(fromApi) && fromApi > 0 ? fromApi : eventIdx;
+        return {
+          eventIdx,
+          eventNum,
+          eventId: eventUtils.resolveEventId(rawEvent),
+          startTxtOffset: rawEvent.startTxtOffset ?? null,
+          endTxtOffset: rawEvent.endTxtOffset ?? null,
+        };
+      })
+      .filter((e) => e.eventIdx > 0);
+  } catch (error) {
+    errorUtils.logDebug('graphModel', 'manifest 이벤트 구조 로드 실패', { message: error?.message });
+    return [];
+  }
+}
+
+function buildManifestEventIndex(manifestEventStructures) {
+  const manifestEventMap = new Map();
+  const manifestEventIndices = [];
+  manifestEventStructures.forEach((structure) => {
+    const idx = Number(structure?.eventIdx);
+    if (!Number.isFinite(idx) || idx <= 0 || manifestEventMap.has(idx)) return;
+    manifestEventMap.set(idx, structure);
+    manifestEventIndices.push(idx);
+  });
+  return {
+    manifestEventMap,
+    sortedManifestIndices: manifestEventIndices.sort((a, b) => a - b),
+  };
+}
+
+function publishChapterPartialCache(bookId, chapterIdx, apiEvents, onPartialCache) {
+  if (!apiEvents.length) return;
+  const payload = buildChapterCachePayload(
+    bookId,
+    chapterIdx,
+    apiEvents,
+    CHAPTER_GRAPH_CACHE_SOURCE.API
+  );
+  setCachedChapterEvents(bookId, chapterIdx, payload);
+  if (typeof onPartialCache === 'function') {
+    try {
+      onPartialCache(payload);
+    } catch (error) {
+      errorUtils.logDebug('graphModel', 'onPartialCache 콜백 실패', { message: error?.message });
+    }
+  }
+}
+
+function appendSnapshotEventToContext(ctx, eventIdx, manifestStructure, snapshot) {
+  const norm = normalizeEventFromDeltasGraphResult(
+    ctx.bookId,
+    ctx.chapterIdx,
+    eventIdx,
+    snapshot,
+    manifestStructure
+  );
+  if (norm.skip) return false;
+  ctx.apiEvents.push(norm.event);
+  ctx.fetchedEventIdxSet.add(eventIdx);
+  return true;
+}
+
+/** apiEvents가 증가 적재된다는 전제에서 eventIdx 직전 이벤트 O(n) 스캔 */
+function findPreviousApiEventBeforeIdx(apiEvents, eventIdx) {
+  let best = null;
+  let bestIdx = -1;
+  for (let i = 0; i < apiEvents.length; i += 1) {
+    const n = eventUtils.resolveEventNum(apiEvents[i]) || 0;
+    if (n > 0 && n < eventIdx && n >= bestIdx) {
+      bestIdx = n;
+      best = apiEvents[i];
+    }
+  }
+  return best;
+}
+
+/** 정렬된 deltas → 이벤트 스냅샷 증분 적재 (through 우선 + 백필) */
+async function appendEventsFromSortedDeltas(ctx, sourceBookId, sortedDeltas, eventEntries, chapterEventIdOrder) {
+  if (!eventEntries.length) return;
+
+  const { chapterIdx, fetchedEventIdxSet, apiEvents, onPartialCache } = ctx;
+  const walkerOpts = { chapterIndex: chapterIdx, chapterEventIdOrder };
+  const lastEntry = eventEntries[eventEntries.length - 1];
+
+  // Phase 1: through 이벤트 우선
+  if (lastEntry?.eventId && !fetchedEventIdxSet.has(lastEntry.eventIdx)) {
+    const throughWalker = createDeltaAccumulateWalker(sourceBookId, sortedDeltas, walkerOpts);
+    appendSnapshotEventToContext(
+      ctx,
+      lastEntry.eventIdx,
+      lastEntry.structure,
+      throughWalker.snapshotThrough(lastEntry.eventId)
+    );
+    publishChapterPartialCache(ctx.bookId, chapterIdx, apiEvents, onPartialCache);
+  }
+
+  // Phase 2: 전체 구간 백필
+  const walker = createDeltaAccumulateWalker(sourceBookId, sortedDeltas, walkerOpts);
+  let appended = 0;
+  for (let i = 0; i < eventEntries.length; i += 1) {
+    const { eventIdx, eventId, structure } = eventEntries[i];
+
+    // 이미 캐시에 있으면 finalize(비김) 생략하고 누적 커서만 전진
+    if (fetchedEventIdxSet.has(eventIdx)) {
+      if (eventId) walker.advanceThrough(eventId);
+      if (i > 0 && i % 16 === 0) await Promise.resolve();
+      continue;
+    }
+
+    let snapshot;
+    if (!eventId) {
+      const prev = findPreviousApiEventBeforeIdx(apiEvents, eventIdx);
+      snapshot = {
+        bookId: sourceBookId,
+        chapterIndex: chapterIdx,
+        eventId: null,
+        characters: Array.isArray(prev?.characters) ? deepClone(prev.characters) : [],
+        relations: Array.isArray(prev?.relations) ? deepClone(prev.relations) : [],
+        event: {
+          chapterIndex: chapterIdx,
+          chapterIdx,
+          eventId: null,
+          startTxtOffset: structure?.startTxtOffset ?? null,
+          endTxtOffset: structure?.endTxtOffset ?? null,
+        },
+      };
+    } else {
+      snapshot = walker.snapshotThrough(eventId);
+    }
+
+    appendSnapshotEventToContext(ctx, eventIdx, structure, snapshot);
+    appended += 1;
+
+    if (i > 0 && i % 8 === 0) await Promise.resolve();
+  }
+  if (appended > 0) {
+    publishChapterPartialCache(ctx.bookId, chapterIdx, apiEvents, onPartialCache);
+  }
+}
+
+/** 1회 deltas fetch 후 증분 누적 */
+async function collectEventsFromDeltas(ctx, indicesToFetch, manifestEventMap) {
+  if (!indicesToFetch.length) return;
+
+  const { bookId, chapterIdx } = ctx;
+  let fetched;
+  try {
+    fetched = await ensureBookRelationshipDeltas(bookId, {
+      chapterIndex: chapterIdx,
+    });
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      errorUtils.logDebug('graphModel', 'relationship-deltas 조회 실패', { chapterIdx, message: error?.message || String(error) });
+    }
+    return;
+  }
+
+  if (!fetched?.isSuccess && !fetched?.deltas?.length) return;
+
+  const eventEntries = indicesToFetch.map((eventIdx) => {
+    const structure = manifestEventMap.get(eventIdx) ?? null;
+    return {
+      eventIdx,
+      eventId: resolveManifestEventId(structure),
+      structure,
+    };
+  });
+  const chapterEventIdOrder = eventEntries.map((e) => e.eventId).filter(Boolean);
+  const sortedDeltas = sortDeltasForAccumulate(fetched.deltas, chapterEventIdOrder);
+  await appendEventsFromSortedDeltas(
+    ctx,
+    fetched.bookId ?? bookId,
+    sortedDeltas,
+    eventEntries,
+    chapterEventIdOrder
+  );
+}
+
+/** manifest 이벤트 없을 때: 챕터 단위 deltas + 로컬 누적 */
+async function discoverWithoutManifest(ctx, cappedMaxEventIdx) {
+  const { bookId, chapterIdx } = ctx;
+  try {
+    const fetched = await ensureBookRelationshipDeltas(bookId, {
+      chapterIndex: chapterIdx,
+    });
+    const deltas = Array.isArray(fetched?.deltas) ? fetched.deltas : [];
+    if (deltas.length > 0) {
+      const sortedDeltas = sortDeltasForAccumulate(deltas);
+      const seenIds = [];
+      for (const delta of sortedDeltas) {
+        const eventId = typeof delta?.eventId === 'string' ? delta.eventId.trim() : '';
+        if (!eventId || seenIds.includes(eventId)) continue;
+        // 해당 챕터 delta만 (chapterIndex가 있으면 필터)
+        const deltaChapter = Number(delta?.chapterIndex);
+        if (Number.isFinite(deltaChapter) && deltaChapter !== chapterIdx) continue;
+        seenIds.push(eventId);
+      }
+      const idsToBuild = cappedMaxEventIdx ? seenIds.slice(0, cappedMaxEventIdx) : seenIds;
+      const eventEntries = idsToBuild.map((eventId, index) => ({
+        eventIdx: index + 1,
+        eventId,
+        structure: { eventIdx: index + 1, eventId },
+      }));
+      await appendEventsFromSortedDeltas(
+        ctx,
+        fetched.bookId ?? bookId,
+        sortedDeltas,
+        eventEntries,
+        idsToBuild
+      );
+    }
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      errorUtils.logDebug('graphModel', 'relationship-deltas(챕터) 조회 실패', { chapterIdx, message: error?.message || String(error) });
+    }
+  }
+}
 
 const discoverChapterEvents = async (
   bookId,
@@ -1535,7 +2302,7 @@ const discoverChapterEvents = async (
 
   if (!forceRefresh) {
     const cached = getCachedChapterEvents(bookId, chapterIdx);
-    if (cached && cached.source !== 'manifest-only') {
+    if (cached && !isUnusableChapterGraphCacheSource(cached.source)) {
       const cachedMax = Number(cached.maxEventIdx) || 0;
       if (!cappedMaxEventIdx || cachedMax >= cappedMaxEventIdx) {
         return cached;
@@ -1548,7 +2315,7 @@ const discoverChapterEvents = async (
     await chapterDiscoverPromises.get(discoverKey);
     const cached = getCachedChapterEvents(bookId, chapterIdx);
     const cachedMax = Number(cached?.maxEventIdx) || 0;
-    if (cached && cached.source !== 'manifest-only') {
+    if (cached && !isUnusableChapterGraphCacheSource(cached.source)) {
       if (!cappedMaxEventIdx || cachedMax >= cappedMaxEventIdx) {
         return cached;
       }
@@ -1564,185 +2331,23 @@ const discoverChapterEvents = async (
       apiEvents.map((event) => eventUtils.resolveEventNum(event) || 0).filter((idx) => idx > 0)
     );
 
-    let manifestEventStructures = [];
-    try {
-      const manifestChapter = getChapterData(bookId, chapterIdx);
-      if (manifestChapter?.events?.length) {
-        manifestEventStructures = manifestChapter.events
-          .map((rawEvent, index) => {
-            const eventIdx = eventUtils.resolveEventNum(rawEvent) || Number(index + 1);
-            const fromApi = Number(rawEvent.eventNum);
-            const eventNum = Number.isFinite(fromApi) && fromApi > 0 ? fromApi : eventIdx;
-            return {
-              eventIdx,
-              eventNum,
-              eventId: eventUtils.resolveEventId(rawEvent),
-              startTxtOffset: rawEvent.startTxtOffset ?? null,
-              endTxtOffset: rawEvent.endTxtOffset ?? null,
-            };
-          })
-          .filter((e) => e.eventIdx > 0);
-      }
-    } catch (error) {
-      console.warn('manifest 이벤트 구조 로드 실패:', error);
-    }
-
-    const publishPartialCache = () => {
-      if (!apiEvents.length) return;
-      const payload = buildChapterCachePayload(
-        bookId,
-        chapterIdx,
-        apiEvents,
-        CHAPTER_GRAPH_CACHE_SOURCE.API
-      );
-      setCachedChapterEvents(bookId, chapterIdx, payload);
-      if (typeof onPartialCache === 'function') {
-        try {
-          onPartialCache(payload);
-        } catch (error) {
-          console.warn('onPartialCache 콜백 실패:', error);
-        }
-      }
+    const ctx = {
+      bookId,
+      chapterIdx,
+      apiEvents,
+      fetchedEventIdxSet,
+      onPartialCache,
     };
 
-    const manifestEventMap = new Map();
-    const manifestEventIndices = [];
-    manifestEventStructures.forEach((structure) => {
-      const idx = Number(structure?.eventIdx);
-      if (!Number.isFinite(idx) || idx <= 0 || manifestEventMap.has(idx)) return;
-      manifestEventMap.set(idx, structure);
-      manifestEventIndices.push(idx);
-    });
-
-    const sortedManifestIndices = manifestEventIndices.sort((a, b) => a - b);
-
-    const appendSnapshotEvent = (eventIdx, manifestStructure, snapshot) => {
-      const norm = normalizeEventFromDeltasGraphResult(
-        bookId,
-        chapterIdx,
-        eventIdx,
-        snapshot,
-        manifestStructure
-      );
-      if (norm.skip) return false;
-      apiEvents.push(norm.event);
-      fetchedEventIdxSet.add(eventIdx);
-      return true;
-    };
-
-    /** 정렬된 deltas → 이벤트 스냅샷 증분 적재 (through 우선 + 백필) */
-    const appendEventsFromSortedDeltas = async (
-      sourceBookId,
-      sortedDeltas,
-      eventEntries,
-      chapterEventIdOrder
-    ) => {
-      if (!eventEntries.length) return;
-
-      const walkerOpts = { chapterIndex: chapterIdx, chapterEventIdOrder };
-      const lastEntry = eventEntries[eventEntries.length - 1];
-
-      // Phase 1: through 이벤트 우선
-      if (lastEntry?.eventId && !fetchedEventIdxSet.has(lastEntry.eventIdx)) {
-        const throughWalker = createDeltaAccumulateWalker(sourceBookId, sortedDeltas, walkerOpts);
-        appendSnapshotEvent(
-          lastEntry.eventIdx,
-          lastEntry.structure,
-          throughWalker.snapshotThrough(lastEntry.eventId)
-        );
-        publishPartialCache();
-      }
-
-      // Phase 2: 전체 구간 백필
-      const walker = createDeltaAccumulateWalker(sourceBookId, sortedDeltas, walkerOpts);
-      let appended = 0;
-      for (let i = 0; i < eventEntries.length; i += 1) {
-        const { eventIdx, eventId, structure } = eventEntries[i];
-
-        // 이미 캐시에 있으면 finalize(비김) 생략하고 누적 커서만 전진
-        if (fetchedEventIdxSet.has(eventIdx)) {
-          if (eventId) walker.advanceThrough(eventId);
-          if (i > 0 && i % 16 === 0) await Promise.resolve();
-          continue;
-        }
-
-        let snapshot;
-        if (!eventId) {
-          const prev = apiEvents
-            .filter((ev) => (eventUtils.resolveEventNum(ev) || 0) < eventIdx)
-            .sort(
-              (a, b) =>
-                (eventUtils.resolveEventNum(a) || 0) - (eventUtils.resolveEventNum(b) || 0)
-            )
-            .at(-1);
-          snapshot = {
-            bookId: sourceBookId,
-            chapterIndex: chapterIdx,
-            eventId: null,
-            characters: Array.isArray(prev?.characters) ? deepClone(prev.characters) : [],
-            relations: Array.isArray(prev?.relations) ? deepClone(prev.relations) : [],
-            event: {
-              chapterIndex: chapterIdx,
-              chapterIdx,
-              eventId: null,
-              startTxtOffset: structure?.startTxtOffset ?? null,
-              endTxtOffset: structure?.endTxtOffset ?? null,
-            },
-          };
-        } else {
-          snapshot = walker.snapshotThrough(eventId);
-        }
-
-        appendSnapshotEvent(eventIdx, structure, snapshot);
-        appended += 1;
-
-        if (i > 0 && i % 8 === 0) await Promise.resolve();
-      }
-      if (appended > 0) publishPartialCache();
-    };
-
-    /** 1회 deltas fetch 후 증분 누적 */
-    const collectEventsFromDeltas = async (indicesToFetch) => {
-      if (!indicesToFetch.length) return;
-
-      let fetched;
-      try {
-        fetched = await ensureBookRelationshipDeltas(bookId, {
-          chapterIndex: chapterIdx,
-        });
-      } catch (error) {
-        if (import.meta.env.DEV) {
-          console.debug(`챕터 ${chapterIdx} relationship-deltas 조회 실패`, error?.message || error);
-        }
-        return;
-      }
-
-      if (!fetched?.isSuccess && !fetched?.deltas?.length) return;
-
-      const eventEntries = indicesToFetch.map((eventIdx) => {
-        const structure = manifestEventMap.get(eventIdx) ?? null;
-        return {
-          eventIdx,
-          eventId: resolveManifestEventId(structure),
-          structure,
-        };
-      });
-      const chapterEventIdOrder = eventEntries.map((e) => e.eventId).filter(Boolean);
-      const sortedDeltas = sortDeltasForAccumulate(fetched.deltas, chapterEventIdOrder);
-      await appendEventsFromSortedDeltas(
-        fetched.bookId ?? bookId,
-        sortedDeltas,
-        eventEntries,
-        chapterEventIdOrder
-      );
-    };
+    const manifestEventStructures = loadManifestEventStructures(bookId, chapterIdx);
+    const { manifestEventMap, sortedManifestIndices } = buildManifestEventIndex(manifestEventStructures);
 
     if (sortedManifestIndices.length > 0) {
       const indicesToFetch = cappedMaxEventIdx
         ? sortedManifestIndices.filter((idx) => idx <= cappedMaxEventIdx)
         : sortedManifestIndices;
 
-      await collectEventsFromDeltas(indicesToFetch);
+      await collectEventsFromDeltas(ctx, indicesToFetch, manifestEventMap);
       if (apiEvents.length > 0) {
         return (
           getCachedChapterEvents(bookId, chapterIdx) ??
@@ -1751,45 +2356,11 @@ const discoverChapterEvents = async (
       }
     }
 
-    // manifest 이벤트 없을 때: 챕터 단위 deltas + 로컬 누적
-    try {
-      const fetched = await ensureBookRelationshipDeltas(bookId, {
-        chapterIndex: chapterIdx,
-      });
-      const deltas = Array.isArray(fetched?.deltas) ? fetched.deltas : [];
-      if (deltas.length > 0) {
-        const sortedDeltas = sortDeltasForAccumulate(deltas);
-        const seenIds = [];
-        for (const delta of sortedDeltas) {
-          const eventId = typeof delta?.eventId === 'string' ? delta.eventId.trim() : '';
-          if (!eventId || seenIds.includes(eventId)) continue;
-          // 해당 챕터 delta만 (chapterIndex가 있으면 필터)
-          const deltaChapter = Number(delta?.chapterIndex);
-          if (Number.isFinite(deltaChapter) && deltaChapter !== chapterIdx) continue;
-          seenIds.push(eventId);
-        }
-        const idsToBuild = cappedMaxEventIdx ? seenIds.slice(0, cappedMaxEventIdx) : seenIds;
-        const eventEntries = idsToBuild.map((eventId, index) => ({
-          eventIdx: index + 1,
-          eventId,
-          structure: { eventIdx: index + 1, eventId },
-        }));
-        await appendEventsFromSortedDeltas(
-          fetched.bookId ?? bookId,
-          sortedDeltas,
-          eventEntries,
-          idsToBuild
-        );
-      }
-    } catch (error) {
-      if (import.meta.env.DEV) {
-        console.debug(`챕터 ${chapterIdx} relationship-deltas(챕터) 조회 실패`, error?.message || error);
-      }
-    }
+    await discoverWithoutManifest(ctx, cappedMaxEventIdx);
 
     if (!apiEvents.length) {
       if (import.meta.env.DEV) {
-        console.debug(`챕터 ${chapterIdx}: relationship-deltas 이벤트 없음`);
+        errorUtils.logDebug('graphModel', 'relationship-deltas 이벤트 없음', { chapterIdx });
       }
       // EMPTY를 캐시에 쓰지 않음 — "빈 성공" 고착 방지 (재요청 가능)
       return null;
@@ -1814,7 +2385,13 @@ const discoverChapterEvents = async (
   }
 };
 
-/** 읽기 위치 기준으로 필요한 이벤트만 선행 캐시 */
+/**
+ * 읽기 위치 기준으로 필요한 이벤트만 선행 캐시 (TTL 스토리지 기록).
+ * @param {string|number} bookId
+ * @param {number} chapterIdx
+ * @param {number} throughEventIdx
+ * @returns {Promise<Object|null>}
+ */
 export const prefetchChapterEvents = (bookId, chapterIdx, throughEventIdx) => {
   const through = Number(throughEventIdx);
   if (!bookId || !chapterIdx || !Number.isFinite(through) || through < 1) {
@@ -1828,13 +2405,18 @@ export const prefetchChapterEvents = (bookId, chapterIdx, throughEventIdx) => {
 const hasUsableChapterCache = (bookId, chapterIdx) => {
   const cached = getCachedChapterEvents(bookId, chapterIdx);
   if (!cached) return false;
-  if (cached.source === CHAPTER_GRAPH_CACHE_SOURCE.INVALID) return false;
-  if (cached.source === CHAPTER_GRAPH_CACHE_SOURCE.EMPTY) return false;
-  if (cached.source === 'manifest-only') return false;
+  if (isUnusableChapterGraphCacheSource(cached.source)) return false;
   return true;
 };
 
-const hasUsableChapterCacheThrough = (bookId, chapterIdx, throughEventIdx = null) => {
+/**
+ * through 시점까지 사용 가능 캐시 여부.
+ * @param {string|number} bookId
+ * @param {number} chapterIdx
+ * @param {number|null} [throughEventIdx]
+ * @returns {boolean}
+ */
+export const hasUsableChapterCacheThrough = (bookId, chapterIdx, throughEventIdx = null) => {
   if (!hasUsableChapterCache(bookId, chapterIdx)) return false;
   const through = Number(throughEventIdx);
   if (!Number.isFinite(through) || through < 1) return true;
@@ -1842,7 +2424,15 @@ const hasUsableChapterCacheThrough = (bookId, chapterIdx, throughEventIdx = null
   return cachedMax >= through;
 };
 
-/** 챕터 이벤트 캐시 확보. through 시점이 준비되면 즉시 success (백필은 백그라운드 계속). */
+/**
+ * 챕터 이벤트 캐시 확보. through 시점이 준비되면 즉시 success (백필은 백그라운드 계속).
+ * @param {string|number} bookId
+ * @param {number} chapter
+ * @param {Object} [options]
+ * @param {Function|null} [options.onPartialCache]
+ * @param {number|null} [options.throughEventIdx]
+ * @returns {Promise<{ success: boolean, reason?: string, error?: Error }>}
+ */
 export async function ensureChapterEventsDiscovered(
   bookId,
   chapter,
@@ -1895,6 +2485,10 @@ export async function ensureChapterEventsDiscovered(
   return { success: false, reason: 'cache_missing' };
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+ * 8. Book relationship deltas
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
 const bookDeltasCache = new Map();
 const bookDeltasInflight = new Map();
 
@@ -1913,6 +2507,10 @@ const loadFetchRelationshipDeltasList = async () => {
   return mod.fetchRelationshipDeltasList;
 };
 
+/**
+ * 책 deltas 메모리/inflight 캐시 클리어.
+ * @param {string|number} bookId
+ */
 export const clearBookRelationshipDeltas = (bookId) => {
   const key = toBookKey(bookId);
   bookDeltasCache.delete(key);
@@ -2013,7 +2611,12 @@ const fetchAndStoreByChapter = async (key, uptoChapter) => {
   return current ?? buildCacheEntry(key, []);
 };
 
-/** 책 deltas 확보 — chapterIndex(1..N) 챕터 단위 조회 */
+/**
+ * 책 deltas 확보 — chapterIndex(1..N) 챕터 단위 조회. 메모리 캐시 기록.
+ * @param {string|number} bookId
+ * @param {{ chapterIndex?: number|null }} [options]
+ * @returns {Promise<{ bookId: *, deltas: Array, toEventId: string|null, coveredThroughChapter: number|null, response: *, isSuccess: boolean }>}
+ */
 export async function ensureBookRelationshipDeltas(bookId, { chapterIndex = null } = {}) {
   if (!bookId) throw new Error('bookId는 필수 매개변수입니다.');
 

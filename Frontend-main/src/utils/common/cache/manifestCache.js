@@ -1,7 +1,6 @@
 import { normalizeManifestBook } from '../../api/booksApi';
 import { sanitizeAssetUrl, errorUtils } from '../urlUtils';
 import {
-  resolveChapterIndex,
   toNumberOrNull,
   toOneBasedChapterIndexOrNull,
   toPositiveInt,
@@ -610,7 +609,7 @@ export const setManifestData = (bookId, manifestData, { persist = true } = {}) =
 
     return normalizedData;
   } catch (error) {
-    console.error('Manifest 캐시 저장 실패:', error);
+    errorUtils.logWarning('manifestCache', 'Manifest 캐시 저장 실패', { message: error?.message });
     return null;
   }
 };
@@ -683,7 +682,7 @@ export const prefetchManifest = async (bookId, fetcher) => {
 
       return null;
     } catch (error) {
-      console.warn('Manifest 프리패치 실패:', error);
+      errorUtils.logWarning('manifestCache', 'Manifest 프리패치 실패', { message: error?.message });
       return null;
     } finally {
       prefetchPromises.delete(key);

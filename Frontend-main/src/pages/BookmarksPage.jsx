@@ -13,7 +13,7 @@ import {
   resolveBookmarkApiBookId,
   groupBookmarksByChapter,
 } from '../utils/bookmarks/bookmarkUtils';
-import { userViewerPath, userViewerBookmarksPath, userViewerReadingPath } from '../utils/common/urlUtils';
+import { userViewerPath, userViewerBookmarksPath, userViewerReadingPath, errorUtils } from '../utils/common/urlUtils';
 import { resolveChapterIndex } from '../utils/common/valueUtils';
 import { formatFallbackChapterLabel } from '../utils/viewer/viewerCore';
 import './BookmarksPage.css';
@@ -94,7 +94,7 @@ const BookmarksPage = () => {
     fetchBookmarks,
     removeBookmark,
     patchBookmark,
-  } = useBookmarks(apiBookId, { sortOrder });
+  } = useBookmarks(apiBookId);
 
   const filteredBookmarks = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
@@ -145,6 +145,11 @@ const BookmarksPage = () => {
     (bookmark) => {
       const resumeAnchor = bookmarkToResumeAnchor(bookmark);
       if (!resumeAnchor) {
+        errorUtils.logWarning('BookmarksPage', '북마크 위치 해석 실패', {
+          action: 'open',
+          bookId: apiBookId,
+          bookmarkId: bookmark?.id,
+        });
         toast.error('이 북마크의 위치를 찾을 수 없습니다.');
         return;
       }
@@ -286,16 +291,13 @@ const BookmarksPage = () => {
       >
         <div
           className="bm-row-main"
-          role="button"
-          tabIndex={0}
-          onClick={() => handleOpenBookmark(bookmark)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              handleOpenBookmark(bookmark);
-            }
-          }}
         >
+          <button
+            type="button"
+            className="bm-row-open"
+            aria-label={`${locationLabel || '북마크'} 본문으로 이동`}
+            onClick={() => handleOpenBookmark(bookmark)}
+          />
           <span className="bm-row-accent" aria-hidden="true" />
           <div className="bm-row-body">
             <p className={`bm-quote${highlight ? '' : ' is-empty'}`}>
@@ -317,6 +319,11 @@ const BookmarksPage = () => {
                 {memoExtra > 0 ? <span className="bm-memo-extra">외 {memoExtra}</span> : null}
               </p>
             ) : null}
+            {!isExpanded ? (
+              <span className="bm-row-open-label">
+                본문으로 이동 <span aria-hidden="true">→</span>
+              </span>
+            ) : null}
           </div>
           <button
             type="button"
@@ -329,7 +336,7 @@ const BookmarksPage = () => {
               toggleExpanded(bookmark.id);
             }}
           >
-            {isExpanded ? '접기' : '편집'}
+            {isExpanded ? '닫기' : '도구'}
           </button>
         </div>
 
@@ -464,6 +471,7 @@ const BookmarksPage = () => {
 
             <div className="bm-row-footer">
               <div className="bm-color-row" role="group" aria-label="북마크 색상">
+                <span className="bm-color-label">색상</span>
                 {colorOptions.map((option) => (
                   <button
                     key={option.key}
@@ -519,9 +527,11 @@ const BookmarksPage = () => {
 
   if (loading) {
     return (
-      <div className="bm-page" ref={pageRef}>
+      <div className="bm-page bm-page--center" ref={pageRef}>
         <div className="bm-shell bm-shell--narrow">
-          <div className="bm-status">북마크를 불러오는 중...</div>
+          <div className="bm-status" role="status" aria-live="polite">
+            북마크를 불러오는 중...
+          </div>
         </div>
       </div>
     );
@@ -657,10 +667,14 @@ const BookmarksPage = () => {
             role="dialog"
             aria-modal="true"
             aria-labelledby="bookmark-delete-title"
+            aria-describedby="bookmark-delete-desc"
             onClick={stopRow}
           >
             <p id="bookmark-delete-title" className="bm-confirm-title">
-              정말 삭제하시겠습니까?
+              북마크를 삭제할까요?
+            </p>
+            <p id="bookmark-delete-desc" className="bm-confirm-desc">
+              메모가 있다면 함께 삭제되며, 되돌릴 수 없습니다.
             </p>
             <div className="bm-confirm-actions">
               <button
@@ -673,11 +687,12 @@ const BookmarksPage = () => {
               </button>
               <button
                 type="button"
-                className="bm-btn-danger"
+                className="bm-btn bm-btn-confirm-delete"
                 onClick={() => handleDeleteBookmark(deleteConfirmId)}
                 disabled={isMutating}
+                autoFocus
               >
-                삭제
+                {isMutating ? '삭제 중…' : '삭제'}
               </button>
             </div>
           </div>

@@ -1,3 +1,5 @@
+import { errorUtils } from '../valueUtils';
+
 export const MANIFEST_CACHE_PREFIX = 'manifest_cache_v2_';
 export const MANIFEST_TTL_MS = 15 * 60 * 1000;
 
@@ -9,16 +11,22 @@ const BOOKS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 export const GRAPH_BOOK_CACHE_PREFIX = 'graph_cache_';
 export const CHAPTER_EVENT_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+/** 챕터 이벤트 localStorage 키 — v2: convert 단일 진입점 이후 elements 스키마 */
+export const CHAPTER_EVENT_CACHE_PREFIX = 'chapter_events_v2_';
 
 export const READER_PROGRESS_CACHE_PREFIX = 'reader_progress_';
 export const READER_PROGRESS_MAX_AGE_MS = 3 * 24 * 60 * 60 * 1000;
 
 export const CHAPTER_GRAPH_CACHE_SOURCE = Object.freeze({
   API: 'api',
-  EMPTY: 'empty',
   INVALID: 'invalid',
-  RUNTIME: 'runtime',
 });
+
+/** 과거에 write됐던 source — 재사용하지 않고 rediscover */
+export const isUnusableChapterGraphCacheSource = (source) =>
+  source === CHAPTER_GRAPH_CACHE_SOURCE.INVALID ||
+  source === 'empty' ||
+  source === 'manifest-only';
 
 const cacheRegistry = new Map();
 
@@ -114,7 +122,7 @@ export function saveToStorage(storageKey, data, storageType = 'localStorage') {
   try {
     storage.setItem(storageKey, JSON.stringify(data));
   } catch (error) {
-    console.error(`스토리지 저장 실패 (${storageKey}):`, error);
+    errorUtils.logDebug('cacheManager', `스토리지 저장 실패 (${storageKey})`, { message: error?.message });
   }
 }
 
@@ -125,7 +133,7 @@ export function removeFromStorage(storageKey, storageType = 'localStorage') {
   try {
     storage.removeItem(storageKey);
   } catch (error) {
-    console.error(`스토리지 삭제 실패 (${storageKey}):`, error);
+    errorUtils.logDebug('cacheManager', `스토리지 삭제 실패 (${storageKey})`, { message: error?.message });
   }
 }
 
@@ -198,7 +206,7 @@ function setRawToStorage(storageKey, value, storageType = 'localStorage') {
   try {
     storage.setItem(storageKey, value);
   } catch (error) {
-    console.error(`스토리지 저장 실패 (${storageKey}):`, error);
+    errorUtils.logDebug('cacheManager', `스토리지 저장 실패 (${storageKey})`, { message: error?.message });
   }
 }
 
@@ -243,7 +251,7 @@ export function registerCache(name, cache, options = {}) {
       setupCleanupTimer(name, cacheInfo);
     }
   } catch (error) {
-    console.error(`캐시 등록 실패 (${name}):`, error);
+    errorUtils.logDebug('cacheManager', `캐시 등록 실패 (${name})`, { message: error?.message });
     throw error;
   }
 }
@@ -256,7 +264,7 @@ export function recordCacheAccess(name) {
       cacheInfo.accessCount++;
     }
   } catch (error) {
-    console.error(`캐시 접근 기록 실패 (${name}):`, error);
+    errorUtils.logDebug('cacheManager', `캐시 접근 기록 실패 (${name})`, { message: error?.message });
   }
 }
 
@@ -284,7 +292,7 @@ export function enforceCacheSizeLimit(name) {
       }
     }
   } catch (error) {
-    console.error(`캐시 크기 제한 적용 실패 (${name}):`, error);
+    errorUtils.logDebug('cacheManager', `캐시 크기 제한 적용 실패 (${name})`, { message: error?.message });
   }
 }
 
@@ -310,17 +318,17 @@ function setupCleanupTimer(name, cacheInfo) {
         
         if (hasChanges) persistCache(cacheInfo);
       } catch (error) {
-        console.error(`TTL 캐시 정리 중 오류 (${name}):`, error);
+        errorUtils.logDebug('cacheManager', `TTL 캐시 정리 중 오류 (${name})`, { message: error?.message });
       }
     }, cacheInfo.options.cleanupInterval);
     
     cacheInfo.cleanupTimer = interval;
   } catch (error) {
-    console.error(`캐시 타이머 설정 실패 (${name}):`, error);
+    errorUtils.logDebug('cacheManager', `캐시 타이머 설정 실패 (${name})`, { message: error?.message });
   }
 }
 
-export function clearCache(name) {
+function clearCache(name) {
   try {
     const cacheInfo = cacheRegistry.get(name);
     if (!cacheInfo) return;
@@ -341,7 +349,7 @@ export function clearCache(name) {
     cacheInfo.lastAccess = Date.now();
     cacheInfo.accessCount = 0;
   } catch (error) {
-    console.error(`캐시 정리 실패 (${name}):`, error);
+    errorUtils.logDebug('cacheManager', `캐시 정리 실패 (${name})`, { message: error?.message });
   }
 }
 
@@ -370,7 +378,7 @@ export function getCacheItem(name, key) {
     
     return value;
   } catch (error) {
-    console.error(`캐시 항목 조회 실패 (${name}, ${key}):`, error);
+    errorUtils.logDebug('cacheManager', `캐시 항목 조회 실패 (${name}, ${key})`, { message: error?.message });
     return undefined;
   }
 }
@@ -404,7 +412,7 @@ export function setCacheItem(name, key, value) {
     
     return true;
   } catch (error) {
-    console.error(`캐시 항목 설정 실패 (${name}, ${key}):`, error);
+    errorUtils.logDebug('cacheManager', `캐시 항목 설정 실패 (${name}, ${key})`, { message: error?.message });
     return false;
   }
 }
@@ -427,14 +435,14 @@ export function removeCacheItem(name, key) {
             saveToStorage(options.storageKey, stored, options.storageType);
           }
         } catch (error) {
-          console.error(`캐시 항목 스토리지 삭제 실패 (${name}, ${key}):`, error);
+          errorUtils.logDebug('cacheManager', `캐시 항목 스토리지 삭제 실패 (${name}, ${key})`, { message: error?.message });
         }
       }
     }
     
     return true;
   } catch (error) {
-    console.error(`캐시 항목 삭제 실패 (${name}, ${key}):`, error);
+    errorUtils.logDebug('cacheManager', `캐시 항목 삭제 실패 (${name}, ${key})`, { message: error?.message });
     return false;
   }
 }
@@ -449,7 +457,7 @@ function clearVolatileCachesOnBeforeUnload() {
       clearCache(name);
     }
   } catch (error) {
-    console.error('beforeunload 캐시 정리 실패:', error);
+    errorUtils.logDebug('cacheManager', 'beforeunload 캐시 정리 실패', { message: error?.message });
   }
 }
 

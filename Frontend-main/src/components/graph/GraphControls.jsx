@@ -1,10 +1,279 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import PropTypes from "prop-types";
+import { List, Search, SearchX, SlidersHorizontal } from "lucide-react";
 import { useClickOutside } from "../../hooks/ui/tooltipHooks";
 import { findExactSuggestionMatch } from "../../utils/graph/graphCy.js";
-import { GRAPH_CHARACTER_FILTER_STAGE_OPTIONS } from "../../utils/graph/graphCore.js";
+import {
+  GRAPH_CHARACTER_FILTER_STAGE_OPTIONS,
+  formatGraphEventMetaLabel,
+} from "../../utils/graph/graphCore.js";
+import { resolveEventOrdinalForDisplay } from "../../utils/viewer/viewerSession";
+import { GRAPH_COLORS } from "../../utils/styles/graphStyles.js";
 import "./RelationGraph.css";
+
+/** 인물 이미지 없을 때 공통 실루엣 */
+export function PersonSilhouette({
+  size = 48,
+  circleFill = GRAPH_COLORS.border,
+  bodyFill = '#bdbdbd',
+}) {
+  const cx = size / 2;
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} fill="none" aria-hidden>
+      <circle cx={cx} cy={cx} r={cx} fill={circleFill} />
+      <ellipse cx={cx} cy={size * 0.375} rx={size * 0.21} ry={size * 0.21} fill={bodyFill} />
+      <ellipse cx={cx} cy={size * 0.79} rx={size * 0.29} ry={size * 0.17} fill={bodyFill} />
+    </svg>
+  );
+}
+
+PersonSilhouette.propTypes = {
+  size: PropTypes.number,
+  circleFill: PropTypes.string,
+  bodyFill: PropTypes.string,
+};
+
+/** 노드/간선 툴팁 공통 닫기 버튼 */
+export function TooltipCloseButton({ onClose, ariaLabel, className }) {
+  return (
+    <button
+      type="button"
+      onClick={onClose}
+      aria-label={ariaLabel}
+      className={['tooltip-close-btn', className].filter(Boolean).join(' ')}
+    >
+      &times;
+    </button>
+  );
+}
+
+TooltipCloseButton.propTypes = {
+  onClose: PropTypes.func,
+  ariaLabel: PropTypes.string,
+  className: PropTypes.string,
+};
+
+export function ActionButton({ variant = 'secondary', onClick, children, ariaLabel, title }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={ariaLabel}
+      title={title}
+      className={`tooltip-action-btn tooltip-action-btn--${variant === 'primary' ? 'primary' : 'secondary'}`}
+    >
+      {children}
+    </button>
+  );
+}
+
+ActionButton.propTypes = {
+  variant: PropTypes.oneOf(['primary', 'secondary']),
+  onClick: PropTypes.func,
+  children: PropTypes.node,
+  ariaLabel: PropTypes.string,
+  title: PropTypes.string,
+};
+
+const Z_INDEX_TOOLTIP = 99999;
+
+/** 플로팅 노드/간선 툴팁 셸 */
+export function NodeTooltipShell({
+  children,
+  shellRef,
+  className = 'graph-node-tooltip',
+  position,
+  zIndex = Z_INDEX_TOOLTIP,
+  showContent,
+  isDragging,
+  handleMouseDown,
+  transition,
+  closeButton = null,
+}) {
+  return (
+    <div
+      ref={shellRef}
+      className={className}
+      style={{
+        left: position.x,
+        top: position.y,
+        zIndex,
+        ...(showContent !== undefined
+          ? {
+              opacity: showContent ? 1 : 0,
+              transition,
+              cursor: isDragging ? 'grabbing' : 'grab',
+            }
+          : null),
+      }}
+      onMouseDown={handleMouseDown}
+    >
+      {closeButton}
+      {children}
+    </div>
+  );
+}
+
+NodeTooltipShell.propTypes = {
+  children: PropTypes.node,
+  shellRef: PropTypes.oneOfType([PropTypes.func, PropTypes.object]),
+  className: PropTypes.string,
+  position: PropTypes.shape({
+    x: PropTypes.number,
+    y: PropTypes.number,
+  }),
+  zIndex: PropTypes.number,
+  showContent: PropTypes.bool,
+  isDragging: PropTypes.bool,
+  handleMouseDown: PropTypes.func,
+  transition: PropTypes.string,
+  closeButton: PropTypes.node,
+};
+
+export function CenteredStatus({
+  children,
+  color = GRAPH_COLORS.textSecondary,
+  fullHeight = true,
+}) {
+  return (
+    <div
+      className={`tooltip-centered-status${fullHeight ? '' : ' tooltip-centered-status--compact'}`}
+      style={{ '--status-color': color }}
+    >
+      {children}
+    </div>
+  );
+}
+
+CenteredStatus.propTypes = {
+  children: PropTypes.node,
+  color: PropTypes.string,
+  fullHeight: PropTypes.bool,
+};
+
+function handleProfileImageError(e) {
+  e.target.style.display = 'none';
+  if (e.target.nextSibling) e.target.nextSibling.style.display = 'block';
+}
+
+export function NodeProfileAvatar({ node }) {
+  const hasImage = !!node?.hasImage;
+  return (
+    <div className="profile-image-placeholder">
+      <div className="profile-img">
+        {hasImage ? (
+          <img
+            src={node.image}
+            alt={node?.displayName || 'character'}
+            crossOrigin="anonymous"
+            onError={handleProfileImageError}
+          />
+        ) : null}
+        <div style={{ display: hasImage ? 'none' : 'block' }}>
+          <PersonSilhouette size={48} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+NodeProfileAvatar.propTypes = {
+  node: PropTypes.object,
+};
+
+/** 분할·전체 그래프 상단 챕터/사건 메타 (공통) */
+export function GraphTopBarMeta({ chapterLabel, chapterTitle, eventLabel }) {
+  return (
+    <div className="graph-topbar-meta">
+      <span
+        className="graph-topbar-meta-chapter"
+        title={chapterTitle || chapterLabel}
+      >
+        {chapterLabel}
+      </span>
+      {eventLabel != null ? (
+        <span className="graph-topbar-meta-event">{eventLabel}</span>
+      ) : null}
+    </div>
+  );
+}
+
+GraphTopBarMeta.propTypes = {
+  chapterLabel: PropTypes.string,
+  chapterTitle: PropTypes.string,
+  eventLabel: PropTypes.node,
+};
+
+/** 분할 상단바: 챕터 + 사건 메타 (계산중 포함) */
+export function GraphChapterEventMeta({
+  bookId,
+  progressTopBar,
+  currentEvent,
+  prevValidEvent,
+  resolvedServerChapter,
+  chapterDisplayLabel,
+}) {
+  const eventNum = resolveEventOrdinalForDisplay({
+    currentEvent,
+    prevValidEvent,
+    currentChapter: resolvedServerChapter,
+    progressTopBar: progressTopBar ?? { eventNum: null },
+    fallback: 0,
+  });
+
+  if (bookId && progressTopBar === undefined && !(eventNum > 0)) {
+    return <span className="graph-topbar-meta-event">계산중…</span>;
+  }
+
+  return (
+    <GraphTopBarMeta
+      chapterLabel={chapterDisplayLabel}
+      chapterTitle={chapterDisplayLabel}
+      eventLabel={formatGraphEventMetaLabel(eventNum > 0 ? eventNum : null)}
+    />
+  );
+}
+
+GraphChapterEventMeta.propTypes = {
+  bookId: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+  progressTopBar: PropTypes.object,
+  currentEvent: PropTypes.any,
+  prevValidEvent: PropTypes.any,
+  resolvedServerChapter: PropTypes.number,
+  chapterDisplayLabel: PropTypes.string,
+};
+
+/** 빈/로딩/에러 패널 (분할·전체 그래프) */
+export function GraphNoticePanel({ variant, title, description, icon, actions }) {
+  const isLoading = variant === 'loading';
+  const TitleTag = isLoading ? 'p' : 'h3';
+
+  return (
+    <div
+      className={`graph-panel-status graph-panel-status--${variant}`}
+      role={isLoading ? 'status' : variant === 'error' ? 'alert' : undefined}
+      aria-live={isLoading ? 'polite' : undefined}
+    >
+      <div className={`graph-panel-status-icon graph-panel-status-icon--${variant}`} aria-hidden>
+        {icon}
+      </div>
+      <div className="graph-panel-status-copy">
+        <TitleTag className="graph-panel-status-title">{title}</TitleTag>
+        {description ? <p className="graph-panel-status-desc">{description}</p> : null}
+      </div>
+      {actions ? <div className="graph-panel-status-actions">{actions}</div> : null}
+    </div>
+  );
+}
+
+GraphNoticePanel.propTypes = {
+  variant: PropTypes.oneOf(['loading', 'empty', 'error']).isRequired,
+  title: PropTypes.node,
+  description: PropTypes.node,
+  icon: PropTypes.node,
+  actions: PropTypes.node,
+};
 
 function EdgeLabelToggle({ visible, onToggle }) {
   const labelId = useId();
@@ -145,9 +414,7 @@ function GraphCanvasLegend() {
         aria-controls={open ? panelId : undefined}
         onClick={toggle}
       >
-        <span className="material-symbols-outlined" aria-hidden>
-          legend_toggle
-        </span>
+        <List size={18} aria-hidden />
         {!hintSeen ? <span className="graph-legend-hint-dot" aria-hidden /> : null}
       </button>
       {open ? <GraphLegendPanel id={panelId} /> : null}
@@ -277,7 +544,11 @@ function GraphSearchPalette({
         }}
       />
       <div className="graph-search-palette-panel">
-        {toastMessage ? <div className="graph-search-toast is-palette">{toastMessage}</div> : null}
+        {toastMessage ? (
+          <div className="graph-search-toast is-palette" role="status" aria-live="polite">
+            {toastMessage}
+          </div>
+        ) : null}
 
         <form
           className="graph-search-palette-form"
@@ -286,9 +557,7 @@ function GraphSearchPalette({
             trySubmitSearch();
           }}
         >
-          <span className="material-symbols-outlined graph-search-palette-icon" aria-hidden>
-            search
-          </span>
+          <Search size={20} className="graph-search-palette-icon" aria-hidden />
           <input
             ref={inputRef}
             className="graph-search-palette-input"
@@ -354,9 +623,7 @@ function GraphSearchPalette({
               </>
             ) : (
               <div className="graph-search-empty">
-                <span className="material-symbols-outlined graph-search-empty-icon" aria-hidden>
-                  search_off
-                </span>
+                <SearchX size={32} className="graph-search-empty-icon" aria-hidden />
                 <div className="graph-search-empty-title">검색 결과 없음</div>
                 <div className="graph-search-empty-desc">다른 검색어를 시도해보세요</div>
               </div>
@@ -467,9 +734,7 @@ export function GraphFloatingControls({
           aria-expanded={paletteOpen}
           onClick={openPalette}
         >
-          <span className="material-symbols-outlined" aria-hidden>
-            search
-          </span>
+          <Search size={18} aria-hidden />
         </button>
 
         <div className="graph-floating-options" ref={optionsRef}>
@@ -482,9 +747,7 @@ export function GraphFloatingControls({
             aria-expanded={optionsOpen}
             onClick={() => setOptionsOpen((v) => !v)}
           >
-            <span className="material-symbols-outlined" aria-hidden>
-              tune
-            </span>
+            <SlidersHorizontal size={18} aria-hidden />
           </button>
           {optionsOpen ? (
             <div className="graph-floating-options-panel" role="menu" aria-label="표시 옵션">

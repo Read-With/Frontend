@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
 import { Upload, X, Loader2 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
+import { toast } from 'react-toastify';
 import { getBooks, getBook, uploadBook } from '../../utils/api/booksApi';
+import { errorUtils } from '../../utils/common/urlUtils';
 import {
   extractEpubFileMetadata,
   epubUploadBasename,
@@ -12,7 +14,7 @@ import {
 } from '../../utils/library/libraryUtils';
 import { normalizeTitle, normalizeAuthor } from '../../utils/common/valueUtils';
 import { BOOKS_QUERY_KEY, findCanonicalBook } from '../../hooks/books/bookHooks';
-import './BookDetailModal.css';
+import './LibraryModalChrome.css';
 import './FileUpload.css';
 
 const EMPTY_METADATA = { title: '', author: '', language: 'ko' };
@@ -55,7 +57,11 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
     try {
       setExtractingMetadata(true);
       return await withMetadataTimeout(extractEpubFileMetadata(file));
-    } catch {
+    } catch (error) {
+      errorUtils.logWarning('FileUpload', 'EPUB 메타데이터 추출 실패, 파일명 폴백', {
+        message: error?.message,
+        fileName: file?.name || null,
+      });
       return {
         title: epubUploadBasename(file.name),
         author: 'Unknown',
@@ -71,7 +77,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
     const file = files[0];
     const v = validateEpubFile(file);
     if (!v.valid) {
-      alert(v.error);
+      toast.error(v.error);
       return;
     }
     setSelectedFile(file);
@@ -129,8 +135,13 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
       });
       onClose();
     } catch (error) {
-      console.error('업로드 처리 실패:', error);
-      alert(`업로드 처리 중 오류가 발생했습니다: ${error.message}`);
+      errorUtils.logError('FileUpload', error, {
+        fileName: selectedFile?.name || null,
+        title: metadata.title || null,
+        status: error?.status ?? null,
+        code: error?.code ?? null,
+      });
+      toast.error(`업로드 처리 중 오류가 발생했습니다: ${error.message}`);
     } finally {
       uploadingRef.current = false;
       setUploading(false);
