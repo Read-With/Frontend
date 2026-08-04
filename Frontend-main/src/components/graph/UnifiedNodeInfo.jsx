@@ -12,8 +12,7 @@ import {
   collectUndirectedRelations,
   resolvePovSummary,
   resolveRelationConnectionKind,
-  readPovSpoilerUnlocked,
-  unlockPovSpoilerSession,
+  clearPovSpoilerSession,
   NODE_TOOLTIP_VIEW_STATUS,
 } from "../../utils/graph/graphCore";
 import { getEventDataByIndex } from "../../utils/graph/graphFetch.js";
@@ -244,7 +243,6 @@ function UnifiedNodeInfo({
 
   const [appeared, setAppeared] = useState(false);
   const [error, setError] = useState(null);
-  const [spoilerUnlocked, setSpoilerUnlocked] = useState(readPovSpoilerUnlocked);
   const [summaryStage, setSummaryStage] = useState(SUMMARY.COLLAPSED);
   const [isModalOpen, setIsModalOpen] = useState(() => {
     if (pendingKeepAnalysisOpen) {
@@ -255,6 +253,7 @@ function UnifiedNodeInfo({
   });
   const keepModalOpenRef = useRef(false);
   const analysisBtnRef = useRef(null);
+  const unlockedPovNodeIdsRef = useRef(new Set());
 
   const openModal = useCallback(() => setIsModalOpen(true), []);
   const closeModal = useCallback(() => {
@@ -274,7 +273,13 @@ function UnifiedNodeInfo({
     return onSelectRelatedNode(idOrName, options);
   }, [onSelectRelatedNode]);
 
+  const isPovUnlockedForNode = useCallback((nodeId) => {
+    if (nodeId == null || nodeId === '') return false;
+    return unlockedPovNodeIdsRef.current.has(String(nodeId));
+  }, []);
+
   useEffect(() => {
+    clearPovSpoilerSession();
     setSummaryStage(SUMMARY.COLLAPSED);
     if (keepModalOpenRef.current) {
       keepModalOpenRef.current = false;
@@ -283,6 +288,11 @@ function UnifiedNodeInfo({
       setIsModalOpen(false);
     }
   }, [node?.id]);
+
+  useEffect(() => () => {
+    unlockedPovNodeIdsRef.current.clear();
+    clearPovSpoilerSession();
+  }, []);
 
   const avoidPoint = useCanvasAvoidPoint(data?.nodeCenter);
 
@@ -344,15 +354,16 @@ function UnifiedNodeInfo({
   const openSummarySection = useCallback(() => {
     setSummaryStage((s) => {
       if (s !== SUMMARY.COLLAPSED) return SUMMARY.COLLAPSED;
-      return spoilerUnlocked ? SUMMARY.CONTENT : SUMMARY.WARNING;
+      return isPovUnlockedForNode(node?.id) ? SUMMARY.CONTENT : SUMMARY.WARNING;
     });
-  }, [spoilerUnlocked]);
+  }, [isPovUnlockedForNode, node?.id]);
 
   const confirmSpoiler = useCallback(() => {
-    unlockPovSpoilerSession();
-    setSpoilerUnlocked(true);
+    if (node?.id != null && node.id !== '') {
+      unlockedPovNodeIdsRef.current.add(String(node.id));
+    }
     setSummaryStage(SUMMARY.CONTENT);
-  }, []);
+  }, [node?.id]);
 
   const radarResult = useMemo(() => {
     if (!isSidebar) return RADAR_EMPTY;
@@ -484,8 +495,6 @@ function UnifiedNodeInfo({
     <Suspense fallback={<div role="status" aria-live="polite">관계 분석을 불러오는 중…</div>}>
       <RelationAnalysisModal
         node={node}
-        currentChapter={currentChapter}
-        chapterScopeLabel={currentChapter != null ? `챕터 1–${currentChapter} 누적` : null}
         radarChartData={radarChartData}
         connectionKind={connectionKind}
         loadError={radarLoadError}

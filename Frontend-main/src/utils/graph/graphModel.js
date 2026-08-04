@@ -26,6 +26,7 @@ import {
   normalizeRelation,
   pickLastRelationLabel,
   mergeRelationLabelHistory,
+  labelEventOrderHint,
   relationEventMetaPassthrough,
   pickCharacterDisplayName,
   lookupRememberedCharacterDisplayName,
@@ -196,21 +197,30 @@ function validateAndNormalizeProfileImageUrl(profileImage) {
  * 2. Node weights
  * ═══════════════════════════════════════════════════════════════════════════ */
 
+/** number 리터럴이면서 양의 유한수인지 (문자열 강제 변환 없음) */
+function isPositiveFiniteNumberLiteral(n) {
+  return typeof n === 'number' && Number.isFinite(n) && n > 0;
+}
+
 /**
  * 노드 weight가 양의 유한수인지 검사.
  * @param {*} weight
  * @returns {boolean}
  */
 export function isValidNodeWeight(weight) {
-  return typeof weight === 'number' && Number.isFinite(weight) && weight > 0;
+  return isPositiveFiniteNumberLiteral(weight);
 }
 
 function isValidNodeCount(count) {
-  return typeof count === 'number' && Number.isFinite(count) && count > 0;
+  return isPositiveFiniteNumberLiteral(count);
 }
 
 function isNodeWeightEntryVisible(entry) {
-  return Boolean(entry && isValidNodeWeight(entry.weight) && isValidNodeCount(entry.count));
+  return Boolean(
+    entry &&
+    isValidNodeWeight(entry.weight) &&
+    isValidNodeCount(entry.count)
+  );
 }
 
 function resolveNodeWeightAndCount(char, previousEntry = null) {
@@ -414,11 +424,41 @@ export function buildElementsFromGraphPayload({
   };
 }
 
-function mergeEdgeLabels(a, b) {
-  const t1 = String(a ?? '').trim();
-  const t2 = String(b ?? '').trim();
-  // 양방향 합칠 때도 한쪽(최근) 라벨만 겉에 표시
-  return t2 || t1;
+function resolveMostRecentRelationLabel(history, latestLabels = null, fallbackLabel = '') {
+  if (!history || typeof history !== 'object') {
+    return pickLastRelationLabel(latestLabels) || String(fallbackLabel ?? '').trim();
+  }
+  let latestText = '';
+  let latestOrder = null;
+
+  for (const [text, meta] of Object.entries(history)) {
+    const trimmed = String(meta?.text || text || '').trim();
+    if (!trimmed) continue;
+    const order = labelEventOrderHint(meta?.lastEventId, meta?.lastEventOrdinal);
+    if (latestOrder == null || (order != null && order >= latestOrder)) {
+      latestText = trimmed;
+      latestOrder = order ?? latestOrder;
+    }
+  }
+
+  return (
+    latestText ||
+    pickLastRelationLabel(latestLabels) ||
+    String(fallbackLabel ?? '').trim()
+  );
+}
+
+/** relation / latestLabels / labelHistory 필드 머지 */
+function mergeEdgeLabelFields(a = {}, b = {}) {
+  const relationA = Array.isArray(a.relation) ? a.relation : [];
+  const relationB = Array.isArray(b.relation) ? b.relation : [];
+  const latestA = Array.isArray(a.latestLabels) ? a.latestLabels : [];
+  const latestB = Array.isArray(b.latestLabels) ? b.latestLabels : [];
+  return {
+    relation: uniqueStrings([...relationA, ...relationB]),
+    latestLabels: uniqueStrings([...latestA, ...latestB]),
+    labelHistory: mergeRelationLabelHistory(a.labelHistory, b.labelHistory),
+  };
 }
 
 function mergePositivity(a, b) {
@@ -488,21 +528,19 @@ function finalizeDirectedEdges(edgeMap) {
     if (s0 === t1 && t0 === s1) {
       if (relationPayloadEquivalent(e0.data, e1.data)) {
         const [a, b] = String(s0) <= String(t0) ? [s0, t0] : [t0, s0];
-        const r0 = Array.isArray(e0.data.relation) ? e0.data.relation : [];
-        const r1 = Array.isArray(e1.data.relation) ? e1.data.relation : [];
         const pos = mergePositivity(e0.data.positivity, e1.data.positivity);
+        const merged = mergeEdgeLabelFields(e0.data, e1.data);
         const baseData = {
           id: `${a}-${b}`,
           source: a,
           target: b,
           bidirectional: true,
-          relation: uniqueStrings([...r0, ...r1]),
-          label: mergeEdgeLabels(e0.data.label, e1.data.label),
-          latestLabels: uniqueStrings([
-            ...(Array.isArray(e0.data.latestLabels) ? e0.data.latestLabels : []),
-            ...(Array.isArray(e1.data.latestLabels) ? e1.data.latestLabels : []),
-          ]),
-          labelHistory: mergeRelationLabelHistory(e0.data.labelHistory, e1.data.labelHistory),
+          ...merged,
+          label: resolveMostRecentRelationLabel(
+            merged.labelHistory,
+            merged.latestLabels,
+            e1.data.label || e0.data.label
+          ),
           snapshotEventId: e0.data.snapshotEventId ?? e1.data.snapshotEventId ?? null,
         };
         if (Number.isFinite(Number(pos))) {
@@ -537,12 +575,7 @@ function isRelationVisibleAtEvent(rel, eventData) {
 
   const meta = relationEventMetaPassthrough(rel);
   const relationChapter = toPositiveIntOrNaN(meta.chapterIdx);
-  const relationEventIdx = toPositiveIntOrNaN(
-    eventUtils.resolveEventOrdinal(rel) ??
-    eventUtils.resolveEventOrdinal(meta) ??
-    rel?.event_id ??
-    rel?.event?.event_id
-  );
+  const relationEventIdx = resolveRelationEventOrdinal(rel, { fallback: NaN });
 
   if (Number.isFinite(targetChapter) && Number.isFinite(relationChapter)) {
     if (relationChapter > targetChapter) return false;
@@ -570,7 +603,8 @@ function resolveEdgeDisplayLabel(r) {
   );
 }
 
-function relationEventOrdinal(rel) {
+/** relation 이벤트 ordinal 후보를 공통 순서로 해석 */
+function resolveRelationEventOrdinal(rel, { fallback = 0 } = {}) {
   const meta = relationEventMetaPassthrough(rel);
   const candidates = [
     eventUtils.resolveEventOrdinal(rel),
@@ -582,7 +616,7 @@ function relationEventOrdinal(rel) {
     const n = toPositiveIntOrNaN(candidate);
     if (Number.isFinite(n)) return n;
   }
-  return 0;
+  return fallback;
 }
 
 /** relations + orphan characters → 등장 노드 id 목록 */
@@ -760,7 +794,7 @@ function accumulateDirectedEdges(relations, { nodeSet, visibleNodeIdSet, eventDa
     }
 
     const relationLabel = resolveEdgeDisplayLabel(r);
-    const relEv = relationEventOrdinal(rel);
+    const relEv = resolveRelationEventOrdinal(rel);
     const snapshotEventId =
       eventData?.eventId ??
       eventData?.id ??
@@ -769,23 +803,12 @@ function accumulateDirectedEdges(relations, { nodeSet, visibleNodeIdSet, eventDa
 
     if (edgeMap.has(edgeKey)) {
       const existingEdge = edgeMap.get(edgeKey);
-      existingEdge.data.relation = uniqueStrings([...existingEdge.data.relation, ...r.relation]);
-      existingEdge.data.latestLabels = uniqueStrings([
-        ...(Array.isArray(existingEdge.data.latestLabels) ? existingEdge.data.latestLabels : []),
-        ...(Array.isArray(r.latestLabels) ? r.latestLabels : []),
-      ]);
-      existingEdge.data.labelHistory = mergeRelationLabelHistory(
-        existingEdge.data.labelHistory,
-        r.labelHistory
-      );
+      Object.assign(existingEdge.data, mergeEdgeLabelFields(existingEdge.data, r));
       if (snapshotEventId != null) {
         existingEdge.data.snapshotEventId = snapshotEventId;
       }
       const prevEv = existingEdge.data._labelEventIdx ?? -1;
-      if (relationLabel && relEv >= prevEv) {
-        existingEdge.data.label = relationLabel;
-        existingEdge.data._labelEventIdx = relEv;
-      } else if (!existingEdge.data.label && relationLabel) {
+      if (relationLabel && (!existingEdge.data.label || relEv >= prevEv)) {
         existingEdge.data.label = relationLabel;
         existingEdge.data._labelEventIdx = relEv;
       }
@@ -1364,6 +1387,42 @@ function runOverlapPushPasses(
   return hasOverlap;
 }
 
+function parseOverlapOptions(nodeSize, options = {}) {
+  const size =
+    typeof nodeSize === 'number' && nodeSize > 0
+      ? nodeSize
+      : OVERLAP_RESOLVE.FALLBACK_NODE_SIZE;
+  const movableIdSet = options.movableIds
+    ? new Set([...options.movableIds].map(String).filter((id) => id !== ''))
+    : null;
+  const padding =
+    typeof options.padding === 'number' && options.padding >= 0
+      ? options.padding
+      : OVERLAP_RESOLVE.PADDING;
+  const tolerance =
+    typeof options.tolerance === 'number' && options.tolerance >= 0
+      ? options.tolerance
+      : OVERLAP_RESOLVE.OVERLAP_TOLERANCE;
+  return { nodeSize: size, movableIdSet, padding, tolerance, options };
+}
+
+function buildOverlapNodePositions(cy, movableIdSet, nodeSize, padding) {
+  const nodes = collectOverlapCandidateNodes(
+    cy,
+    movableIdSet,
+    OVERLAP_RESOLVE.MAX_NODES,
+    nodeSize,
+    padding,
+  );
+  if (nodes.length < 2) return null;
+  return nodes.map((node) => ({
+    node,
+    id: String(node.id()),
+    pos: node.position(),
+    radius: readNodeRadius(node, nodeSize),
+  }));
+}
+
 /**
  * 노드 겹침 감지 및 자동 조정
  * @param {Object} cy - Cytoscape 인스턴스
@@ -1384,29 +1443,17 @@ export function detectAndResolveOverlap(
     return false;
   }
 
-  if (typeof nodeSize !== 'number' || nodeSize <= 0) {
-    nodeSize = OVERLAP_RESOLVE.FALLBACK_NODE_SIZE;
-  }
-
-  const movableIdSet = options.movableIds
-    ? new Set([...options.movableIds].map(String).filter((id) => id !== ''))
-    : null;
+  const parsed = parseOverlapOptions(nodeSize, options);
+  const { movableIdSet, padding, tolerance } = parsed;
+  nodeSize = parsed.nodeSize;
   if (movableIdSet && movableIdSet.size === 0) {
     return false;
   }
 
-  const padding =
-    typeof options.padding === 'number' && options.padding >= 0
-      ? options.padding
-      : OVERLAP_RESOLVE.PADDING;
   const pushExtra =
     typeof options.pushExtra === 'number' && options.pushExtra >= 0
       ? options.pushExtra
       : OVERLAP_RESOLVE.PUSH_EXTRA;
-  const tolerance =
-    typeof options.tolerance === 'number' && options.tolerance >= 0
-      ? options.tolerance
-      : OVERLAP_RESOLVE.OVERLAP_TOLERANCE;
   const severeOverlap =
     typeof options.severeOverlap === 'number' && options.severeOverlap > 0
       ? options.severeOverlap
@@ -1422,23 +1469,10 @@ export function detectAndResolveOverlap(
       ? options.extraPasses
       : OVERLAP_RESOLVE.EXTRA_PASSES;
 
-  const nodes = collectOverlapCandidateNodes(
-    cy,
-    movableIdSet,
-    OVERLAP_RESOLVE.MAX_NODES,
-    nodeSize,
-    padding,
-  );
-  if (nodes.length < 2) {
+  const nodePositions = buildOverlapNodePositions(cy, movableIdSet, nodeSize, padding);
+  if (!nodePositions) {
     return false;
   }
-
-  const nodePositions = nodes.map((node) => ({
-    node,
-    id: String(node.id()),
-    pos: node.position(),
-    radius: readNodeRadius(node, nodeSize),
-  }));
 
   let hasOverlap = false;
   const apply = () => {
@@ -1495,38 +1529,11 @@ export function hasOverlappingNodes(
   options = {},
 ) {
   if (!cy) return false;
-  if (typeof nodeSize !== 'number' || nodeSize <= 0) {
-    nodeSize = OVERLAP_RESOLVE.FALLBACK_NODE_SIZE;
-  }
-  const movableIdSet = options.movableIds
-    ? new Set([...options.movableIds].map(String).filter((id) => id !== ''))
-    : null;
+  const { movableIdSet, padding, tolerance, nodeSize: size } = parseOverlapOptions(nodeSize, options);
   if (movableIdSet && movableIdSet.size === 0) return false;
 
-  const padding =
-    typeof options.padding === 'number' && options.padding >= 0
-      ? options.padding
-      : OVERLAP_RESOLVE.PADDING;
-  const tolerance =
-    typeof options.tolerance === 'number' && options.tolerance >= 0
-      ? options.tolerance
-      : OVERLAP_RESOLVE.OVERLAP_TOLERANCE;
-
-  const nodes = collectOverlapCandidateNodes(
-    cy,
-    movableIdSet,
-    OVERLAP_RESOLVE.MAX_NODES,
-    nodeSize,
-    padding,
-  );
-  if (nodes.length < 2) return false;
-
-  const nodePositions = nodes.map((node) => ({
-    node,
-    id: String(node.id()),
-    pos: node.position(),
-    radius: readNodeRadius(node, nodeSize),
-  }));
+  const nodePositions = buildOverlapNodePositions(cy, movableIdSet, size, padding);
+  if (!nodePositions) return false;
   return pairStillOverlaps(nodePositions, movableIdSet, padding, tolerance);
 }
 
@@ -2406,7 +2413,7 @@ const hasUsableChapterCache = (bookId, chapterIdx) => {
   const cached = getCachedChapterEvents(bookId, chapterIdx);
   if (!cached) return false;
   if (isUnusableChapterGraphCacheSource(cached.source)) return false;
-  return true;
+  return cached;
 };
 
 /**
@@ -2417,10 +2424,11 @@ const hasUsableChapterCache = (bookId, chapterIdx) => {
  * @returns {boolean}
  */
 export const hasUsableChapterCacheThrough = (bookId, chapterIdx, throughEventIdx = null) => {
-  if (!hasUsableChapterCache(bookId, chapterIdx)) return false;
+  const cached = hasUsableChapterCache(bookId, chapterIdx);
+  if (!cached) return false;
   const through = Number(throughEventIdx);
   if (!Number.isFinite(through) || through < 1) return true;
-  const cachedMax = Number(getCachedChapterEvents(bookId, chapterIdx)?.maxEventIdx) || 0;
+  const cachedMax = Number(cached.maxEventIdx) || 0;
   return cachedMax >= through;
 };
 

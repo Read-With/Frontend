@@ -4,12 +4,12 @@ import {
   RELATION_CONNECTION_KIND,
 } from "../../utils/graph/graphCore";
 import {Radar,RadarChart,PolarGrid,PolarAngleAxis,PolarRadiusAxis,ResponsiveContainer,} from 'recharts';
-import { getPositivityDisplay, clampPositivity, GRAPH_COLORS, brandAlpha } from '../../utils/styles/graphStyles.js';
+import { getPositivityDisplay, clampPositivity, getPositivityGradientCss, GRAPH_COLORS, brandAlpha } from '../../utils/styles/graphStyles.js';
 import { truncateWithEllipsis, cycleIndex } from '../../utils/common/valueUtils.js';
 import { PersonSilhouette } from './GraphControls';
 import './RelationGraph.css';
 
-const NAME_LABEL_MAX = 6;
+const NAME_LABEL_MAX = 11; // truncate 시 10자 + …
 const RADAR_GRID = brandAlpha(0.22);
 const RADAR_AXIS_TICK = '#6f7f6f';
 const RADAR_FILL = brandAlpha(0.14);
@@ -20,6 +20,7 @@ const RADAR_RADIUS_TICK_LABELS = {
 };
 
 const CONNECTION = RELATION_CONNECTION_KIND;
+const POSITIVITY_GRADIENT = getPositivityGradientCss();
 
 const SIBLING_NAV = [
   { dir: -1, label: '이전 연결 인물로 분석 전환', text: '‹' },
@@ -131,10 +132,27 @@ const RadarDot = memo(function RadarDot({
   );
 });
 
+function SwitchAnalysisButton({ item, onSwitch }) {
+  if (!item || !onSwitch) return null;
+  return (
+    <button
+      type="button"
+      className="relation-modal-action-btn relation-modal-action-btn--secondary relation-modal-switch-inline"
+      onClick={(e) => {
+        e.stopPropagation();
+        onSwitch(item);
+      }}
+    >
+      이 인물로 분석 전환
+    </button>
+  );
+}
+
 function RelationList({
   items,
   activeName,
   onSelect,
+  onSwitch,
   emptyMessage,
 }) {
   if (!items?.length) {
@@ -149,13 +167,16 @@ function RelationList({
         const active = activeName === item.name;
         const { color, label, percent } = getPositivityDisplay(item.positivity);
         return (
-          <li key={item.id || item.name}>
+          <li
+            key={item.id || item.name}
+            className={`relation-modal-list-item${active ? ' is-active' : ''}`}
+            style={{ '--item-pos-color': color }}
+            role="option"
+            aria-selected={active}
+          >
             <button
               type="button"
-              role="option"
-              aria-selected={active}
-              className={`relation-modal-list-item${active ? ' is-active' : ''}`}
-              style={{ '--item-pos-color': color }}
+              className="relation-modal-list-item-main"
               onClick={() => onSelect(item)}
             >
               <div className="relation-modal-list-item-head">
@@ -171,6 +192,7 @@ function RelationList({
               </div>
               <RelationTagsRow tags={item.relationTags} />
             </button>
+            {active ? <SwitchAnalysisButton item={item} onSwitch={onSwitch} /> : null}
           </li>
         );
       })}
@@ -191,7 +213,10 @@ function PositivityScaleBar({ positivity }) {
       role="img"
       aria-label={`긍정성 ${label} (${clamped.toFixed(2)})`}
     >
-      <div className="relation-positivity-scale-track">
+      <div
+        className="relation-positivity-scale-track"
+        style={{ background: POSITIVITY_GRADIENT }}
+      >
         <span className="relation-positivity-scale-zero" />
         <span
           className="relation-positivity-scale-marker"
@@ -207,28 +232,35 @@ function PositivityScaleBar({ positivity }) {
   );
 }
 
-function RelationCard({ item, active, onSelect, sourceName }) {
+function RelationCard({ item, active, onSelect, onSwitch, sourceName }) {
   if (!item) return null;
 
   return (
-    <button
-      type="button"
+    <div
       className={`relation-card${active ? ' is-active' : ''}`}
-      aria-pressed={active}
-      onClick={() => onSelect(item)}
+      role="option"
+      aria-selected={active}
     >
-      <div className="relation-card-top">
-        <NameWithDot name={item.name} positivity={item.positivity} fontSize="1.05rem" />
-        <PositivityChip positivity={item.positivity} />
-      </div>
-      {sourceName ? (
-        <p className="relation-card-pair-hint">
-          {sourceName} ↔ {item.name}
-        </p>
-      ) : null}
-      <PositivityScaleBar positivity={item.positivity} />
-      <RelationTagsRow tags={item.relationTags} />
-    </button>
+      <button
+        type="button"
+        className="relation-card-main"
+        aria-pressed={active}
+        onClick={() => onSelect(item)}
+      >
+        <div className="relation-card-top">
+          <NameWithDot name={item.name} positivity={item.positivity} fontSize="1.05rem" />
+          <PositivityChip positivity={item.positivity} />
+        </div>
+        {sourceName ? (
+          <p className="relation-card-pair-hint">
+            {sourceName} ↔ {item.name}
+          </p>
+        ) : null}
+        <PositivityScaleBar positivity={item.positivity} />
+        <RelationTagsRow tags={item.relationTags} />
+      </button>
+      {active ? <SwitchAnalysisButton item={item} onSwitch={onSwitch} /> : null}
+    </div>
   );
 }
 
@@ -236,6 +268,7 @@ function FewConnectionsPanel({
   items,
   activeName,
   onSelect,
+  onSwitch,
   sourceName,
   connectionKind,
 }) {
@@ -262,6 +295,7 @@ function FewConnectionsPanel({
             item={item}
             active={activeName === item.name}
             onSelect={onSelect}
+            onSwitch={onSwitch}
             sourceName={sourceName}
           />
         ))}
@@ -275,7 +309,13 @@ function PersonAvatar({ node, size = 40 }) {
   return (
     <div className="relation-modal-avatar" style={{ width: size, height: size }}>
       {hasImage ? (
-        <img src={node.image} alt="" crossOrigin="anonymous" />
+        <img
+          src={node.image}
+          alt=""
+          crossOrigin="anonymous"
+          decoding="async"
+          loading="eager"
+        />
       ) : (
         <PersonSilhouette size={size} />
       )}
@@ -285,8 +325,6 @@ function PersonAvatar({ node, size = 40 }) {
 
 function RelationAnalysisModalImpl({
   node,
-  currentChapter,
-  chapterScopeLabel = null,
   radarChartData = [],
   connectionKind,
   loadError = null,
@@ -329,8 +367,6 @@ function RelationAnalysisModalImpl({
     radarChartData.forEach((item) => map.set(item.name, item));
     return map;
   }, [radarChartData]);
-
-  const activeItem = activeName ? dataMap.get(activeName) : null;
 
   const activeIndex = radarChartData.findIndex((item) => item.name === activeName);
   switchTargetsRef.current = radarChartData;
@@ -522,6 +558,7 @@ function RelationAnalysisModalImpl({
         items={radarChartData}
         activeName={activeName}
         onSelect={activateItem}
+        onSwitch={onSelectRelatedNode ? switchToRelated : null}
         sourceName={node?.displayName}
         connectionKind={connectionKind}
       />
@@ -542,28 +579,11 @@ function RelationAnalysisModalImpl({
           items={radarChartData}
           activeName={activeName}
           onSelect={activateItem}
+          onSwitch={onSelectRelatedNode ? switchToRelated : null}
         />
       </div>
     );
   }
-
-  const showCta =
-    activeItem &&
-    onSelectRelatedNode &&
-    connectionKind !== CONNECTION.NONE &&
-    connectionKind !== CONNECTION.ERROR;
-
-  const ctaRow = showCta ? (
-    <div className="relation-modal-cta-row">
-      <button
-        type="button"
-        className="relation-modal-action-btn relation-modal-action-btn--secondary"
-        onClick={() => switchToRelated(activeItem)}
-      >
-        이 인물로 분석 전환
-      </button>
-    </div>
-  ) : null;
 
   const titleId = 'relation-analysis-modal-title';
   const bodyClassName = joinClasses(
@@ -609,11 +629,6 @@ function RelationAnalysisModalImpl({
               <h2 id={titleId} className="tooltip-modal-title">
                 {node?.displayName || '인물'} 관계 분석
               </h2>
-              {(chapterScopeLabel || currentChapter != null) && (
-                <span className="relation-modal-chip">
-                  {chapterScopeLabel || `챕터 ${currentChapter}`}
-                </span>
-              )}
               {connectionKind === CONNECTION.ERROR ? (
                 <span className="relation-modal-chip relation-modal-chip--error">로드 실패</span>
               ) : (
@@ -654,7 +669,10 @@ function RelationAnalysisModalImpl({
             <span className="relation-modal-legend-label">긍정성</span>
             <div className="relation-modal-legend-bar">
               <span>부정 (−100%)</span>
-              <span className="relation-modal-legend-gradient" />
+              <span
+                className="relation-modal-legend-gradient"
+                style={{ background: POSITIVITY_GRADIENT }}
+              />
               <span>긍정 (+100%)</span>
             </div>
           </div>
@@ -664,7 +682,6 @@ function RelationAnalysisModalImpl({
           {chartPanel}
           {bodyPanel}
         </div>
-        {ctaRow}
       </div>
     </div>
   );

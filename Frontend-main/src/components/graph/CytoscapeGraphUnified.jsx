@@ -22,7 +22,7 @@ import {
   clearHighlightClassesOn,
   calculateAnchorAwarePlacement,
   zoomGraphByFactor,
-  fitGraphToNodes,
+  fitGraphViewportInContainer,
   safeCyCall,
   syncCyElementData,
   elementDefIdSet,
@@ -115,6 +115,8 @@ const CytoscapeGraphUnified = ({
   isDataRefreshing = false,
   showZoomControls = true,
   onCyReady = null,
+  /** 챕터 전환 등 뷰포트 재맞춤 트리거 (값이 바뀌면 전체 fit) */
+  viewportFitKey = null,
 }) => {
   const containerRef = useRef(null);
   const [isGraphVisible, setIsGraphVisible] = useState(false);
@@ -126,7 +128,20 @@ const CytoscapeGraphUnified = ({
   initialStylesheetRef.current = stylesheet;
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const pendingInitialFitRef = useRef(false);
+  /** 챕터 전환 직후 이전 fingerprint와 같으면 fit 보류 */
+  const blockFitWhileFingerprintRef = useRef(null);
+  const lastViewportFitKeyRef = useRef(viewportFitKey);
+  const elementsGraphFingerprintRef = useRef("");
   const cy = useCyInstance(externalCyRef, cyReady);
+
+  // 챕터 전환: 새 elements 레이아웃/resize에서 fit
+  useEffect(() => {
+    if (viewportFitKey == null || viewportFitKey === '') return;
+    if (lastViewportFitKeyRef.current === viewportFitKey) return;
+    lastViewportFitKeyRef.current = viewportFitKey;
+    pendingInitialFitRef.current = true;
+    blockFitWhileFingerprintRef.current = elementsGraphFingerprintRef.current || "";
+  }, [viewportFitKey]);
 
   useEffect(() => {
     if (!onCyReady) return undefined;
@@ -142,7 +157,18 @@ const CytoscapeGraphUnified = ({
     () => (isEmpty(elements) ? "" : buildElementsGraphFingerprint(elements)),
     [elements]
   );
+  elementsGraphFingerprintRef.current = elementsGraphFingerprint;
   const elementsLength = Array.isArray(elements) ? elements.length : 0;
+
+  const canApplyPendingViewportFit = useCallback(() => {
+    const blocked = blockFitWhileFingerprintRef.current;
+    if (blocked == null) return true;
+    return elementsGraphFingerprintRef.current !== blocked;
+  }, []);
+
+  const clearPendingViewportFitBlock = useCallback(() => {
+    blockFitWhileFingerprintRef.current = null;
+  }, []);
 
   const fitNodeIdsKey = useMemo(
     () => stableIdListKey(fitNodeIds),
@@ -214,6 +240,7 @@ const CytoscapeGraphUnified = ({
           elements: [],
           style: initialStylesheetRef.current,
           layout: PRESET_LAYOUT,
+          pixelRatio: 'auto',
           userZoomingEnabled: true,
           userPanningEnabled: true,
           wheelSensitivity: GRAPH_ZOOM.WHEEL_SENSITIVITY,
@@ -521,6 +548,8 @@ const CytoscapeGraphUnified = ({
     setIsInitialLoad,
     containerRef,
     pendingInitialFitRef,
+    canApplyPendingViewportFit,
+    clearPendingViewportFitBlock,
   });
 
   useEffect(() => {
@@ -607,11 +636,14 @@ const CytoscapeGraphUnified = ({
                 ...OVERLAP_PROFILES.RESIZE,
               });
             }
-            // 리사이즈 때 전체 노드를 뷰포트로 끌어오면 줌·팬된 배치가 깨지므로 하지 않음
-            if (pendingInitialFitRef.current) {
-              if (fitGraphToNodes(cy, { duration: 0 })) {
-                pendingInitialFitRef.current = false;
-              }
+            // pending(최초/챕터 fit)일 때만 — 이전 챕터 잔여 데이터면 보류
+            if (
+              pendingInitialFitRef.current &&
+              canApplyPendingViewportFit() &&
+              fitGraphViewportInContainer(cy, el)
+            ) {
+              pendingInitialFitRef.current = false;
+              clearPendingViewportFitBlock();
             }
           }, 'CytoscapeGraphUnified:resizeInner');
         }, 120);
@@ -627,7 +659,7 @@ const CytoscapeGraphUnified = ({
       window.removeEventListener("resize", handleSize);
       if (resizeTimeoutId) window.clearTimeout(resizeTimeoutId);
     };
-  }, [cy, applyNodeSizes]);
+  }, [cy, applyNodeSizes, canApplyPendingViewportFit, clearPendingViewportFitBlock]);
 
   const noResultsMessage = shouldShowNoSearchResults(isSearchActive, searchTerm, fitNodeIds)
     ? getNoSearchResultsMessage(searchTerm)
@@ -707,6 +739,7 @@ CytoscapeGraphUnified.propTypes = {
   isDataRefreshing: PropTypes.bool,
   showZoomControls: PropTypes.bool,
   onCyReady: PropTypes.func,
+  viewportFitKey: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
 };
 
 export default CytoscapeGraphUnified;

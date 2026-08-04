@@ -60,10 +60,15 @@
 
   --rg-positivity-gradient: linear-gradient(
     90deg,
-    var(--rg-danger-strong) 0%,
-    #c5c9c5 48%,
-    #c5c9c5 52%,
-    #3d8f5a 100%
+    hsl(0, 85%, 42%) 0%,
+    hsl(4.6, 77.5%, 44.5%) 12.5%,
+    hsl(17.6, 70%, 47%) 25%,
+    hsl(37, 62.5%, 49.5%) 37.5%,
+    hsl(60, 55%, 52%) 50%,
+    hsl(83, 62.5%, 49.5%) 62.5%,
+    hsl(102.4, 70%, 47%) 75%,
+    hsl(115.4, 77.5%, 44.5%) 87.5%,
+    hsl(120, 85%, 42%) 100%
   );
 }
 
@@ -111,10 +116,7 @@
 .edge-label-switch:focus-visible,
 .character-filter-option:focus-visible,
 .graph-chapter-rail-fab:focus-visible,
-.graph-chapter-rail-toggle:focus-visible,
-.graph-gesture-hint-close:focus-visible,
-.graph-event-scrubber-jump:focus-visible,
-.graph-event-scrubber-btn:focus-visible {
+.graph-chapter-rail-toggle:focus-visible {
   outline: 0.125rem solid var(--rg-focus);
   outline-offset: 0.125rem;
 }
@@ -185,9 +187,5 @@
 
   .tooltip-action-btn--primary:hover {
     transform: none;
-  }
-
-  .graph-gesture-hint {
-    backdrop-filter: none;
   }
 }

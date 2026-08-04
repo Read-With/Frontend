@@ -108,7 +108,7 @@ function labelHistoryLookupKey(text) {
 }
 
 /** eventId·ordinal에서 상대 순서 힌트 (작을수록 이른 등장) */
-function labelEventOrderHint(eventId, ordinal) {
+export function labelEventOrderHint(eventId, ordinal) {
   // Number(null) === 0 이므로 null ordinal은 무시
   if (ordinal != null && Number.isFinite(Number(ordinal))) return Number(ordinal);
   return toPositiveNumberFromId(eventId);
@@ -367,9 +367,14 @@ export const GRAPH_ZOOM = {
   /** 마우스 휠 한 단계의 확대·축소 변화량. 낮을수록 더 세밀하다. */
   WHEEL_SENSITIVITY: 0.25,
   MIN: 0.2,
-  MAX: 2.4,
-  /** cy.fit 여백 — 줌·범례 버튼 등 가장자리 여유 */
-  FIT_PADDING: 56,
+  /** 소규모 그래프가 화면에 가깝게 채워지도록 상한을 넉넉히 */
+  MAX: 3.2,
+  /** cy.fit 여백 — 가장자리 여유 (작을수록 그래프가 크게 보임) */
+  FIT_PADDING: 32,
+  /** 최초/챕터 fit 전용 여백 */
+  FIT_PADDING_INITIAL: 24,
+  /** 초기 fit 후 살짝 줌인 (1 = 추가 없음). 라벨이 살짝 잘려도 본체가 읽히게 */
+  FIT_FILL: 1.1,
   /** 초기/영역 맞춤 — 짧게 유지해 등장감 완화 */
   FIT_DURATION_MS: 140,
 };
@@ -799,11 +804,11 @@ export function enrichGraphPayload(payload, bookId) {
   return next;
 }
 
-/** 상단 메타·스크러버 공통: `사건 3` / `사건 ?` */
+/** 상단 메타·스크러버 공통: `Event 3` / `Event ?` */
 export function formatGraphEventMetaLabel(eventNum, { unknown = '?' } = {}) {
   const n = Number(eventNum);
-  if (Number.isFinite(n) && n > 0) return `사건 ${Math.trunc(n)}`;
-  return `사건 ${unknown}`;
+  if (Number.isFinite(n) && n > 0) return `Event ${Math.trunc(n)}`;
+  return `Event ${unknown}`;
 }
 
 /** 챕터 manifest events → 정렬된 eventIdx 목록 */
@@ -990,17 +995,19 @@ export function buildProcessedNode(data) {
 
 const POV_SPOILER_SESSION_KEY = 'readwith:pov-spoiler-unlocked';
 
+/** @deprecated 세션 유지 안 함 — 선택 해제 후 안내 문구가 다시 보이도록 false 고정 */
 export function readPovSpoilerUnlocked() {
-  try {
-    return sessionStorage.getItem(POV_SPOILER_SESSION_KEY) === '1';
-  } catch {
-    return false;
-  }
+  return false;
 }
 
+/** @deprecated 세션에 저장하지 않음 */
 export function unlockPovSpoilerSession() {
+  clearPovSpoilerSession();
+}
+
+export function clearPovSpoilerSession() {
   try {
-    sessionStorage.setItem(POV_SPOILER_SESSION_KEY, '1');
+    sessionStorage.removeItem(POV_SPOILER_SESSION_KEY);
   } catch {
     /* ignore */
   }

@@ -35,6 +35,10 @@ import {
 } from '../../utils/viewer/viewerLocator';
 import './XhtmlViewer.css';
 
+const SWIPE_THRESHOLD = 50;
+const TAP_SLOP_PX = 12;
+const TAP_ZONE_EDGE = 1 / 3;
+
 const XhtmlViewer = forwardRef(
   (
     {
@@ -419,10 +423,6 @@ const XhtmlViewer = forwardRef(
       el.addEventListener('wheel', onWheel, { passive: false });
       return () => el.removeEventListener('wheel', onWheel);
     }, [nextPage, prevPage, suppressViewport, xhtmlContent]);
-
-    const SWIPE_THRESHOLD = 50;
-    const TAP_SLOP_PX = 12;
-    const TAP_ZONE_EDGE = 1 / 3;
 
     const resolveTapAction = useCallback((clientX) => {
       const el = containerRef.current;

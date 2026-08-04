@@ -182,6 +182,21 @@ export const getRelationColor = (positivity) => {
   return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
 };
 
+/**
+ * 간선·태그 색(getRelationColor)과 동일한 −1→+1 스케일 그라데이션.
+ * CSS `--rg-positivity-gradient` / 범례·스케일 바에 사용.
+ */
+export function getPositivityGradientCss({ steps = 9, angle = '90deg' } = {}) {
+  const n = Math.max(2, Math.trunc(steps));
+  const stops = [];
+  for (let i = 0; i < n; i += 1) {
+    const t = i / (n - 1);
+    const pct = Math.round(t * 1000) / 10;
+    stops.push(`${getRelationColor(t * 2 - 1)} ${pct}%`);
+  }
+  return `linear-gradient(${angle}, ${stops.join(', ')})`;
+}
+
 const relationStyleCache = new Map();
 
 const POSITIVITY_LABELS = [

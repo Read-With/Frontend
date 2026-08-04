@@ -296,6 +296,7 @@ const GraphContainer = memo(function GraphContainer({
           graphSelectElementRef={graphSelectElementRef}
           showZoomControls={showZoomControls}
           onCyReady={onCyReady}
+          viewportFitKey={currentChapter}
         />
       </div>
     </div>

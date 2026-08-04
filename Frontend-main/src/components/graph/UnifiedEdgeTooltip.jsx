@@ -35,6 +35,9 @@ function EndpointAvatar({ endpoint }) {
         className="edge-tooltip-endpoint-avatar"
         src={endpoint.image}
         alt={label}
+        crossOrigin="anonymous"
+        decoding="async"
+        loading="eager"
       />
     );
   }

@@ -3,6 +3,7 @@
 export {
   getRelationStyle,
   getPositivityDisplay,
+  getPositivityGradientCss,
   clearStyleCache,
   clampPositivity,
   getRelationColor,

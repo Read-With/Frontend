@@ -429,18 +429,31 @@ function resolveFitElements(cy, eles) {
   return cy.elements();
 }
 
+/** 초기 뷰포트용: 노드(+이름 라벨)만 — 간선 라벨 BB로 과도하게 줌아웃되지 않게 */
+function resolveInitialFitElements(cy) {
+  try {
+    const nodes = cy.nodes(':visible');
+    if (nodes.length > 0) return nodes;
+  } catch {
+    /* fall through */
+  }
+  return resolveFitElements(cy);
+}
+
 /**
  * 뷰포트 fit (즉시 또는 애니메이션).
  * 기본은 visible 노드·간선 전체 — 최초 등장 시 캔버스 안에 그래프가 들어오도록.
  * @param {object} cy
- * @param {{ padding?: number, duration?: number, eles?: object } | number} [opts]
+ * @param {{ padding?: number, duration?: number, eles?: object, fill?: number } | number} [opts]
  *   number면 padding으로 처리. eles 없으면 visible(없으면 전체) elements.
+ *   fill > 1 이면 fit 후 중심 기준 추가 줌인.
  */
 export function fitGraphToNodes(cy, opts = {}) {
   if (!cy || cy.destroyed?.()) return false;
   const options = typeof opts === 'number' ? { padding: opts } : (opts || {});
   const padding = options.padding ?? GRAPH_ZOOM.FIT_PADDING;
   const duration = options.duration ?? 0;
+  const fill = Number.isFinite(options.fill) ? options.fill : 1;
   try {
     if (typeof cy.resize === 'function') cy.resize();
 
@@ -474,17 +487,58 @@ export function fitGraphToNodes(cy, opts = {}) {
     cy.stop();
     if (duration <= 0) {
       cy.fit(fitEles, padding);
+      if (fill > 1) applyFitFillZoom(cy, fill);
       return true;
     }
     cy.animate({
       fit: { eles: fitEles, padding },
       duration,
       easing: 'ease-in-out',
+      complete: () => {
+        if (fill > 1) applyFitFillZoom(cy, fill);
+      },
     });
     return true;
   } catch {
     return false;
   }
+}
+
+/** fit 직후 중심 기준 추가 줌인 (소규모 그래프가 멀리 보이지 않게) */
+function applyFitFillZoom(cy, fill) {
+  if (!cy || cy.destroyed?.() || !(fill > 1)) return;
+  try {
+    const current = cy.zoom();
+    const next = Math.min(cy.maxZoom(), current * fill);
+    if (!(next > current)) return;
+    cy.zoom({
+      level: next,
+      renderedPosition: {
+        x: cy.width() / 2,
+        y: cy.height() / 2,
+      },
+    });
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * 컨테이너 크기가 준비된 뒤 전체 요소를 fit하고 경계 안으로 재제약.
+ * 초기/챕터 전환용 — 노드 기준 + 약간 더 가까운 줌.
+ * @returns {boolean}
+ */
+export function fitGraphViewportInContainer(cy, container, opts = {}) {
+  if (!isGraphContainerSizeReady(container)) return false;
+  const eles = opts.eles ?? resolveInitialFitElements(cy);
+  const padding = opts.padding ?? GRAPH_ZOOM.FIT_PADDING_INITIAL ?? GRAPH_ZOOM.FIT_PADDING;
+  const fill = opts.fill ?? GRAPH_ZOOM.FIT_FILL ?? 1;
+  if (!fitGraphToNodes(cy, { duration: 0, ...opts, eles, padding, fill })) return false;
+  // fill로 살짝 잘린 노드를 레이아웃을 깨며 끌어오지 않음 — 패닝만으로 충분
+  if (!(fill > 1)) {
+    ensureElementsInBounds(cy, container);
+  }
+  return true;
 }
 
 /** 뷰포트 중심 기준 비율 줌 */
@@ -502,6 +556,49 @@ export function zoomGraphByFactor(cy, factor) {
         y: cy.height() / 2,
       },
     });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** 현재 zoom/pan 스냅샷 (선택 포커스 전 복원용) */
+export function captureCyViewport(cy) {
+  if (!cy || cy.destroyed?.()) return null;
+  try {
+    const zoom = cy.zoom();
+    const pan = cy.pan();
+    if (!Number.isFinite(zoom) || !Number.isFinite(pan?.x) || !Number.isFinite(pan?.y)) {
+      return null;
+    }
+    return { zoom, pan: { x: pan.x, y: pan.y } };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 저장된 zoom/pan으로 뷰포트 복원.
+ * @param {{ duration?: number }} [opts]
+ */
+export function restoreCyViewport(cy, snapshot, opts = {}) {
+  if (!cy || cy.destroyed?.() || !snapshot) return false;
+  const zoom = snapshot.zoom;
+  const pan = snapshot.pan;
+  if (!Number.isFinite(zoom) || !Number.isFinite(pan?.x) || !Number.isFinite(pan?.y)) {
+    return false;
+  }
+  const duration = Number.isFinite(opts.duration) ? Math.max(0, opts.duration) : 0;
+  try {
+    if (typeof cy.stop === 'function') cy.stop();
+    if (duration > 0 && typeof cy.animate === 'function') {
+      cy.animate({ zoom, pan, duration, easing: 'ease-in-out' });
+    } else if (typeof cy.viewport === 'function') {
+      cy.viewport({ zoom, pan });
+    } else {
+      cy.zoom(zoom);
+      cy.pan(pan);
+    }
     return true;
   } catch {
     return false;

@@ -6,7 +6,6 @@ import {
   Bookmark,
   BookmarkPlus,
   BookMarked,
-  CircleHelp,
   Columns2,
   Maximize2,
   Menu,
@@ -29,7 +28,6 @@ const NARROW_MQ = '(max-width: 767px)';
 const ICON_SM = 18;
 const MODE_HINT_PANEL_ID = 'viewer-mode-hint-panel';
 const CHROME_HINT_PANEL_ID = 'viewer-chrome-hint-panel';
-const SHORTCUTS_PANEL_ID = 'viewer-shortcuts-panel';
 
 function readStoredSplitPercent() {
   try {
@@ -225,7 +223,6 @@ function ViewerToolbar({
   isFromLibrary = false,
   previousPage = null,
   onExitToMypage,
-  onToggleShortcuts,
 }) {
   const navigate = useNavigate();
   const { filename: bookId } = useParams();
@@ -427,14 +424,6 @@ function ViewerToolbar({
           <div className="toolbar-group-right">
             <div className="toolbar-group-right-inner">
               <ToolbarButton
-                onClick={onToggleShortcuts}
-                title="단축키 안내 (?)"
-                ariaLabel="단축키 안내"
-                className="xhtml-toolbar-btn xhtml-toolbar-btn--icon"
-              >
-                <CircleHelp size={ICON_SM} aria-hidden />
-              </ToolbarButton>
-              <ToolbarButton
                 onClick={onOpenSettings}
                 title="뷰어 설정 열기"
                 ariaLabel="설정"
@@ -513,17 +502,6 @@ function ViewerToolbar({
             <ToolbarButton
               onClick={runMobileAction(() => {
                 closeMobileMenu();
-                onToggleShortcuts?.();
-              })}
-              title="단축키 안내"
-              className="xhtml-toolbar-btn xhtml-toolbar-btn--menu"
-            >
-              <CircleHelp size={ICON_SM} aria-hidden />
-              <span className="viewer-mobile-menu-label">단축키</span>
-            </ToolbarButton>
-            <ToolbarButton
-              onClick={runMobileAction(() => {
-                closeMobileMenu();
                 onOpenSettings?.();
               })}
               title="뷰어 설정 열기"
@@ -584,7 +562,6 @@ function ViewerLayout({
   const [mobilePane, setMobilePane] = useState('reader');
   const [isSplitDragging, setIsSplitDragging] = useState(false);
   const [chromeHintOpen, setChromeHintOpen] = useState(() => !readChromeHintSeen());
-  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const prevShowGraphRef = useRef(showGraph);
   const skipInitialLayoutSettleRef = useRef(true);
   const onViewerLayoutSettledRef = useRef(onViewerLayoutSettled);
@@ -594,30 +571,6 @@ function ViewerLayout({
     markChromeHintSeen();
     setChromeHintOpen(false);
   }, []);
-
-  const toggleShortcuts = useCallback(() => {
-    setShortcutsOpen((v) => !v);
-    dismissChromeHint();
-  }, [dismissChromeHint]);
-
-  useEffect(() => {
-    const onKey = (e) => {
-      if (e.target.closest?.('input, textarea, [contenteditable], [role="dialog"]')) {
-        return;
-      }
-      if (e.key === '?' || (e.key === '/' && e.shiftKey)) {
-        e.preventDefault();
-        setShortcutsOpen((v) => !v);
-        dismissChromeHint();
-      }
-      if (e.key === 'Escape' && shortcutsOpen) {
-        e.preventDefault();
-        setShortcutsOpen(false);
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [dismissChromeHint, shortcutsOpen]);
 
   useEffect(() => {
     const mq = window.matchMedia(NARROW_MQ);
@@ -770,7 +723,6 @@ function ViewerLayout({
           isFromLibrary={isFromLibrary}
           previousPage={previousPage}
           onExitToMypage={onExitToMypage}
-          onToggleShortcuts={toggleShortcuts}
         />
       </div>
 
@@ -857,18 +809,15 @@ function ViewerLayout({
         />
       </div>
 
-      {chromeHintOpen && !shortcutsOpen ? (
+      {chromeHintOpen ? (
         <div className="viewer-chrome-coach" role="status" aria-labelledby={CHROME_HINT_PANEL_ID}>
           <p id={CHROME_HINT_PANEL_ID} className="viewer-chrome-coach-title">
-            가운데를 탭하면 도구모음을 열고 닫을 수 있어요
+            화면 가운데를 탭하면 도구모음을 열고 닫을 수 있어요
           </p>
           <p className="viewer-chrome-coach-desc">
-            좌·우 1/3을 탭하면 페이지를 넘깁니다. ←→·↑↓·휠·스와이프도 동일합니다. 단축키는 ? 키에서 볼 수 있습니다.
+            좌우 가장자리 탭, 휠, 스와이프로 페이지를 넘길 수 있어요.
           </p>
           <div className="viewer-chrome-coach-actions">
-            <button type="button" className="viewer-chrome-coach-btn" onClick={toggleShortcuts}>
-              단축키 보기
-            </button>
             <button
               type="button"
               className="viewer-chrome-coach-btn viewer-chrome-coach-btn--primary"
@@ -876,45 +825,6 @@ function ViewerLayout({
             >
               확인
             </button>
-          </div>
-        </div>
-      ) : null}
-
-      {shortcutsOpen ? (
-        <div
-          className="viewer-shortcuts-overlay"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby={SHORTCUTS_PANEL_ID}
-          onClick={toggleShortcuts}
-        >
-          <div
-            className="viewer-shortcuts-panel"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="viewer-shortcuts-header">
-              <h2 id={SHORTCUTS_PANEL_ID} className="viewer-shortcuts-title">
-                뷰어 단축키
-              </h2>
-              <button
-                type="button"
-                className="viewer-shortcuts-close"
-                onClick={toggleShortcuts}
-                aria-label="단축키 안내 닫기"
-              >
-                <X size={18} aria-hidden />
-              </button>
-            </div>
-            <ul className="viewer-shortcuts-list">
-              <li><kbd>←</kbd><kbd>→</kbd><span>이전 / 다음 페이지</span></li>
-              <li><kbd>↑</kbd><kbd>↓</kbd><span>이전 / 다음 페이지</span></li>
-              <li><kbd>PgUp</kbd><kbd>PgDn</kbd><span>이전 / 다음 페이지</span></li>
-              <li><kbd>휠</kbd><span>페이지 넘김</span></li>
-              <li><kbd>T</kbd><span>도구모음 표시 / 숨김</span></li>
-              <li><kbd>?</kbd><span>이 안내 열기 / 닫기</span></li>
-              <li><span className="viewer-shortcuts-plain">좌·우 탭</span><span>이전 / 다음 페이지</span></li>
-              <li><span className="viewer-shortcuts-plain">가운데 탭</span><span>도구모음 표시 / 숨김</span></li>
-            </ul>
           </div>
         </div>
       ) : null}

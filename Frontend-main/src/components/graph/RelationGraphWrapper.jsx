@@ -12,12 +12,12 @@ import {
   GRAPH_LAYOUT_CONSTANTS,
   resolveChapterSidebarWidth,
   calculateLastEventForChapter,
-  listChapterEventIndices,
-  resolveReadingEventNumForChapter,
 } from '../../utils/graph/graphCore';
 import {
   isGraphDragEndEvent,
   centerSelectionOnElementId,
+  captureCyViewport,
+  restoreCyViewport,
 } from '../../utils/graph/graphCy';
 import { userViewerPath, errorUtils } from '../../utils/common/urlUtils';
 import {
@@ -34,7 +34,7 @@ import {
   DEFAULT_GRAPH_TRANSFORM_DEPS,
 } from '../../utils/viewer/viewerGraph';
 import { extractNodeWeightsFromElements, getGraphEventState } from '../../utils/graph/graphModel';
-import { eventUtils, formatChapterOrderAndName, stripRedundantBookTitlePrefix, resolveChapterTitleMeta } from '../../utils/viewer/viewerCore';
+import { eventUtils, formatFallbackChapterLabel, stripRedundantBookTitlePrefix, resolveChapterTitleMeta } from '../../utils/viewer/viewerCore';
 import { hasGraphPayload } from '../../utils/api/graphApi';
 import { toPositiveNumberOrNull } from '../../utils/common/valueUtils';
 import {
@@ -96,6 +96,7 @@ function RelationGraphWrapper() {
   const graphClearRef = useRef(null);
   const graphSelectNodeRef = useRef(null);
   const selectedElementRef = useRef(null);
+  const preFocusViewportRef = useRef(null);
   const prevChapterNum = useRef(currentChapter);
   const prevEventNum = useRef();
   const profileApplyTokenRef = useRef(0);
@@ -216,7 +217,7 @@ function RelationGraphWrapper() {
           ? meta.display
           : '';
     return {
-      chapterDisplayLabel: formatChapterOrderAndName(currentChapter, displayName),
+      chapterDisplayLabel: displayName || formatFallbackChapterLabel(currentChapter),
       chapterTitleTooltip: meta.raw || meta.tooltip || undefined,
     };
   }, [serverBookId, currentChapter, bookTitle]);
@@ -302,14 +303,27 @@ function RelationGraphWrapper() {
     onSelectedIndexChange: searchActions.onSelectedIndexChange,
   }), [searchActions]);
 
-  const clearGraphSelection = useCallback((options) => {
+  const clearGraphSelection = useCallback((options = {}) => {
     graphClearRef.current?.(options);
+    if (options.restoreViewport === false) {
+      preFocusViewportRef.current = null;
+      return;
+    }
+    const snapshot = preFocusViewportRef.current;
+    preFocusViewportRef.current = null;
+    restoreCyViewport(cyRef.current, snapshot, {
+      duration: GRAPH_LAYOUT_CONSTANTS.FOCUS_PAN_MS,
+    });
   }, []);
 
   // 좌(챕터 레일)는 캔버스 offset으로 이미 제외. 우(정보 슬라이드바)는 오버레이라 예약.
   const centerSelection = useCallback((elementId) => {
     const cy = cyRef.current;
     if (!cy || elementId == null || elementId === '') return;
+
+    if (!preFocusViewportRef.current) {
+      preFocusViewportRef.current = captureCyViewport(cy);
+    }
 
     const reserveLeft = isNarrow && isSidebarOpen
       ? GRAPH_LAYOUT_CONSTANTS.SIDEBAR.OPEN_WIDTH
@@ -325,6 +339,11 @@ function RelationGraphWrapper() {
 
   const onClearTooltip = useCallback(() => {
     closeSidebar();
+    const snapshot = preFocusViewportRef.current;
+    preFocusViewportRef.current = null;
+    restoreCyViewport(cyRef.current, snapshot, {
+      duration: GRAPH_LAYOUT_CONSTANTS.FOCUS_PAN_MS,
+    });
   }, [closeSidebar]);
 
   const dismissTooltip = useCallback(() => {
@@ -358,7 +377,7 @@ function RelationGraphWrapper() {
 
     if (chapterChanged || eventChanged) {
       if (chapterChanged && searchState.isSearchActive) clearSearch();
-      clearGraphSelection({ fitViewport: false });
+      clearGraphSelection({ fitViewport: false, restoreViewport: false });
     }
 
     prevChapterNum.current = currentChapter;
@@ -407,7 +426,7 @@ function RelationGraphWrapper() {
 
     // 선택(노드/간선·툴팁)이 있으면 먼저 해제한 뒤 챕터 전환
     const hadTooltip = Boolean(activeTooltip);
-    clearGraphSelection({ fitViewport: false });
+    clearGraphSelection({ fitViewport: false, restoreViewport: false });
 
     if (hadTooltip) {
       startClosing();
@@ -445,22 +464,6 @@ function RelationGraphWrapper() {
     () => Array.from({ length: apiMaxChapter }, (_, i) => i + 1),
     [apiMaxChapter],
   );
-
-  const chapterEventIndices = useMemo(
-    () => listChapterEventIndices(serverBookId, currentChapter, manifestData),
-    [serverBookId, currentChapter, manifestData],
-  );
-
-  const readingEventNum = useMemo(
-    () => resolveReadingEventNumForChapter(serverBookId, currentChapter),
-    [serverBookId, currentChapter],
-  );
-
-  const handleEventChange = useCallback((nextEvent) => {
-    const n = Number(nextEvent);
-    if (!Number.isFinite(n) || n < 1) return;
-    setCurrentEvent(Math.trunc(n));
-  }, []);
 
   useEffect(() => {
     const id = window.setTimeout(() => {
@@ -562,12 +565,6 @@ function RelationGraphWrapper() {
             돌아가기
           </button>
         )}
-        eventScrub={{
-          eventIndices: chapterEventIndices,
-          currentEvent,
-          onEventChange: handleEventChange,
-          readingEventNum,
-        }}
         floatingControls={{
           searchState,
           searchActions: floatingSearchActions,

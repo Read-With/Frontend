@@ -39,8 +39,7 @@
 }
 
 .modal-overlay.relation-modal-overlay--graph-page .modal-header,
-.modal-overlay.relation-modal-overlay--graph-page .relation-modal-legend,
-.modal-overlay.relation-modal-overlay--graph-page .relation-modal-cta-row {
+.modal-overlay.relation-modal-overlay--graph-page .relation-modal-legend {
   flex-shrink: 0;
 }
 
@@ -319,7 +318,6 @@
 .relation-modal-list-item {
   width: 100%;
   box-sizing: border-box;
-  text-align: left;
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
@@ -329,9 +327,30 @@
   border-left: 0.25rem solid var(--item-pos-color, var(--rg-border));
   border-radius: 0.6rem;
   background: var(--rg-surface);
-  cursor: pointer;
   transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
   flex-shrink: 0;
+}
+
+.relation-modal-list-item-main {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+
+.relation-modal-list-item-main:focus-visible {
+  outline: 0.125rem solid var(--rg-brand-dark);
+  outline-offset: 0.125rem;
+  border-radius: 0.25rem;
 }
 
 .relation-modal-list-item:hover {
@@ -415,12 +434,30 @@
   font-size: 0.85rem;
 }
 
-.relation-modal-cta-row {
+.relation-modal-switch-inline {
+  align-self: stretch;
+  width: 100%;
+}
+
+.relation-card-main {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  margin-top: 0.75rem;
-  flex-shrink: 0;
+  flex-direction: column;
+  gap: 0.65rem;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+
+.relation-card-main:focus-visible {
+  outline: 0.125rem solid var(--rg-brand-dark);
+  outline-offset: 0.125rem;
+  border-radius: 0.25rem;
 }
 
 .relation-modal-body.is-card-view,
@@ -480,13 +517,11 @@
   display: flex;
   flex-direction: column;
   gap: 0.65rem;
-  text-align: left;
   padding: 1rem 1.05rem;
   border: 0.0625rem solid var(--rg-border);
   border-radius: 0.75rem;
   background:
     linear-gradient(165deg, var(--rg-surface) 0%, var(--rg-surface-slate) 100%);
-  cursor: pointer;
   transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
 

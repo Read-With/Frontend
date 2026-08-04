@@ -141,31 +141,32 @@
 /* ==================== 원형 아이콘 버튼 (즐겨찾기·더보기) ==================== */
 .book-favorite-btn,
 .book-context-trigger {
-  position: absolute;
-  top: 0.75rem;
+  box-sizing: border-box;
   width: 2.25rem;
   height: 2.25rem;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.95);
   -webkit-backdrop-filter: blur(0.625rem);
   backdrop-filter: blur(0.625rem);
-  border: none;
+  border: 0.125rem solid transparent;
   font-size: 1.2rem;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.3s ease, background 0.3s ease, box-shadow 0.3s ease;
+  transition: transform 0.3s ease, background 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
   box-shadow: 0 0.125rem 0.5rem rgba(0, 0, 0, 0.1);
 }
 
 .book-favorite-btn {
+  position: absolute;
+  top: 0.75rem;
   left: 0.75rem;
   z-index: 2;
 }
 
 .book-context-trigger {
-  right: 0.75rem;
+  position: relative;
 }
 
 .book-favorite-btn:hover,
@@ -401,7 +402,7 @@
 
 .book-context-dropdown {
   position: absolute;
-  top: 2.75rem;
+  top: calc(100% + 0.5rem);
   right: 0;
   background: var(--bl-surface);
   border-radius: 0.75rem;
@@ -682,16 +683,13 @@
   min-height: 2.75rem;
 }
 
-.book-card.list-view .book-favorite-btn,
-.book-card.list-view .book-context-trigger {
-  top: 1rem;
-}
-
 .book-card.list-view .book-favorite-btn {
+  top: 1rem;
   left: 1rem;
 }
 
-.book-card.list-view .book-context-trigger {
+.book-card.list-view .book-context-menu {
+  top: 1rem;
   right: 1rem;
 }
 
@@ -753,14 +751,15 @@
     width: 2rem;
     height: 2rem;
     font-size: 1.1rem;
-    top: 0.625rem;
   }
 
   .book-favorite-btn {
+    top: 0.625rem;
     left: 0.625rem;
   }
 
-  .book-context-trigger {
+  .book-context-menu {
+    top: 0.625rem;
     right: 0.625rem;
   }
 
@@ -820,14 +819,15 @@
     width: 1.75rem;
     height: 1.75rem;
     font-size: 1rem;
-    top: 0.5rem;
   }
 
   .book-favorite-btn {
+    top: 0.5rem;
     left: 0.5rem;
   }
 
-  .book-context-trigger {
+  .book-context-menu {
+    top: 0.5rem;
     right: 0.5rem;
   }
 

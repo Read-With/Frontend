@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import PropTypes from "prop-types";
-import { List, Search, SearchX, SlidersHorizontal } from "lucide-react";
+import { List, MousePointer2, Move, Search, SearchX, SlidersHorizontal, ZoomIn } from "lucide-react";
 import { useClickOutside } from "../../hooks/ui/tooltipHooks";
 import { findExactSuggestionMatch } from "../../utils/graph/graphCy.js";
 import {
@@ -9,7 +9,7 @@ import {
   formatGraphEventMetaLabel,
 } from "../../utils/graph/graphCore.js";
 import { resolveEventOrdinalForDisplay } from "../../utils/viewer/viewerSession";
-import { GRAPH_COLORS } from "../../utils/styles/graphStyles.js";
+import { GRAPH_COLORS, getPositivityGradientCss } from "../../utils/styles/graphStyles.js";
 import "./RelationGraph.css";
 
 /** 인물 이미지 없을 때 공통 실루엣 */
@@ -167,6 +167,8 @@ export function NodeProfileAvatar({ node }) {
             src={node.image}
             alt={node?.displayName || 'character'}
             crossOrigin="anonymous"
+            decoding="async"
+            loading="eager"
             onError={handleProfileImageError}
           />
         ) : null}
@@ -331,96 +333,188 @@ CharacterFilterSegmented.propTypes = {
   onChange: PropTypes.func.isRequired,
 };
 
+const GESTURE_HINT_SESSION_KEY = "rw-graph-gesture-hint-seen";
 const LEGEND_HINT_SESSION_KEY = "rw-graph-legend-hint-seen";
+const POSITIVITY_GRADIENT = getPositivityGradientCss();
 
-function readLegendHintSeen() {
+function readSessionHintSeen(key) {
   try {
-    return sessionStorage.getItem(LEGEND_HINT_SESSION_KEY) === "1";
+    return sessionStorage.getItem(key) === "1";
   } catch {
     return true;
   }
 }
 
-function markLegendHintSeen() {
+function markSessionHintSeen(key) {
   try {
-    sessionStorage.setItem(LEGEND_HINT_SESSION_KEY, "1");
+    sessionStorage.setItem(key, "1");
   } catch {
     /* ignore */
   }
+}
+
+function useSessionHint(storageKey, { autoOpen = true } = {}) {
+  const [hintSeen, setHintSeen] = useState(() => readSessionHintSeen(storageKey));
+  const [open, setOpen] = useState(() => autoOpen && !readSessionHintSeen(storageKey));
+
+  const markSeen = useCallback(() => {
+    markSessionHintSeen(storageKey);
+    setHintSeen(true);
+  }, [storageKey]);
+
+  const dismiss = useCallback(() => {
+    markSeen();
+    setOpen(false);
+  }, [markSeen]);
+
+  const toggle = useCallback(() => {
+    setOpen((v) => {
+      markSeen();
+      return !v;
+    });
+  }, [markSeen]);
+
+  return { hintSeen, open, setOpen, dismiss, toggle, markSeen };
 }
 
 function getSuggestionDisplayName(suggestion) {
   return suggestion?.label || suggestion?.common_name || "Unknown";
 }
 
-function GraphLegendPanel({ id }) {
-  return (
-    <aside id={id} className="graph-canvas-legend" aria-label="그래프 범례">
-      <p className="graph-canvas-legend-title">범례</p>
-      <div className="graph-canvas-legend-tone" aria-hidden>
-        <span className="graph-canvas-legend-tone-end">부정 (−100%)</span>
-        <span className="graph-canvas-legend-swatch" />
-        <span className="graph-canvas-legend-tone-end">긍정 (+100%)</span>
-      </div>
-      <div className="graph-canvas-legend-row">
-        <span className="graph-canvas-legend-size" aria-hidden>
-          <span className="graph-canvas-legend-dot graph-canvas-legend-dot--lg" />
-          <span className="graph-canvas-legend-dot graph-canvas-legend-dot--sm" />
-        </span>
-        <span>크기 = 중요도</span>
-      </div>
-      <div className="graph-canvas-legend-row">
-        <span className="graph-canvas-legend-main" aria-hidden>
-          <span className="graph-canvas-legend-main-ring" />
-        </span>
-        <span>굵은 테두리 = 주요 인물</span>
-      </div>
-    </aside>
-  );
-}
-
-GraphLegendPanel.propTypes = {
-  id: PropTypes.string,
-};
-
-/** 범례 토글 + 세션 1회 힌트(첫 진입 시 열림, 자동 닫힘 없음) */
-function GraphCanvasLegend() {
-  const [hintSeen, setHintSeen] = useState(readLegendHintSeen);
-  const [open, setOpen] = useState(() => !readLegendHintSeen());
+function GraphHintShell({
+  open,
+  hintSeen,
+  onToggle,
+  onDismiss,
+  buttonLabel,
+  buttonTitle,
+  panelId,
+  icon: Icon,
+  children,
+}) {
   const rootRef = useClickOutside(() => {
-    setOpen(false);
-    markLegendHintSeen();
-    setHintSeen(true);
+    if (open) onDismiss();
   }, open);
-  const panelId = "graph-canvas-legend-panel";
-
-  const toggle = () => {
-    setOpen((v) => {
-      const next = !v;
-      markLegendHintSeen();
-      setHintSeen(true);
-      return next;
-    });
-  };
 
   return (
-    <div className="graph-floating-legend" ref={rootRef}>
+    <div className="graph-hint" ref={rootRef}>
       <button
         type="button"
-        className={`graph-floating-btn ${!hintSeen ? "has-hint" : ""}`}
-        aria-label={open ? "범례 닫기" : "범례 보기"}
-        title="범례"
+        className={`graph-floating-btn${!hintSeen ? " has-hint" : ""}${open ? " is-active" : ""}`}
+        aria-label={open ? `${buttonLabel} 닫기` : buttonLabel}
+        title={buttonTitle}
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
-        onClick={toggle}
+        onClick={onToggle}
       >
-        <List size={18} aria-hidden />
-        {!hintSeen ? <span className="graph-legend-hint-dot" aria-hidden /> : null}
+        <Icon size={18} aria-hidden />
+        {!hintSeen ? <span className="graph-hint-dot" aria-hidden /> : null}
       </button>
-      {open ? <GraphLegendPanel id={panelId} /> : null}
+      {open ? (
+        <div id={panelId} className="graph-hint-panel" role="status">
+          {children}
+        </div>
+      ) : null}
     </div>
   );
 }
+
+GraphHintShell.propTypes = {
+  open: PropTypes.bool.isRequired,
+  hintSeen: PropTypes.bool.isRequired,
+  onToggle: PropTypes.func.isRequired,
+  onDismiss: PropTypes.func.isRequired,
+  buttonLabel: PropTypes.string.isRequired,
+  buttonTitle: PropTypes.string.isRequired,
+  panelId: PropTypes.string.isRequired,
+  icon: PropTypes.elementType.isRequired,
+  children: PropTypes.node.isRequired,
+};
+
+function GraphGestureHint({ hint }) {
+  const panelId = "graph-gesture-hint-panel";
+  const [usesTouch] = useState(
+    () => globalThis.matchMedia?.("(pointer: coarse)").matches ?? false,
+  );
+
+  return (
+    <GraphHintShell
+      open={hint.open}
+      hintSeen={hint.hintSeen}
+      onToggle={hint.toggle}
+      onDismiss={hint.dismiss}
+      buttonLabel="조작 안내"
+      buttonTitle="조작 안내"
+      panelId={panelId}
+      icon={MousePointer2}
+    >
+      <p className="graph-hint-panel-title">조작 안내</p>
+      <ul className="graph-hint-panel-list">
+        <li><MousePointer2 aria-hidden />노드·간선 선택</li>
+        <li><Move aria-hidden />{usesTouch ? "한 손가락으로 이동" : "드래그로 이동"}</li>
+        <li><ZoomIn aria-hidden />{usesTouch ? "두 손가락으로 확대·축소" : "휠로 확대·축소"}</li>
+      </ul>
+    </GraphHintShell>
+  );
+}
+
+GraphGestureHint.propTypes = {
+  hint: PropTypes.shape({
+    open: PropTypes.bool.isRequired,
+    hintSeen: PropTypes.bool.isRequired,
+    toggle: PropTypes.func.isRequired,
+    dismiss: PropTypes.func.isRequired,
+  }).isRequired,
+};
+
+function GraphCanvasLegend({ hint }) {
+  const panelId = "graph-canvas-legend-panel";
+
+  return (
+    <GraphHintShell
+      open={hint.open}
+      hintSeen={hint.hintSeen}
+      onToggle={hint.toggle}
+      onDismiss={hint.dismiss}
+      buttonLabel="범례"
+      buttonTitle="범례"
+      panelId={panelId}
+      icon={List}
+    >
+      <p className="graph-hint-panel-title">범례</p>
+      <div className="graph-hint-legend-tone" aria-hidden>
+        <span className="graph-hint-legend-tone-end">부정 (−100%)</span>
+        <span
+          className="graph-hint-legend-swatch"
+          style={{ background: POSITIVITY_GRADIENT }}
+        />
+        <span className="graph-hint-legend-tone-end">긍정 (+100%)</span>
+      </div>
+      <div className="graph-hint-legend-row">
+        <span className="graph-hint-legend-size" aria-hidden>
+          <span className="graph-hint-legend-dot graph-hint-legend-dot--lg" />
+          <span className="graph-hint-legend-dot graph-hint-legend-dot--sm" />
+        </span>
+        <span>크기 = 중요도</span>
+      </div>
+      <div className="graph-hint-legend-row">
+        <span className="graph-hint-legend-main" aria-hidden>
+          <span className="graph-hint-legend-main-ring" />
+        </span>
+        <span>굵은 테두리 = 주요 인물</span>
+      </div>
+    </GraphHintShell>
+  );
+}
+
+GraphCanvasLegend.propTypes = {
+  hint: PropTypes.shape({
+    open: PropTypes.bool.isRequired,
+    hintSeen: PropTypes.bool.isRequired,
+    toggle: PropTypes.func.isRequired,
+    dismiss: PropTypes.func.isRequired,
+  }).isRequired,
+};
 
 function useModKeyLabel() {
   const [mod, setMod] = useState("Ctrl");
@@ -657,7 +751,7 @@ GraphSearchPalette.propTypes = {
 };
 
 /**
- * 검색 팔레트 · 필터 · 간선 라벨 · (선택) 범례
+ * 검색 팔레트 · 필터 · 간선 라벨 · (선택) 조작 안내·범례
  */
 export function GraphFloatingControls({
   searchState,
@@ -667,11 +761,37 @@ export function GraphFloatingControls({
   filterStage,
   onFilterChange,
   showLegend = true,
+  showGestureHint = true,
 }) {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const optionsRef = useClickOutside(() => setOptionsOpen(false), optionsOpen);
   const modKey = useModKeyLabel();
+
+  const gestureSeenInitially = readSessionHintSeen(GESTURE_HINT_SESSION_KEY);
+  const legendSeenInitially = readSessionHintSeen(LEGEND_HINT_SESSION_KEY);
+  // 둘 다 미확인이면 조작 안내만 먼저 자동 오픈 → 닫힌 뒤 범례 오픈
+  const gestureHint = useSessionHint(GESTURE_HINT_SESSION_KEY, {
+    autoOpen: showGestureHint && !gestureSeenInitially,
+  });
+  const legendHint = useSessionHint(LEGEND_HINT_SESSION_KEY, {
+    autoOpen: showLegend && legendSeenInitially === false && gestureSeenInitially,
+  });
+
+  useEffect(() => {
+    if (!showLegend || !showGestureHint) return;
+    if (!gestureHint.hintSeen || legendHint.hintSeen || legendHint.open) return;
+    if (gestureHint.open) return;
+    legendHint.setOpen(true);
+  }, [
+    showLegend,
+    showGestureHint,
+    gestureHint.hintSeen,
+    gestureHint.open,
+    legendHint.hintSeen,
+    legendHint.open,
+    legendHint.setOpen,
+  ]);
 
   const {
     searchTerm,
@@ -768,7 +888,8 @@ export function GraphFloatingControls({
           ) : null}
         </div>
 
-        {showLegend ? <GraphCanvasLegend /> : null}
+        {showGestureHint ? <GraphGestureHint hint={gestureHint} /> : null}
+        {showLegend ? <GraphCanvasLegend hint={legendHint} /> : null}
       </div>
 
       <GraphSearchPalette
@@ -811,4 +932,5 @@ GraphFloatingControls.propTypes = {
   filterStage: PropTypes.number.isRequired,
   onFilterChange: PropTypes.func.isRequired,
   showLegend: PropTypes.bool,
+  showGestureHint: PropTypes.bool,
 };

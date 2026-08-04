@@ -650,32 +650,34 @@ body.viewer-split-dragging * {
   right: 0;
 }
 
-/* ─── Chrome onboarding · shortcuts ─── */
+/* ─── Chrome onboarding ─── */
 
 .viewer-chrome-coach {
   position: absolute;
   left: 50%;
-  bottom: 4.5rem;
-  z-index: 45;
+  top: max(0.75rem, env(safe-area-inset-top, 0rem) + 0.5rem);
+  z-index: 60;
   transform: translateX(-50%);
-  width: min(22rem, calc(100vw - 1.5rem));
-  padding: 0.85rem 1rem;
-  background: var(--vt-surface);
-  border: 0.0625rem solid var(--vt-border-strong);
-  border-radius: var(--vt-radius);
+  width: min(28rem, calc(100vw - 1.5rem));
+  padding: 1rem 1.1rem;
+  background: rgba(255, 255, 255, 0.96);
+  border: 0.0625rem solid rgba(197, 208, 197, 0.95);
+  border-radius: 0.875rem;
   color: var(--vt-text);
+  box-shadow: 0 0.75rem 2rem rgba(15, 23, 42, 0.14);
+  backdrop-filter: blur(0.75rem);
 }
 
 .viewer-chrome-coach-title {
-  margin: 0 0 0.35rem;
-  font-size: 0.875rem;
+  margin: 0 0 0.4rem;
+  font-size: 0.9375rem;
   font-weight: 700;
   line-height: 1.4;
   word-break: keep-all;
 }
 
 .viewer-chrome-coach-desc {
-  margin: 0 0 0.75rem;
+  margin: 0;
   font-size: 0.8125rem;
   font-weight: 500;
   line-height: 1.45;
@@ -686,7 +688,7 @@ body.viewer-split-dragging * {
 .viewer-chrome-coach-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 0.5rem;
+  margin-top: 0.85rem;
 }
 
 .viewer-chrome-coach-btn {
@@ -712,103 +714,15 @@ body.viewer-split-dragging * {
   outline-offset: 0.125rem;
 }
 
-.viewer-shortcuts-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 50;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1rem;
-  background: rgba(15, 23, 42, 0.28);
-}
-
-.viewer-shortcuts-panel {
-  width: min(22rem, 100%);
-  background: var(--vt-surface);
-  border: 0.0625rem solid var(--vt-border-strong);
-  border-radius: var(--vt-radius);
-  padding: 1rem 1.1rem 1.1rem;
-  color: var(--vt-text);
-}
-
-.viewer-shortcuts-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  margin-bottom: 0.75rem;
-}
-
-.viewer-shortcuts-title {
-  margin: 0;
-  font-size: 1rem;
-  font-weight: 700;
-}
-
-.viewer-shortcuts-close {
-  appearance: none;
-  border: none;
-  background: transparent;
-  color: var(--vt-text-muted);
-  padding: 0.25rem;
-  cursor: pointer;
-  border-radius: 0.375rem;
-}
-
-.viewer-shortcuts-close:focus-visible {
-  outline: 0.125rem solid var(--vt-focus);
-  outline-offset: 0.125rem;
-}
-
-.viewer-shortcuts-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.55rem;
-}
-
-.viewer-shortcuts-list li {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.35rem 0.5rem;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  color: var(--vt-text-muted);
-}
-
-.viewer-shortcuts-list kbd,
-.viewer-shortcuts-plain {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 1.75rem;
-  padding: 0.15rem 0.4rem;
-  border: 0.0625rem solid var(--vt-border);
-  border-radius: 0.25rem;
-  background: var(--vt-surface-muted);
-  color: var(--vt-text);
-  font-size: 0.75rem;
-  font-weight: 700;
-  font-family: inherit;
-}
-
-.viewer-shortcuts-list li > span:last-child {
-  margin-left: auto;
-  text-align: right;
-  color: var(--vt-text);
-}
-
 @media (max-width: 767px) {
   .viewer-toolbar {
     padding: 0.5rem;
   }
 
   .viewer-chrome-coach {
-    bottom: 5.25rem;
+    top: max(0.5rem, env(safe-area-inset-top, 0rem) + 0.25rem);
+    width: min(100vw - 1rem, 24rem);
+    padding: 0.9rem 1rem;
   }
 }
 

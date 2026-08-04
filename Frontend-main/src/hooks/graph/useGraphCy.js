@@ -18,6 +18,7 @@ import {
   clearHighlightClassesOn,
   ensureElementsInBounds,
   fitGraphToNodes,
+  fitGraphViewportInContainer,
   handleGraphCanvasHotkeys,
   isGraphDragEndEvent,
   isGraphContainerSizeReady,
@@ -254,6 +255,8 @@ export function useGraphLayout({
   setIsInitialLoad,
   containerRef,
   pendingInitialFitRef = null,
+  canApplyPendingViewportFit = null,
+  clearPendingViewportFitBlock = null,
 }) {
   const prevStylesheetRef = useRef(stylesheet);
 
@@ -303,28 +306,19 @@ export function useGraphLayout({
         }
       }
       if (shouldFitOnInitialLoad) {
-        // 컨테이너 크기 준비 전 fit은 실패하므로 재시도 — 노드·간선이 캔버스 안에 들어오게
+        // 컨테이너 미준비 시 pending 유지 → resize에서 재시도
         if (pendingInitialFitRef) pendingInitialFitRef.current = true;
-        const tryInitialFit = () => {
-          if (!cyInstance || cyInstance.destroyed?.()) return true;
-          if (!isGraphContainerSizeReady(containerRef.current)) return false;
-          const ok = fitGraphToNodes(cyInstance, { duration: 0 });
-          if (ok && pendingInitialFitRef) pendingInitialFitRef.current = false;
-          return ok;
-        };
-        if (!tryInitialFit()) {
-          let tries = 0;
-          const retryFit = () => {
-            tries += 1;
-            if (tryInitialFit() || tries >= 20) return;
-            window.setTimeout(retryFit, 50);
-          };
-          window.setTimeout(retryFit, 0);
+        if (
+          (typeof canApplyPendingViewportFit !== 'function' || canApplyPendingViewportFit()) &&
+          fitGraphViewportInContainer(cyInstance, containerRef.current)
+        ) {
+          if (pendingInitialFitRef) pendingInitialFitRef.current = false;
+          clearPendingViewportFitBlock?.();
         }
       }
       syncReciprocalPairJunctionOffsets(cyInstance);
     },
-    [containerRef, pendingInitialFitRef],
+    [containerRef, pendingInitialFitRef, canApplyPendingViewportFit, clearPendingViewportFitBlock],
   );
 
   useEffect(() => {
@@ -352,7 +346,13 @@ export function useGraphLayout({
     const stylesheetChanged = prevStylesheetRef.current !== stylesheet;
     prevStylesheetRef.current = stylesheet;
 
-    const shouldFitViewport = Boolean(isInitialLoad);
+    const pendingFit = pendingInitialFitRef?.current === true;
+    const pendingFitAllowed =
+      !pendingFit ||
+      typeof canApplyPendingViewportFit !== 'function' ||
+      canApplyPendingViewportFit();
+    const shouldFitViewport =
+      Boolean(isInitialLoad) || (pendingFit && pendingFitAllowed);
 
     const edgesOnlyIncremental =
       hasChanges && nodesToAdd.length === 0 && edgesToAdd.length > 0;
@@ -498,6 +498,8 @@ export function useGraphLayout({
     isInitialLoad,
     setIsInitialLoad,
     elementsUpdateRef,
+    pendingInitialFitRef,
+    canApplyPendingViewportFit,
   ]);
 }
 
