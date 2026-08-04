@@ -15,20 +15,36 @@
   --rg-surface-slate: #f8fafc;
   --rg-surface-indigo: #f8f9fc;
   --rg-surface-gray: #f8f9fa;
+  --rg-surface-muted: #f1f5f9;
+  --rg-surface-danger-soft: #fef2f2;
+  --rg-surface-glass: rgba(255, 255, 255, 0.96);
+  --rg-surface-glass-soft: rgba(255, 255, 255, 0.95);
+  --rg-surface-loading: rgba(255, 255, 255, 0.75);
 
   --rg-border: #e5e7eb;
   --rg-border-soft: #e3e6ef;
   --rg-border-muted: #e2e8f0;
   --rg-border-strong: #c5d0c5;
+  --rg-border-input: #cbd5e1;
 
   --rg-text: #1f2937;
   --rg-text-muted: #6b7280;
   --rg-text-subtle: #6c757d;
   --rg-text-faint: #64748b;
+  --rg-text-gray: #374151;
+  --rg-text-gray-muted: #9ca3af;
   --rg-text-brand: var(--brand-text);
 
   --rg-danger: #ef4444;
   --rg-danger-strong: #dc2626;
+
+  --rg-focus: var(--rg-brand);
+  --rg-overlay: rgba(15, 23, 42, 0.35);
+  --rg-overlay-strong: rgba(15, 23, 42, 0.45);
+  --rg-shadow-rail: -0.25rem 0 0.75rem rgba(15, 23, 42, 0.08);
+
+  --rg-scrollbar-thumb: #d1d5db;
+  --rg-scrollbar-thumb-hover: #9ca3af;
 
   --rg-radius-sm: 0.375rem;
   --rg-radius-md: 0.5rem;
@@ -40,6 +56,8 @@
   --rg-shadow-lg: 0 1.25rem 3.75rem rgba(0, 0, 0, 0.3);
   --rg-shadow-brand: 0 0.25rem 1.25rem var(--brand-alpha-28);
 
+  --rg-font: var(--font-family-primary);
+
   --rg-positivity-gradient: linear-gradient(
     90deg,
     var(--rg-danger-strong) 0%,
@@ -47,6 +65,32 @@
     #c5c9c5 52%,
     #3d8f5a 100%
   );
+}
+
+/* ============================================================
+   Typography — MyPage / Bookmarks와 동일 Noto Serif KR
+   ============================================================ */
+.graph-page-shell,
+.graph-shell,
+.graph-page-sidebar,
+.graph-sidebar-panel,
+.graph-node-tooltip,
+.edge-tooltip-container,
+.modal-overlay,
+.graph-search-palette,
+.graph-chapter-rail,
+.graph-canvas-area,
+.graph-page-shell :is(button, input, select),
+.graph-shell :is(button, input, select),
+.graph-page-sidebar :is(button, input, select),
+.graph-sidebar-panel :is(button, input, select),
+.graph-node-tooltip :is(button, input, select),
+.edge-tooltip-container :is(button, input, select),
+.modal-overlay :is(button, input, select),
+.graph-search-palette :is(button, input, select),
+.graph-chapter-rail :is(button, input, select),
+.graph-canvas-area :is(button, input, select) {
+  font-family: var(--rg-font);
 }
 
 /* ============================================================
@@ -67,8 +111,11 @@
 .edge-label-switch:focus-visible,
 .character-filter-option:focus-visible,
 .graph-chapter-rail-fab:focus-visible,
-.graph-chapter-rail-toggle:focus-visible {
-  outline: 0.125rem solid var(--rg-brand);
+.graph-chapter-rail-toggle:focus-visible,
+.graph-gesture-hint-close:focus-visible,
+.graph-event-scrubber-jump:focus-visible,
+.graph-event-scrubber-btn:focus-visible {
+  outline: 0.125rem solid var(--rg-focus);
   outline-offset: 0.125rem;
 }
 
@@ -76,7 +123,7 @@
 .relation-analysis-btn:focus-visible,
 .graph-chapter-rail-item:focus-visible,
 .graph-canvas-area:focus-visible {
-  outline: 0.125rem solid var(--rg-brand);
+  outline: 0.125rem solid var(--rg-focus);
   outline-offset: -0.125rem;
 }
 
@@ -94,6 +141,17 @@
 .relation-modal-nav-btn:hover,
 .relation-modal-action-btn--secondary:hover {
   background: var(--rg-brand-tint);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(0.625rem);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 /* ============================================================
@@ -119,12 +177,17 @@
   .graph-zoom-btn,
   .tooltip-action-btn,
   .summary-toggle-btn,
-  .relation-analysis-btn {
+  .relation-analysis-btn,
+  .graph-spin {
     animation: none !important;
     transition: none !important;
   }
 
   .tooltip-action-btn--primary:hover {
     transform: none;
+  }
+
+  .graph-gesture-hint {
+    backdrop-filter: none;
   }
 }

@@ -22,7 +22,7 @@
   padding: 0;
   align-items: stretch;
   justify-content: stretch;
-  background: rgba(15, 23, 42, 0.45);
+  background: var(--rg-overlay-strong);
   transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1), right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -198,8 +198,8 @@
 }
 
 .relation-modal-chip--error {
-  background: color-mix(in srgb, var(--rg-danger, #b42318) 12%, transparent);
-  color: var(--rg-danger, #b42318);
+  background: color-mix(in srgb, var(--rg-danger-strong) 12%, transparent);
+  color: var(--rg-danger-strong);
 }
 
 .relation-modal-header-actions {
@@ -219,7 +219,7 @@
   height: 2rem;
   border: 0.0625rem solid var(--rg-border);
   border-radius: 0.4rem;
-  background: #fff;
+  background: var(--rg-surface);
   color: var(--rg-brand);
   font-size: 1.25rem;
   line-height: 1;
@@ -256,7 +256,6 @@
 .relation-modal-body {
   display: flex;
   gap: 1rem;
-  align-items: stretch;
 }
 
 .relation-modal-chart {
@@ -267,7 +266,7 @@
   border-radius: var(--rg-radius-lg);
   background:
     radial-gradient(ellipse 70% 65% at 50% 48%, rgba(255, 255, 255, 0.92) 0%, transparent 70%),
-    linear-gradient(165deg, var(--rg-brand-tint-soft) 0%, #ffffff 55%, var(--rg-surface-slate, #f8fafc) 100%);
+    linear-gradient(165deg, var(--rg-brand-tint-soft) 0%, var(--rg-surface) 55%, var(--rg-surface-slate) 100%);
   box-shadow: inset 0 0 0 0.0625rem var(--brand-alpha-04);
 }
 
@@ -323,14 +322,13 @@
   text-align: left;
   display: flex;
   flex-direction: column;
-  align-items: stretch;
   gap: 0.55rem;
   min-height: 5.25rem;
   padding: 0.85rem 0.95rem 0.85rem 1rem;
   border: 0.0625rem solid var(--rg-border-soft);
   border-left: 0.25rem solid var(--item-pos-color, var(--rg-border));
   border-radius: 0.6rem;
-  background: #fff;
+  background: var(--rg-surface);
   cursor: pointer;
   transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
   flex-shrink: 0;
@@ -451,7 +449,7 @@
 }
 
 .relation-modal-empty-message.is-error p {
-  color: var(--rg-danger, #b42318);
+  color: var(--rg-danger-strong);
 }
 
 .relation-few-panel {
@@ -487,7 +485,7 @@
   border: 0.0625rem solid var(--rg-border);
   border-radius: 0.75rem;
   background:
-    linear-gradient(165deg, #ffffff 0%, var(--rg-surface-slate, #f8fafc) 100%);
+    linear-gradient(165deg, var(--rg-surface) 0%, var(--rg-surface-slate) 100%);
   cursor: pointer;
   transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
@@ -547,7 +545,7 @@
   width: 0.75rem;
   height: 0.75rem;
   border-radius: 50%;
-  border: 0.125rem solid #fff;
+  border: 0.125rem solid var(--rg-surface);
   box-shadow: 0 0.0625rem 0.25rem rgba(15, 23, 42, 0.28);
   transform: translate(-50%, -50%);
 }
@@ -566,7 +564,7 @@
   border-radius: 0.45rem;
   padding: 0.45rem 0.75rem;
   background: var(--rg-brand);
-  color: #fff;
+  color: var(--rg-surface);
   font-size: 0.8rem;
   font-weight: 600;
   cursor: pointer;
@@ -582,7 +580,7 @@
 }
 
 .relation-modal-action-btn--secondary {
-  background: #fff;
+  background: var(--rg-surface);
   color: var(--rg-brand);
   border: 0.0625rem solid var(--rg-brand);
 }
@@ -604,19 +602,8 @@
 }
 
 .modal-close-btn:hover {
-  background: #f3f4f6;
-  color: #374151;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(0.625rem);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  background: var(--rg-surface-muted);
+  color: var(--rg-text-gray);
 }
 
 @media (max-width: 56.25rem) {

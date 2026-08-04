@@ -2,19 +2,17 @@
    Graph sidebar
    ============================================================ */
 
-/* 그래프와 맞닿는 왼쪽 세로 구분 + 고정 패널 셸 */
 .graph-page-sidebar {
   position: fixed;
   top: 0;
   width: 30rem; /* GRAPH_LAYOUT_CONSTANTS.TOOLTIP_SIDEBAR_WIDTH = 480 */
   height: 100vh;
   background: var(--rg-surface);
-  border-radius: 0;
   z-index: 99999;
   overflow: hidden;
   transition: right 520ms cubic-bezier(0.4, 0, 0.2, 1);
   border-left: 0.0625rem solid var(--rg-border-strong);
-  box-shadow: -0.25rem 0 0.75rem rgba(15, 23, 42, 0.08);
+  box-shadow: var(--rg-shadow-rail);
 }
 
 .graph-sidebar-panel {
@@ -25,9 +23,7 @@
   flex-direction: column;
   background: var(--rg-surface);
   overflow: hidden;
-  font-family: var(--font-family-primary);
   box-sizing: border-box;
-  /* 천장·돌아가기/줌 행 아래부터 여유 있게 시작 */
   padding-top: 3.75rem;
 }
 
@@ -56,13 +52,8 @@
 }
 
 .sidebar-section {
-  background: transparent;
-  border: none;
   border-top: 0.0625rem solid var(--rg-border);
-  border-radius: 0;
-  box-shadow: none;
   padding: 1rem 1.25rem;
-  margin: 0;
 }
 
 .edge-tooltip-content--sidebar {
@@ -79,7 +70,6 @@
   max-height: none;
 }
 
-/* Shared thin scrollbar (sidebar body + edge tooltip panels) */
 .edge-tooltip-body::-webkit-scrollbar,
 .graph-sidebar-body::-webkit-scrollbar,
 .edge-tooltip-panel--sidebar::-webkit-scrollbar {
@@ -96,12 +86,12 @@
 .edge-tooltip-body::-webkit-scrollbar-thumb,
 .graph-sidebar-body::-webkit-scrollbar-thumb,
 .edge-tooltip-panel--sidebar::-webkit-scrollbar-thumb {
-  background: #d1d5db;
+  background: var(--rg-scrollbar-thumb);
   border-radius: 0.1875rem;
 }
 
 .edge-tooltip-body::-webkit-scrollbar-thumb:hover,
 .graph-sidebar-body::-webkit-scrollbar-thumb:hover,
 .edge-tooltip-panel--sidebar::-webkit-scrollbar-thumb:hover {
-  background: #9ca3af;
+  background: var(--rg-scrollbar-thumb-hover);
 }

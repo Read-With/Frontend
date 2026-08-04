@@ -50,7 +50,6 @@
 
 .graph-node-tooltip[style*="cursor: grabbing"],
 .edge-tooltip-container[style*="cursor: grabbing"] {
-  box-shadow: var(--rg-shadow-md);
   transform: scale(1.02);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
@@ -227,7 +226,7 @@
   background: transparent;
   font-size: 0.8125rem;
   font-weight: 500;
-  color: #9ca3af;
+  color: var(--rg-text-gray-muted);
   cursor: pointer;
   border-bottom: 0.125rem solid transparent;
   transition: color 0.22s cubic-bezier(0.4, 0, 0.2, 1);
@@ -398,7 +397,7 @@
 .edge-tooltip-skeleton-line {
   height: 0.625rem;
   border-radius: 0.25rem;
-  background: linear-gradient(90deg, #f3f4f6 25%, var(--rg-border) 50%, #f3f4f6 75%);
+  background: linear-gradient(90deg, var(--rg-surface-muted) 25%, var(--rg-border) 50%, var(--rg-surface-muted) 75%);
   background-size: 200% 100%;
   animation: edgeTooltipShimmer 1.2s ease-in-out infinite;
 }
@@ -444,7 +443,7 @@
 
 .edge-tooltip-retry-btn:hover {
   background: var(--rg-brand);
-  color: #fff;
+  color: var(--rg-surface);
 }
 
 @keyframes edgeTooltipShimmer {
@@ -572,7 +571,7 @@
 
 .node-tooltip-badge {
   background: var(--rg-brand);
-  color: #fff;
+  color: var(--rg-surface);
   border-radius: var(--rg-radius-pill);
   font-size: 0.6875rem;
   padding: 0.125rem 0.5rem;
@@ -587,7 +586,7 @@
 }
 
 .business-card-description {
-  color: #374151;
+  color: var(--rg-text-gray);
   font-size: 0.8125rem;
   margin: 0;
   padding: 1rem 1.25rem 1.25rem;
@@ -774,7 +773,7 @@
 .tooltip-action-btn--primary {
   min-width: 9rem;
   background: var(--rg-brand);
-  color: #fff;
+  color: var(--rg-surface);
   border: none;
   box-shadow: 0 0.125rem 0.375rem var(--brand-alpha-30);
 }
@@ -787,7 +786,7 @@
 
 .tooltip-action-btn--secondary {
   min-width: 6rem;
-  background: #fff;
+  background: var(--rg-surface);
   color: var(--rg-text-subtle);
   border: 0.0625rem solid var(--rg-border);
 }
@@ -1043,14 +1042,13 @@
 }
 
 .tooltip-summary-text--error {
-  color: #b42318;
+  color: var(--rg-danger-strong);
   background: rgba(254, 242, 242, 0.9);
 }
 
 .tooltip-summary-text--pending {
   color: var(--rg-text-subtle);
   background: rgba(247, 250, 252, 0.55);
-  font-style: italic;
 }
 
 .tooltip-summary-text--loading {
@@ -1104,7 +1102,7 @@
   padding: 0.35rem 0.75rem;
   border-radius: var(--rg-radius-md);
   background: var(--rg-brand);
-  color: #fff;
+  color: var(--rg-surface);
   font-size: 0.8rem;
   font-weight: 600;
   white-space: nowrap;
@@ -1134,8 +1132,6 @@
 .tooltip-modal-body {
   flex: 1;
   display: flex;
-  align-items: stretch;
-  justify-content: stretch;
   min-height: 0;
   overflow: hidden;
 }

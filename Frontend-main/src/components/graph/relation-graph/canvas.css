@@ -39,7 +39,7 @@
   padding: 0.625rem 0.75rem 0.625rem 1rem;
   border: 0.0625rem solid var(--rg-border-soft);
   border-radius: var(--rg-radius-lg);
-  background: rgba(255, 255, 255, 0.96);
+  background: var(--rg-surface-glass);
   color: var(--rg-text);
   box-shadow: var(--rg-shadow-md);
   backdrop-filter: blur(0.5rem);
@@ -91,12 +91,7 @@
   color: var(--rg-text);
 }
 
-.graph-gesture-hint-close:focus-visible {
-  outline: 0.125rem solid var(--rg-brand);
-  outline-offset: 0.125rem;
-}
-
-@media (max-width: 640px) {
+@media (max-width: 40rem) {
   .graph-gesture-hint {
     bottom: 0.75rem;
     width: calc(100% - 1.5rem);
@@ -117,11 +112,10 @@
     max-width: 6.5rem;
     text-align: center;
   }
-}
 
-@media (prefers-reduced-motion: reduce) {
-  .graph-gesture-hint {
-    backdrop-filter: none;
+  .graph-canvas-legend {
+    min-width: min(16rem, calc(100vw - 1.25rem));
+    max-width: calc(100vw - 1.25rem);
   }
 }
 
@@ -141,7 +135,7 @@
   height: 100%;
   min-width: 0;
   min-height: 0;
-  background: #ffffff;
+  background: var(--rg-surface);
   position: relative;
   overflow: hidden;
   z-index: 1;
@@ -158,7 +152,7 @@
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  background: rgba(255, 255, 255, 0.95);
+  background: var(--rg-surface-glass-soft);
   padding: 1.25rem 1.875rem;
   border-radius: var(--rg-radius-lg);
   box-shadow: 0 0.25rem 1.25rem rgba(0, 0, 0, 0.1);
@@ -177,7 +171,7 @@
 
 .graph-no-results-description {
   font-size: 0.875rem;
-  color: #94a3b8;
+  color: var(--rg-text-faint);
   line-height: 1.4;
 }
 
@@ -214,7 +208,6 @@
 }
 
 .graph-page-back {
-  position: static;
   height: 1.75rem;
   padding: 0 0.625rem;
   border-radius: var(--rg-radius-sm);
@@ -253,7 +246,7 @@
   padding: 0;
   border: 0.0625rem solid var(--rg-border-soft);
   border-radius: var(--rg-radius-md);
-  background: rgba(255, 255, 255, 0.95);
+  background: var(--rg-surface-glass-soft);
   color: var(--rg-brand);
   font-size: 1.125rem;
   font-weight: 600;
@@ -268,11 +261,11 @@
 
 .graph-zoom-btn:hover {
   background: var(--rg-surface-slate);
-  border-color: #cbd5e1;
+  border-color: var(--rg-border-input);
 }
 
 .graph-zoom-btn:active {
-  background: #f1f5f9;
+  background: var(--rg-surface-muted);
 }
 
 /* ============================================================
@@ -318,9 +311,7 @@
 }
 
 .graph-floating-dock {
-  position: static;
   display: flex;
-  flex-direction: row;
   align-items: center;
   gap: 0.375rem;
   pointer-events: auto;
@@ -383,7 +374,7 @@
   border: none;
   margin: 0;
   padding: 0;
-  background: rgba(15, 23, 42, 0.35);
+  background: var(--rg-overlay);
   cursor: pointer;
 }
 
@@ -485,7 +476,7 @@
   padding: 0.65rem 0.85rem 0.7rem;
   border-radius: var(--rg-radius-md);
   border: 0.0625rem solid var(--rg-border-soft);
-  background: rgba(255, 255, 255, 0.96);
+  background: var(--rg-surface-glass);
   box-shadow: var(--rg-shadow-sm);
   font-size: 0.75rem;
   font-weight: 600;
@@ -597,13 +588,6 @@
   pointer-events: none;
 }
 
-@media (max-width: 640px) {
-  .graph-canvas-legend {
-    min-width: min(16rem, calc(100vw - 1.25rem));
-    max-width: calc(100vw - 1.25rem);
-  }
-}
-
 /* Page / split shell — CSS 정본 (inline graphStyles 대체) */
 .graph-page-shell {
   width: 100%;
@@ -637,11 +621,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.75);
+  background: var(--rg-surface-loading);
   color: var(--rg-brand);
   font-size: 1rem;
   font-weight: 600;
-  letter-spacing: 0.02em;
 }
 
 .graph-page-inner {
@@ -733,12 +716,6 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .graph-spin {
-    animation: none;
-  }
-}
-
 .graph-panel-status {
   display: flex;
   flex-direction: column;
@@ -771,13 +748,13 @@
 }
 
 .graph-panel-status-icon--empty {
-  background: #f1f5f9;
-  color: #64748b;
+  background: var(--rg-surface-muted);
+  color: var(--rg-text-faint);
 }
 
 .graph-panel-status-icon--error {
-  background: #fef2f2;
-  color: #dc2626;
+  background: var(--rg-surface-danger-soft);
+  color: var(--rg-danger-strong);
 }
 
 .graph-panel-status-copy {
@@ -951,7 +928,6 @@
   position: relative;
   z-index: 2;
   display: flex;
-  flex-direction: row;
   align-items: center;
   justify-content: flex-end;
   gap: 0.375rem;
@@ -970,7 +946,6 @@
 
 .graph-topbar-meta {
   display: flex;
-  flex-direction: row;
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
@@ -983,7 +958,6 @@
   display: block;
   padding: 0.125rem 0.25rem;
   border-radius: var(--rg-radius-sm);
-  background: transparent;
   color: var(--rg-text);
   font-size: 0.9375rem;
   font-weight: 700;
@@ -1072,16 +1046,6 @@
   cursor: pointer;
 }
 
-.graph-event-scrubber-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.graph-event-scrubber-btn:focus-visible {
-  outline: 0.125rem solid var(--rg-focus, var(--rg-brand));
-  outline-offset: 0.125rem;
-}
-
 .graph-event-scrubber-jumps {
   display: flex;
   align-items: center;
@@ -1107,15 +1071,12 @@
   color: var(--rg-brand);
 }
 
+.graph-event-scrubber-btn:disabled,
 .graph-event-scrubber-jump:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
 
-.graph-event-scrubber-jump:focus-visible {
-  outline: 0.125rem solid var(--rg-focus, var(--rg-brand));
-  outline-offset: 0.125rem;
-}
 
 .graph-event-scrubber-empty {
   font-size: 0.8125rem;
@@ -1130,10 +1091,8 @@
 }
 
 .graph-topbar-more-label {
-  font-size: 0.6875rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-size: 0.75rem;
+  font-weight: 600;
   color: var(--rg-text-muted);
 }
 
@@ -1262,11 +1221,9 @@
 }
 
 .graph-search-dropdown-header-title {
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   font-weight: 600;
   color: var(--rg-text-subtle);
-  text-transform: uppercase;
-  letter-spacing: 0.03125rem;
 }
 
 .graph-search-option {
@@ -1311,18 +1268,15 @@
 }
 
 .graph-search-option-alias-label {
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   color: var(--rg-text-subtle);
-  font-weight: 700;
+  font-weight: 600;
   margin-bottom: 0.25rem;
-  text-transform: uppercase;
-  letter-spacing: 0.03125rem;
 }
 
 .graph-search-option-alias-text {
   font-size: 0.8125rem;
   color: var(--rg-text-subtle);
-  font-style: italic;
   font-weight: 500;
   line-height: 1.4;
 }
@@ -1483,7 +1437,7 @@
 
 .graph-chapter-rail-item.is-selected .graph-chapter-rail-num {
   background: var(--rg-brand);
-  color: #fff;
+  color: var(--rg-surface);
 }
 
 .graph-chapter-rail-copy {

@@ -125,6 +125,14 @@ const BookmarksPage = () => {
 
   const isFilteredView = searchTerm.trim().length > 0;
 
+  const bookTitle = useMemo(() => {
+    const book = location.state?.book;
+    const raw = book?.title || book?.name || book?.bookTitle;
+    return typeof raw === 'string' && raw.trim() ? raw.trim() : null;
+  }, [location.state?.book]);
+
+  const bookmarkCount = (bookmarks ?? []).length;
+
   const goViewer = useCallback(
     (path, stateExtra = {}) => {
       const bookFromState = location.state?.book;
@@ -304,31 +312,25 @@ const BookmarksPage = () => {
               {highlight || '표시할 구절 없음'}
             </p>
             <div className="bm-row-meta">
-              {locationLabel ? <span className="bm-meta-loc">{locationLabel}</span> : null}
+              {locationLabel ? <span>{locationLabel}</span> : null}
               {locationLabel && created ? <span className="bm-meta-dot">·</span> : null}
               {created ? (
-                <time className="bm-meta-time" dateTime={created}>
+                <time dateTime={created}>
                   {formatRelativeTime(created)}
                 </time>
               ) : null}
             </div>
             {memoEntries.length > 0 && !isExpanded ? (
               <p className="bm-memo-preview">
-                <span className="bm-memo-preview-label">메모</span>
                 <span className="bm-memo-preview-text">{memoPreview}</span>
-                {memoExtra > 0 ? <span className="bm-memo-extra">외 {memoExtra}</span> : null}
+                {memoExtra > 0 ? <span className="bm-memo-extra">+{memoExtra}</span> : null}
               </p>
-            ) : null}
-            {!isExpanded ? (
-              <span className="bm-row-open-label">
-                본문으로 이동 <span aria-hidden="true">→</span>
-              </span>
             ) : null}
           </div>
           <button
             type="button"
             className="bm-row-more"
-            aria-label={isExpanded ? '도구 닫기' : '도구 열기'}
+            aria-label={isExpanded ? '메모·색상 닫기' : '메모·색상 열기'}
             aria-expanded={isExpanded}
             disabled={isMutating}
             onClick={(e) => {
@@ -336,12 +338,12 @@ const BookmarksPage = () => {
               toggleExpanded(bookmark.id);
             }}
           >
-            {isExpanded ? '닫기' : '도구'}
+            <span aria-hidden="true">{isExpanded ? '−' : '⋯'}</span>
           </button>
         </div>
 
         {isExpanded ? (
-          <div className="bm-row-panel" onClick={stopRow} onKeyDown={stopRow}>
+          <div className="bm-row-panel" onClick={stopRow}>
             <div className="bm-memo-block">
               <div className="bm-memo-list">
                 {memoEntries.length > 0 ? (
@@ -479,6 +481,8 @@ const BookmarksPage = () => {
                     className={`bm-color-swatch${colorKey === option.key ? ' is-active' : ''}`}
                     title={option.label}
                     disabled={isMutating}
+                    aria-label={option.label}
+                    aria-pressed={colorKey === option.key}
                     style={{
                       '--bm-swatch-bg': option.color,
                       '--bm-swatch-border': option.border,
@@ -564,10 +568,10 @@ const BookmarksPage = () => {
         <header className="bm-header">
           <div className="bm-header-left">
             <div className="bm-header-copy">
-              <h1 className="bm-title">북마크</h1>
-              <p className="bm-subtitle">표시해 둔 구절을 챕터별로 모아 둡니다</p>
+              {bookTitle ? <p className="bm-eyebrow">북마크</p> : null}
+              <h1 className="bm-title">{bookTitle || '북마크'}</h1>
             </div>
-            <span className="bm-count">{(bookmarks ?? []).length}개</span>
+            <span className="bm-count">{bookmarkCount}개</span>
           </div>
         </header>
 
@@ -577,7 +581,7 @@ const BookmarksPage = () => {
             type="search"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="메모·위치 검색"
+            placeholder="메모·위치·구절 검색"
             aria-label="북마크 검색"
           />
           <div className="bm-toolbar-actions">
@@ -599,7 +603,7 @@ const BookmarksPage = () => {
               </select>
             </div>
             <button type="button" className="bm-btn-back" onClick={() => goViewer()}>
-              뷰어로 돌아가기
+              뷰어로
             </button>
           </div>
         </div>
@@ -607,11 +611,28 @@ const BookmarksPage = () => {
         {chapterGroups.length === 0 ? (
           <div className="bm-empty">
             <p className="bm-empty-title">
-              {isFilteredView ? '조건에 맞는 북마크가 없습니다.' : '저장된 북마크가 없습니다.'}
+              {isFilteredView ? '검색 결과가 없습니다' : '저장된 북마크가 없습니다'}
             </p>
             <p className="bm-empty-desc">
-              {isFilteredView ? '검색어를 바꿔보세요.' : '책을 읽으면서 북마크를 추가해보세요.'}
+              {isFilteredView
+                ? '다른 검색어로 다시 찾아보세요.'
+                : '뷰어에서 구절을 표시하면 여기에 모입니다.'}
             </p>
+            <div className="bm-panel-actions">
+              {isFilteredView ? (
+                <button
+                  type="button"
+                  className="bm-btn bm-btn-ghost"
+                  onClick={() => setSearchTerm('')}
+                >
+                  검색 지우기
+                </button>
+              ) : (
+                <button type="button" className="bm-btn bm-btn-primary" onClick={() => goViewer()}>
+                  뷰어로 돌아가기
+                </button>
+              )}
+            </div>
           </div>
         ) : (
           <div className="bm-body">
@@ -636,25 +657,23 @@ const BookmarksPage = () => {
               </ul>
             </nav>
 
-            <div className="bm-content">
-              <div className="bm-chapters">
-                {chapterGroups.map((group) => (
-                  <section
-                    key={group.key}
-                    id={`bm-chapter-${group.key}`}
-                    className="bm-chapter"
-                  >
-                    <header className="bm-chapter-head">
-                      <h2 className="bm-chapter-label">{group.label}</h2>
-                      {group.title ? <span className="bm-chapter-title">{group.title}</span> : null}
-                      <span className="bm-chapter-count">{group.items.length}개</span>
-                    </header>
-                    <div className="bm-chapter-rows">
-                      {group.items.map((bookmark) => renderBookmark(bookmark))}
-                    </div>
-                  </section>
-                ))}
-              </div>
+            <div className="bm-chapters">
+              {chapterGroups.map((group) => (
+                <section
+                  key={group.key}
+                  id={`bm-chapter-${group.key}`}
+                  className="bm-chapter"
+                >
+                  <header className="bm-chapter-head">
+                    <h2 className="bm-chapter-label">{group.label}</h2>
+                    {group.title ? <span className="bm-chapter-title">{group.title}</span> : null}
+                    <span className="bm-chapter-count">{group.items.length}</span>
+                  </header>
+                  <div className="bm-chapter-list">
+                    {group.items.map((bookmark) => renderBookmark(bookmark))}
+                  </div>
+                </section>
+              ))}
             </div>
           </div>
         )}

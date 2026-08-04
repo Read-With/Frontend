@@ -24,7 +24,7 @@ const VIEW_TABS = [
 const TAG_TONE_TITLE = {
   added: '이 위치에서 처음 추가된 관계',
   changed: '이 위치에서 갱신된 관계',
-  previous: '이전에 추가된 관계',
+  prior: '이전에 추가된 관계',
 };
 
 function EndpointAvatar({ endpoint }) {
@@ -473,7 +473,7 @@ function UnifiedEdgeTooltip({
                 style={{
                   '--tag-color': getRelationColor(item.positivity),
                 }}
-                title={TAG_TONE_TITLE[item.tone] || TAG_TONE_TITLE.previous}
+                title={TAG_TONE_TITLE[item.tone] || TAG_TONE_TITLE.prior}
               >
                 {item.text}
               </span>
