@@ -153,19 +153,17 @@ const ViewerPage = () => {
   const graphClearRef = useRef(null);
 
   useEffect(() => {
-    const updateFromClientY = (clientY) => {
+    const revealIfHidden = (clientY) => {
+      if (showToolbarRef.current) return;
       const nearTop = clientY <= TOOLBAR_REVEAL_ZONE_PX;
       const nearBottom =
         clientY >= window.innerHeight - TOOLBAR_REVEAL_ZONE_PX;
-      const next = nearTop || nearBottom;
-      if (showToolbarRef.current !== next) {
-        setShowToolbar(next);
-      }
+      if (nearTop || nearBottom) setShowToolbar(true);
     };
-    const onMouseMove = (event) => updateFromClientY(event.clientY);
+    const onMouseMove = (event) => revealIfHidden(event.clientY);
     const onTouchStart = (event) => {
       const touch = event.touches?.[0];
-      if (touch) updateFromClientY(touch.clientY);
+      if (touch) revealIfHidden(touch.clientY);
     };
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('touchstart', onTouchStart, { passive: true });
@@ -174,6 +172,24 @@ const ViewerPage = () => {
       window.removeEventListener('touchstart', onTouchStart);
     };
   }, [setShowToolbar]);
+
+  const toggleToolbar = useCallback(() => {
+    setShowToolbar((prev) => !prev);
+  }, [setShowToolbar]);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.target.closest?.('input, textarea, [contenteditable], [role="dialog"]')) {
+        return;
+      }
+      if (e.key === 't' || e.key === 'T') {
+        e.preventDefault();
+        toggleToolbar();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [toggleToolbar]);
 
   const dismissDeleteConfirm = useCallback(() => {
     setToolbarDeleteConfirmId(null);
@@ -369,6 +385,7 @@ const ViewerPage = () => {
           suppressMessage={
             resumeAnchor ? '읽던 위치로 이동 중...' : '로딩 중...'
           }
+          onToggleChrome={toggleToolbar}
         />
         <ViewerSettings
           isOpen={showSettingsModal}

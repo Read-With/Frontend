@@ -96,6 +96,13 @@ export function useViewerGraphState({
     }
   }, []);
 
+  const markGraphTransitionLoading = useCallback(() => {
+    setIsDataReady(false);
+    setAppliedGraphKey(null);
+    setIsGraphLoading(true);
+    setEventGraphLoading(true);
+  }, []);
+
   useEffect(() => {
     if (!currentEvent) return;
     if (eventMatchesChapter(currentEvent, currentChapter)) {
@@ -104,8 +111,7 @@ export function useViewerGraphState({
     }
     setCurrentEvent(null);
     setPrevValidEvent(null);
-    clearDisplayedGraph({ loading: true });
-  }, [currentChapter, currentEvent, clearDisplayedGraph]);
+  }, [currentChapter, currentEvent]);
 
   const resetGraphPipelineState = useCallback(() => {
     setEvents([]);
@@ -123,14 +129,14 @@ export function useViewerGraphState({
     resetGraphPipelineState();
   }, [bookKey, resetGraphPipelineState]);
 
-  // 챕터 전환만 화면 비움 — 같은 챕터 이벤트 전환은 캐시 교체로 처리 (매번 remount 방지)
+  // 챕터 전환 중에도 기존 요소를 유지하고, 다음 스냅샷 적용 시 id diff로 증감만 반영한다.
   const prevChapterForGraphRef = useRef(currentChapter);
   useEffect(() => {
     if (prevChapterForGraphRef.current === currentChapter) return;
     prevChapterForGraphRef.current = currentChapter;
     if (currentChapter == null) return;
-    clearDisplayedGraph({ loading: true });
-  }, [currentChapter, clearDisplayedGraph]);
+    markGraphTransitionLoading();
+  }, [currentChapter, markGraphTransitionLoading]);
 
   useEffect(() => {
     if (!isHardNavigationReload()) return undefined;
@@ -176,7 +182,7 @@ export function useViewerGraphState({
       filterStage,
       setFilterStage,
     }),
-    [filterStage],
+    [filterStage, setEdgeLabelVisible, setFilterStage],
   );
 
   const graphViewerState = useMemo(
@@ -208,12 +214,6 @@ const {
   DISCOVERY_WAIT_MS,
   DISCOVERY_POLL_MS,
 } = VIEWER_GRAPH_PIPELINE;
-
-function logPipelineError(message, error) {
-  if (import.meta.env.DEV) {
-    errorUtils.logError(`${LOG_PREFIX} ${message}`, error?.message || error);
-  }
-}
 
 /** 재시도 시 effect를 다시 돌리기 위한 토큰 */
 function useRetryToken() {
@@ -339,7 +339,7 @@ function useGraphCacheApply({
       return didApply;
     } catch (error) {
       refs.chapterSyncStatusRef.current.delete(key);
-      logPipelineError('챕터 이벤트 동기화 실패', error);
+      errorUtils.logError(`${LOG_PREFIX} 챕터 이벤트 동기화 실패`, error);
       return false;
     }
   }, [book, setEvents, refs]);
@@ -536,7 +536,7 @@ function useGraphChapterDiscovery({
       ));
 
       if (outcome.reason === 'api_error') {
-        logPipelineError('챕터 이벤트 discovery 실패', outcome.error);
+        errorUtils.logError(`${LOG_PREFIX} 챕터 이벤트 discovery 실패`, outcome.error);
       }
     };
 
@@ -870,4 +870,3 @@ export function useViewerGraphPipeline({
 
   return { graphApiError: discoveryError ?? apiError };
 }
-

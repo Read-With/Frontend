@@ -1,10 +1,281 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import PropTypes from "prop-types";
+import { List, MousePointer2, Move, Search, SearchX, SlidersHorizontal, ZoomIn } from "lucide-react";
 import { useClickOutside } from "../../hooks/ui/tooltipHooks";
 import { findExactSuggestionMatch } from "../../utils/graph/graphCy.js";
-import { GRAPH_CHARACTER_FILTER_STAGE_OPTIONS } from "../../utils/graph/graphCore.js";
+import {
+  GRAPH_CHARACTER_FILTER_STAGE_OPTIONS,
+  formatGraphEventMetaLabel,
+} from "../../utils/graph/graphCore.js";
+import { resolveEventOrdinalForDisplay } from "../../utils/viewer/viewerSession";
+import { GRAPH_COLORS, getPositivityGradientCss } from "../../utils/styles/graphStyles.js";
 import "./RelationGraph.css";
+
+/** 인물 이미지 없을 때 공통 실루엣 */
+export function PersonSilhouette({
+  size = 48,
+  circleFill = GRAPH_COLORS.border,
+  bodyFill = '#bdbdbd',
+}) {
+  const cx = size / 2;
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} fill="none" aria-hidden>
+      <circle cx={cx} cy={cx} r={cx} fill={circleFill} />
+      <ellipse cx={cx} cy={size * 0.375} rx={size * 0.21} ry={size * 0.21} fill={bodyFill} />
+      <ellipse cx={cx} cy={size * 0.79} rx={size * 0.29} ry={size * 0.17} fill={bodyFill} />
+    </svg>
+  );
+}
+
+PersonSilhouette.propTypes = {
+  size: PropTypes.number,
+  circleFill: PropTypes.string,
+  bodyFill: PropTypes.string,
+};
+
+/** 노드/간선 툴팁 공통 닫기 버튼 */
+export function TooltipCloseButton({ onClose, ariaLabel, className }) {
+  return (
+    <button
+      type="button"
+      onClick={onClose}
+      aria-label={ariaLabel}
+      className={['tooltip-close-btn', className].filter(Boolean).join(' ')}
+    >
+      &times;
+    </button>
+  );
+}
+
+TooltipCloseButton.propTypes = {
+  onClose: PropTypes.func,
+  ariaLabel: PropTypes.string,
+  className: PropTypes.string,
+};
+
+export function ActionButton({ variant = 'secondary', onClick, children, ariaLabel, title }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={ariaLabel}
+      title={title}
+      className={`tooltip-action-btn tooltip-action-btn--${variant === 'primary' ? 'primary' : 'secondary'}`}
+    >
+      {children}
+    </button>
+  );
+}
+
+ActionButton.propTypes = {
+  variant: PropTypes.oneOf(['primary', 'secondary']),
+  onClick: PropTypes.func,
+  children: PropTypes.node,
+  ariaLabel: PropTypes.string,
+  title: PropTypes.string,
+};
+
+const Z_INDEX_TOOLTIP = 99999;
+
+/** 플로팅 노드/간선 툴팁 셸 */
+export function NodeTooltipShell({
+  children,
+  shellRef,
+  className = 'graph-node-tooltip',
+  position,
+  zIndex = Z_INDEX_TOOLTIP,
+  showContent,
+  isDragging,
+  handleMouseDown,
+  transition,
+  closeButton = null,
+}) {
+  return (
+    <div
+      ref={shellRef}
+      className={className}
+      style={{
+        left: position.x,
+        top: position.y,
+        zIndex,
+        ...(showContent !== undefined
+          ? {
+              opacity: showContent ? 1 : 0,
+              transition,
+              cursor: isDragging ? 'grabbing' : 'grab',
+            }
+          : null),
+      }}
+      onMouseDown={handleMouseDown}
+    >
+      {closeButton}
+      {children}
+    </div>
+  );
+}
+
+NodeTooltipShell.propTypes = {
+  children: PropTypes.node,
+  shellRef: PropTypes.oneOfType([PropTypes.func, PropTypes.object]),
+  className: PropTypes.string,
+  position: PropTypes.shape({
+    x: PropTypes.number,
+    y: PropTypes.number,
+  }),
+  zIndex: PropTypes.number,
+  showContent: PropTypes.bool,
+  isDragging: PropTypes.bool,
+  handleMouseDown: PropTypes.func,
+  transition: PropTypes.string,
+  closeButton: PropTypes.node,
+};
+
+export function CenteredStatus({
+  children,
+  color = GRAPH_COLORS.textSecondary,
+  fullHeight = true,
+}) {
+  return (
+    <div
+      className={`tooltip-centered-status${fullHeight ? '' : ' tooltip-centered-status--compact'}`}
+      style={{ '--status-color': color }}
+    >
+      {children}
+    </div>
+  );
+}
+
+CenteredStatus.propTypes = {
+  children: PropTypes.node,
+  color: PropTypes.string,
+  fullHeight: PropTypes.bool,
+};
+
+function handleProfileImageError(e) {
+  e.target.style.display = 'none';
+  if (e.target.nextSibling) e.target.nextSibling.style.display = 'block';
+}
+
+export function NodeProfileAvatar({ node }) {
+  const hasImage = !!node?.hasImage;
+  return (
+    <div className="profile-image-placeholder">
+      <div className="profile-img">
+        {hasImage ? (
+          <img
+            src={node.image}
+            alt={node?.displayName || 'character'}
+            crossOrigin="anonymous"
+            decoding="async"
+            loading="eager"
+            onError={handleProfileImageError}
+          />
+        ) : null}
+        <div style={{ display: hasImage ? 'none' : 'block' }}>
+          <PersonSilhouette size={48} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+NodeProfileAvatar.propTypes = {
+  node: PropTypes.object,
+};
+
+/** 분할·전체 그래프 상단 챕터/사건 메타 (공통) */
+export function GraphTopBarMeta({ chapterLabel, chapterTitle, eventLabel }) {
+  return (
+    <div className="graph-topbar-meta">
+      <span
+        className="graph-topbar-meta-chapter"
+        title={chapterTitle || chapterLabel}
+      >
+        {chapterLabel}
+      </span>
+      {eventLabel != null ? (
+        <span className="graph-topbar-meta-event">{eventLabel}</span>
+      ) : null}
+    </div>
+  );
+}
+
+GraphTopBarMeta.propTypes = {
+  chapterLabel: PropTypes.string,
+  chapterTitle: PropTypes.string,
+  eventLabel: PropTypes.node,
+};
+
+/** 분할 상단바: 챕터 + 사건 메타 (계산중 포함) */
+export function GraphChapterEventMeta({
+  bookId,
+  progressTopBar,
+  currentEvent,
+  prevValidEvent,
+  resolvedServerChapter,
+  chapterDisplayLabel,
+}) {
+  const eventNum = resolveEventOrdinalForDisplay({
+    currentEvent,
+    prevValidEvent,
+    currentChapter: resolvedServerChapter,
+    progressTopBar: progressTopBar ?? { eventNum: null },
+    fallback: 0,
+  });
+
+  if (bookId && progressTopBar === undefined && !(eventNum > 0)) {
+    return <span className="graph-topbar-meta-event">계산중…</span>;
+  }
+
+  return (
+    <GraphTopBarMeta
+      chapterLabel={chapterDisplayLabel}
+      chapterTitle={chapterDisplayLabel}
+      eventLabel={formatGraphEventMetaLabel(eventNum > 0 ? eventNum : null)}
+    />
+  );
+}
+
+GraphChapterEventMeta.propTypes = {
+  bookId: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+  progressTopBar: PropTypes.object,
+  currentEvent: PropTypes.any,
+  prevValidEvent: PropTypes.any,
+  resolvedServerChapter: PropTypes.number,
+  chapterDisplayLabel: PropTypes.string,
+};
+
+/** 빈/로딩/에러 패널 (분할·전체 그래프) */
+export function GraphNoticePanel({ variant, title, description, icon, actions }) {
+  const isLoading = variant === 'loading';
+  const TitleTag = isLoading ? 'p' : 'h3';
+
+  return (
+    <div
+      className={`graph-panel-status graph-panel-status--${variant}`}
+      role={isLoading ? 'status' : variant === 'error' ? 'alert' : undefined}
+      aria-live={isLoading ? 'polite' : undefined}
+    >
+      <div className={`graph-panel-status-icon graph-panel-status-icon--${variant}`} aria-hidden>
+        {icon}
+      </div>
+      <div className="graph-panel-status-copy">
+        <TitleTag className="graph-panel-status-title">{title}</TitleTag>
+        {description ? <p className="graph-panel-status-desc">{description}</p> : null}
+      </div>
+      {actions ? <div className="graph-panel-status-actions">{actions}</div> : null}
+    </div>
+  );
+}
+
+GraphNoticePanel.propTypes = {
+  variant: PropTypes.oneOf(['loading', 'empty', 'error']).isRequired,
+  title: PropTypes.node,
+  description: PropTypes.node,
+  icon: PropTypes.node,
+  actions: PropTypes.node,
+};
 
 function EdgeLabelToggle({ visible, onToggle }) {
   const labelId = useId();
@@ -62,98 +333,188 @@ CharacterFilterSegmented.propTypes = {
   onChange: PropTypes.func.isRequired,
 };
 
+const GESTURE_HINT_SESSION_KEY = "rw-graph-gesture-hint-seen";
 const LEGEND_HINT_SESSION_KEY = "rw-graph-legend-hint-seen";
+const POSITIVITY_GRADIENT = getPositivityGradientCss();
 
-function readLegendHintSeen() {
+function readSessionHintSeen(key) {
   try {
-    return sessionStorage.getItem(LEGEND_HINT_SESSION_KEY) === "1";
+    return sessionStorage.getItem(key) === "1";
   } catch {
     return true;
   }
 }
 
-function markLegendHintSeen() {
+function markSessionHintSeen(key) {
   try {
-    sessionStorage.setItem(LEGEND_HINT_SESSION_KEY, "1");
+    sessionStorage.setItem(key, "1");
   } catch {
     /* ignore */
   }
+}
+
+function useSessionHint(storageKey, { autoOpen = true } = {}) {
+  const [hintSeen, setHintSeen] = useState(() => readSessionHintSeen(storageKey));
+  const [open, setOpen] = useState(() => autoOpen && !readSessionHintSeen(storageKey));
+
+  const markSeen = useCallback(() => {
+    markSessionHintSeen(storageKey);
+    setHintSeen(true);
+  }, [storageKey]);
+
+  const dismiss = useCallback(() => {
+    markSeen();
+    setOpen(false);
+  }, [markSeen]);
+
+  const toggle = useCallback(() => {
+    setOpen((v) => {
+      markSeen();
+      return !v;
+    });
+  }, [markSeen]);
+
+  return { hintSeen, open, setOpen, dismiss, toggle, markSeen };
 }
 
 function getSuggestionDisplayName(suggestion) {
   return suggestion?.label || suggestion?.common_name || "Unknown";
 }
 
-function GraphLegendPanel({ id }) {
-  return (
-    <aside id={id} className="graph-canvas-legend" aria-label="그래프 범례">
-      <p className="graph-canvas-legend-title">범례</p>
-      <div className="graph-canvas-legend-tone" aria-hidden>
-        <span className="graph-canvas-legend-tone-end">부정 (−100%)</span>
-        <span className="graph-canvas-legend-swatch" />
-        <span className="graph-canvas-legend-tone-end">긍정 (+100%)</span>
-      </div>
-      <div className="graph-canvas-legend-row">
-        <span className="graph-canvas-legend-size" aria-hidden>
-          <span className="graph-canvas-legend-dot graph-canvas-legend-dot--lg" />
-          <span className="graph-canvas-legend-dot graph-canvas-legend-dot--sm" />
-        </span>
-        <span>크기 = 중요도</span>
-      </div>
-      <div className="graph-canvas-legend-row">
-        <span className="graph-canvas-legend-main" aria-hidden>
-          <span className="graph-canvas-legend-main-ring" />
-        </span>
-        <span>굵은 테두리 = 주요 인물</span>
-      </div>
-    </aside>
-  );
-}
-
-GraphLegendPanel.propTypes = {
-  id: PropTypes.string,
-};
-
-/** 범례 토글 + 세션 1회 힌트(첫 진입 시 열림, 자동 닫힘 없음) */
-function GraphCanvasLegend() {
-  const [hintSeen, setHintSeen] = useState(readLegendHintSeen);
-  const [open, setOpen] = useState(() => !readLegendHintSeen());
+function GraphHintShell({
+  open,
+  hintSeen,
+  onToggle,
+  onDismiss,
+  buttonLabel,
+  buttonTitle,
+  panelId,
+  icon: Icon,
+  children,
+}) {
   const rootRef = useClickOutside(() => {
-    setOpen(false);
-    markLegendHintSeen();
-    setHintSeen(true);
+    if (open) onDismiss();
   }, open);
-  const panelId = "graph-canvas-legend-panel";
-
-  const toggle = () => {
-    setOpen((v) => {
-      const next = !v;
-      markLegendHintSeen();
-      setHintSeen(true);
-      return next;
-    });
-  };
 
   return (
-    <div className="graph-floating-legend" ref={rootRef}>
+    <div className="graph-hint" ref={rootRef}>
       <button
         type="button"
-        className={`graph-floating-btn ${!hintSeen ? "has-hint" : ""}`}
-        aria-label={open ? "범례 닫기" : "범례 보기"}
-        title="범례"
+        className={`graph-floating-btn${!hintSeen ? " has-hint" : ""}${open ? " is-active" : ""}`}
+        aria-label={open ? `${buttonLabel} 닫기` : buttonLabel}
+        title={buttonTitle}
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
-        onClick={toggle}
+        onClick={onToggle}
       >
-        <span className="material-symbols-outlined" aria-hidden>
-          legend_toggle
-        </span>
-        {!hintSeen ? <span className="graph-legend-hint-dot" aria-hidden /> : null}
+        <Icon size={18} aria-hidden />
+        {!hintSeen ? <span className="graph-hint-dot" aria-hidden /> : null}
       </button>
-      {open ? <GraphLegendPanel id={panelId} /> : null}
+      {open ? (
+        <div id={panelId} className="graph-hint-panel" role="status">
+          {children}
+        </div>
+      ) : null}
     </div>
   );
 }
+
+GraphHintShell.propTypes = {
+  open: PropTypes.bool.isRequired,
+  hintSeen: PropTypes.bool.isRequired,
+  onToggle: PropTypes.func.isRequired,
+  onDismiss: PropTypes.func.isRequired,
+  buttonLabel: PropTypes.string.isRequired,
+  buttonTitle: PropTypes.string.isRequired,
+  panelId: PropTypes.string.isRequired,
+  icon: PropTypes.elementType.isRequired,
+  children: PropTypes.node.isRequired,
+};
+
+function GraphGestureHint({ hint }) {
+  const panelId = "graph-gesture-hint-panel";
+  const [usesTouch] = useState(
+    () => globalThis.matchMedia?.("(pointer: coarse)").matches ?? false,
+  );
+
+  return (
+    <GraphHintShell
+      open={hint.open}
+      hintSeen={hint.hintSeen}
+      onToggle={hint.toggle}
+      onDismiss={hint.dismiss}
+      buttonLabel="조작 안내"
+      buttonTitle="조작 안내"
+      panelId={panelId}
+      icon={MousePointer2}
+    >
+      <p className="graph-hint-panel-title">조작 안내</p>
+      <ul className="graph-hint-panel-list">
+        <li><MousePointer2 aria-hidden />노드·간선 선택</li>
+        <li><Move aria-hidden />{usesTouch ? "한 손가락으로 이동" : "드래그로 이동"}</li>
+        <li><ZoomIn aria-hidden />{usesTouch ? "두 손가락으로 확대·축소" : "휠로 확대·축소"}</li>
+      </ul>
+    </GraphHintShell>
+  );
+}
+
+GraphGestureHint.propTypes = {
+  hint: PropTypes.shape({
+    open: PropTypes.bool.isRequired,
+    hintSeen: PropTypes.bool.isRequired,
+    toggle: PropTypes.func.isRequired,
+    dismiss: PropTypes.func.isRequired,
+  }).isRequired,
+};
+
+function GraphCanvasLegend({ hint }) {
+  const panelId = "graph-canvas-legend-panel";
+
+  return (
+    <GraphHintShell
+      open={hint.open}
+      hintSeen={hint.hintSeen}
+      onToggle={hint.toggle}
+      onDismiss={hint.dismiss}
+      buttonLabel="범례"
+      buttonTitle="범례"
+      panelId={panelId}
+      icon={List}
+    >
+      <p className="graph-hint-panel-title">범례</p>
+      <div className="graph-hint-legend-tone" aria-hidden>
+        <span className="graph-hint-legend-tone-end">부정 (−100%)</span>
+        <span
+          className="graph-hint-legend-swatch"
+          style={{ background: POSITIVITY_GRADIENT }}
+        />
+        <span className="graph-hint-legend-tone-end">긍정 (+100%)</span>
+      </div>
+      <div className="graph-hint-legend-row">
+        <span className="graph-hint-legend-size" aria-hidden>
+          <span className="graph-hint-legend-dot graph-hint-legend-dot--lg" />
+          <span className="graph-hint-legend-dot graph-hint-legend-dot--sm" />
+        </span>
+        <span>크기 = 중요도</span>
+      </div>
+      <div className="graph-hint-legend-row">
+        <span className="graph-hint-legend-main" aria-hidden>
+          <span className="graph-hint-legend-main-ring" />
+        </span>
+        <span>굵은 테두리 = 주요 인물</span>
+      </div>
+    </GraphHintShell>
+  );
+}
+
+GraphCanvasLegend.propTypes = {
+  hint: PropTypes.shape({
+    open: PropTypes.bool.isRequired,
+    hintSeen: PropTypes.bool.isRequired,
+    toggle: PropTypes.func.isRequired,
+    dismiss: PropTypes.func.isRequired,
+  }).isRequired,
+};
 
 function useModKeyLabel() {
   const [mod, setMod] = useState("Ctrl");
@@ -277,7 +638,11 @@ function GraphSearchPalette({
         }}
       />
       <div className="graph-search-palette-panel">
-        {toastMessage ? <div className="graph-search-toast is-palette">{toastMessage}</div> : null}
+        {toastMessage ? (
+          <div className="graph-search-toast is-palette" role="status" aria-live="polite">
+            {toastMessage}
+          </div>
+        ) : null}
 
         <form
           className="graph-search-palette-form"
@@ -286,9 +651,7 @@ function GraphSearchPalette({
             trySubmitSearch();
           }}
         >
-          <span className="material-symbols-outlined graph-search-palette-icon" aria-hidden>
-            search
-          </span>
+          <Search size={20} className="graph-search-palette-icon" aria-hidden />
           <input
             ref={inputRef}
             className="graph-search-palette-input"
@@ -354,9 +717,7 @@ function GraphSearchPalette({
               </>
             ) : (
               <div className="graph-search-empty">
-                <span className="material-symbols-outlined graph-search-empty-icon" aria-hidden>
-                  search_off
-                </span>
+                <SearchX size={32} className="graph-search-empty-icon" aria-hidden />
                 <div className="graph-search-empty-title">검색 결과 없음</div>
                 <div className="graph-search-empty-desc">다른 검색어를 시도해보세요</div>
               </div>
@@ -390,7 +751,7 @@ GraphSearchPalette.propTypes = {
 };
 
 /**
- * 검색 팔레트 · 필터 · 간선 라벨 · (선택) 범례
+ * 검색 팔레트 · 필터 · 간선 라벨 · (선택) 조작 안내·범례
  */
 export function GraphFloatingControls({
   searchState,
@@ -400,11 +761,37 @@ export function GraphFloatingControls({
   filterStage,
   onFilterChange,
   showLegend = true,
+  showGestureHint = true,
 }) {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const optionsRef = useClickOutside(() => setOptionsOpen(false), optionsOpen);
   const modKey = useModKeyLabel();
+
+  const gestureSeenInitially = readSessionHintSeen(GESTURE_HINT_SESSION_KEY);
+  const legendSeenInitially = readSessionHintSeen(LEGEND_HINT_SESSION_KEY);
+  // 둘 다 미확인이면 조작 안내만 먼저 자동 오픈 → 닫힌 뒤 범례 오픈
+  const gestureHint = useSessionHint(GESTURE_HINT_SESSION_KEY, {
+    autoOpen: showGestureHint && !gestureSeenInitially,
+  });
+  const legendHint = useSessionHint(LEGEND_HINT_SESSION_KEY, {
+    autoOpen: showLegend && legendSeenInitially === false && gestureSeenInitially,
+  });
+
+  useEffect(() => {
+    if (!showLegend || !showGestureHint) return;
+    if (!gestureHint.hintSeen || legendHint.hintSeen || legendHint.open) return;
+    if (gestureHint.open) return;
+    legendHint.setOpen(true);
+  }, [
+    showLegend,
+    showGestureHint,
+    gestureHint.hintSeen,
+    gestureHint.open,
+    legendHint.hintSeen,
+    legendHint.open,
+    legendHint.setOpen,
+  ]);
 
   const {
     searchTerm,
@@ -467,9 +854,7 @@ export function GraphFloatingControls({
           aria-expanded={paletteOpen}
           onClick={openPalette}
         >
-          <span className="material-symbols-outlined" aria-hidden>
-            search
-          </span>
+          <Search size={18} aria-hidden />
         </button>
 
         <div className="graph-floating-options" ref={optionsRef}>
@@ -482,9 +867,7 @@ export function GraphFloatingControls({
             aria-expanded={optionsOpen}
             onClick={() => setOptionsOpen((v) => !v)}
           >
-            <span className="material-symbols-outlined" aria-hidden>
-              tune
-            </span>
+            <SlidersHorizontal size={18} aria-hidden />
           </button>
           {optionsOpen ? (
             <div className="graph-floating-options-panel" role="menu" aria-label="표시 옵션">
@@ -505,7 +888,8 @@ export function GraphFloatingControls({
           ) : null}
         </div>
 
-        {showLegend ? <GraphCanvasLegend /> : null}
+        {showGestureHint ? <GraphGestureHint hint={gestureHint} /> : null}
+        {showLegend ? <GraphCanvasLegend hint={legendHint} /> : null}
       </div>
 
       <GraphSearchPalette
@@ -548,4 +932,5 @@ GraphFloatingControls.propTypes = {
   filterStage: PropTypes.number.isRequired,
   onFilterChange: PropTypes.func.isRequired,
   showLegend: PropTypes.bool,
+  showGestureHint: PropTypes.bool,
 };

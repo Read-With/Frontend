@@ -1,85 +1,49 @@
 import { memo, useState, useEffect, useMemo } from "react";
 import {ResponsiveContainer, LineChart, CartesianGrid, ReferenceLine, Tooltip as RechartsTooltip, Line, XAxis, YAxis,} from "recharts";
 import { useParams } from "react-router-dom";
-import { useTooltipPosition, useClickOutside } from "../../hooks/ui/tooltipHooks";
+import { useTooltipPosition, useClickOutside, useCanvasAvoidPoint } from "../../hooks/ui/tooltipHooks";
 import { useRelationData } from "../../hooks/graph/useApiGraphData";
-import { getRelationStyle, clearStyleCache } from "../../utils/styles/relationStyles";
-import { clampPositivity, getRelationColor } from "../../utils/styles/graphStyles";
+import { getPositivityDisplay, clearStyleCache, clampPositivity, getRelationColor } from "../../utils/styles/graphStyles";
 import { COLORS, ANIMATION_VALUES, mergeRefs } from "../../utils/styles/styles";
 import { toFiniteNumber, toPositiveNumberOrNull } from "../../utils/common/valueUtils";
 import { buildRelationTagDisplayItems } from "../../utils/graph/graphCore";
-import { isLongEdgeTimeline, annotateSignificantEdgePoints, getSparseEdgeTickValues, formatEdgeTimelineDisplayLabel } from "../../utils/graph/graphCy";
-import './RelationGraph.css';
+import {
+  isLongEdgeTimeline,
+  getSparseEdgeTickValues,
+  buildEdgeRechartsLineData,
+} from "../../utils/graph/graphCy";
+import { TooltipCloseButton } from './GraphControls';
 
 const NO_RELATION_MESSAGE = '이 위치에서는 표시할 관계가 없습니다.';
 
-function extractNumericLabel(label) {
-  if (typeof label === 'number' && Number.isFinite(label)) {
-    return label;
-  }
-  if (typeof label === 'string') {
-    const match = label.match(/\d+/g);
-    if (match && match.length > 0) {
-      const parsed = Number(match[match.length - 1]);
-      if (Number.isFinite(parsed)) {
-        return parsed;
-      }
-    }
-  }
-  return null;
-}
+const VIEW_TABS = [
+  { id: 'info', label: '요약' },
+  { id: 'chart', label: '변화' },
+];
 
-function isChapterLabel(label) {
-  return typeof label === 'string' && /^Ch\d+/i.test(label.trim());
-}
-
-function isPairCurrentEvent(pair, eventIdx) {
-  if (!pair || pair.isChapterAggregate) return false;
-  if (!Number.isFinite(eventIdx) || eventIdx <= 0) return false;
-  return Number.isFinite(pair.numericLabel) && pair.numericLabel === eventIdx;
-}
-
-/** 클릭한 간선의 현재 긍정도를 타임라인의 현재 이벤트 점에 맞춤 (gap/미존재 점은 만들지 않음) */
-function alignPairsWithEdgePositivity(pairs, edgePositivity, displayEventNum) {
-  if (edgePositivity == null || !Number.isFinite(displayEventNum) || displayEventNum <= 0) {
-    return pairs;
-  }
-
-  const currentIdx = pairs.findIndex(
-    (pair) =>
-      !pair.isChapterAggregate &&
-      Number.isFinite(pair.numericLabel) &&
-      pair.numericLabel === displayEventNum
-  );
-  if (currentIdx < 0) return pairs;
-
-  const current = pairs[currentIdx];
-  // 관계 공백(gap)은 이력 그대로 유지 — 간선 값으로 채우지 않음
-  if (current.isGap || typeof current.value !== 'number') return pairs;
-
-  const next = pairs.map((pair) => ({ ...pair }));
-  next[currentIdx] = {
-    ...next[currentIdx],
-    value: edgePositivity,
-  };
-  return next;
-}
+const TAG_TONE_TITLE = {
+  added: '이 위치에서 처음 추가된 관계',
+  changed: '이 위치에서 갱신된 관계',
+  prior: '이전에 추가된 관계',
+};
 
 function EndpointAvatar({ endpoint }) {
   const label = endpoint?.label || '?';
-  const initial = label.charAt(0);
   if (endpoint?.image) {
     return (
       <img
         className="edge-tooltip-endpoint-avatar"
         src={endpoint.image}
         alt={label}
+        crossOrigin="anonymous"
+        decoding="async"
+        loading="eager"
       />
     );
   }
   return (
     <div className="edge-tooltip-endpoint-avatar" aria-hidden>
-      {initial}
+      {label.charAt(0)}
     </div>
   );
 }
@@ -95,16 +59,13 @@ function UnifiedEdgeTooltip({
   bookId = null,
   sourceEndpoint = null,
   targetEndpoint = null,
+  tooltipBoundsRef = null,
 }) {
   const { filename } = useParams();
   const isSidebar = variant === 'graphPage';
   const isViewer = variant === 'viewer';
 
-  const avoidPoint = useMemo(() => {
-    const c = data?.edgeCenter;
-    if (c && Number.isFinite(c.x) && Number.isFinite(c.y)) return c;
-    return null;
-  }, [data?.edgeCenter]);
+  const avoidPoint = useCanvasAvoidPoint(data?.edgeCenter);
 
   const {
     position,
@@ -116,6 +77,7 @@ function UnifiedEdgeTooltip({
     enabled: !isSidebar,
     bounds: 'canvas',
     avoidPoint,
+    boundsRef: tooltipBoundsRef,
   });
 
   const clickOutsideRef = useClickOutside(
@@ -201,149 +163,34 @@ function UnifiedEdgeTooltip({
     return Number.POSITIVE_INFINITY;
   }, [isViewer, displayEventNum]);
 
-  const { rechartsLineData, hasChartData, numericPointCount } = useMemo(() => {
-    // 로드 실패 시 간선 positivity로 단점 합성하지 않음
-    if (relationError) {
-      return { rechartsLineData: [], hasChartData: false, numericPointCount: 0 };
-    }
-
-    const pairs = [];
-    const timelineHasValues = Array.isArray(timeline)
-      && timeline.some((value) => value === null || (typeof value === 'number' && !Number.isNaN(value)));
-
-    if (timelineHasValues && Array.isArray(labels) && labels.length > 0) {
-      const length = Math.min(labels.length, timeline.length);
-
-      for (let i = 0; i < length; i++) {
-        const label = labels[i];
-        const value = timeline[i];
-        const isChapter = isChapterLabel(label);
-        const numericLabel = extractNumericLabel(label);
-
-        if (
-          isViewer &&
-          Number.isFinite(effectiveEventColumns) &&
-          Number.isFinite(numericLabel) &&
-          numericLabel > effectiveEventColumns
-        ) {
-          continue;
-        }
-
-        // 관계 공백(null) — 축은 유지하고 선은 끊음
-        if (value === null) {
-          if (!Number.isFinite(numericLabel) && !isChapter) continue;
-          pairs.push({
-            value: null,
-            label,
-            numericLabel: Number.isFinite(numericLabel) ? numericLabel : null,
-            isChapterAggregate: false,
-            isGap: true,
-          });
-          continue;
-        }
-
-        if (typeof value !== 'number' || Number.isNaN(value)) {
-          continue;
-        }
-
-        const normalizedValue = clampPositivity(value);
-
-        if (
-          isChapter &&
-          timeline[i + 1] !== undefined &&
-          typeof timeline[i + 1] === 'number' &&
-          !Number.isNaN(timeline[i + 1])
-        ) {
-          pairs.push({
-            value: normalizedValue,
-            label,
-            numericLabel: null,
-            isChapterAggregate: true,
-          });
-          continue;
-        }
-
-        if (!Number.isFinite(numericLabel)) {
-          continue;
-        }
-
-        pairs.push({
-          value: normalizedValue,
-          label,
-          numericLabel,
-          isChapterAggregate: false,
-        });
-      }
-    }
-
-    // 타임라인 없고 로드 에러가 아닐 때만 현재 간선 positivity로 단점 보조
-    if (pairs.length === 0 && edgePositivity !== null) {
-      pairs.push({
-        value: edgePositivity,
-        label: `E${displayEventNum || 1}`,
-        numericLabel: displayEventNum || 1,
-        isChapterAggregate: false,
-      });
-    }
-
-    const alignedPairs = alignPairsWithEdgePositivity(pairs, edgePositivity, displayEventNum);
-
-    let active = alignedPairs.some((pair) => typeof pair.value === 'number');
-    if (active && isViewer && Number.isFinite(displayEventNum) && displayEventNum > 0) {
-      const hasCurrent = alignedPairs.some((pair) => isPairCurrentEvent(pair, displayEventNum));
-      if (!hasCurrent) {
-        active = alignedPairs.some(
-          (pair) =>
-            !pair.isChapterAggregate &&
-            Number.isFinite(pair.numericLabel) &&
-            pair.numericLabel <= displayEventNum &&
-            typeof pair.value === 'number',
-        );
-      }
-    }
-
-    if (!active) {
-      return { rechartsLineData: [], hasChartData: false, numericPointCount: 0 };
-    }
-
-    const annotated = annotateSignificantEdgePoints(alignedPairs);
-    const lineData = annotated.map((pair, i) => {
-      const isChapter = pair.isChapterAggregate || isChapterLabel(pair.label);
-      return {
-        x: i + 1,
-        y: typeof pair.value === 'number' ? pair.value : null,
-        label: formatEdgeTimelineDisplayLabel(pair.label, pair.numericLabel, i),
-        numericLabel: pair.numericLabel,
-        isChapter,
-        isCurrent: isPairCurrentEvent(pair, displayEventNum),
-        isSignificant: !!pair.isSignificant,
-        isGap: !!pair.isGap,
-      };
-    });
-
-    const numericPointCount = lineData.filter((d) => typeof d.y === 'number').length;
-    return {
-      rechartsLineData: lineData,
-      hasChartData: numericPointCount > 0,
-      numericPointCount,
-    };
-  }, [
-    timeline,
-    labels,
-    edgePositivity,
-    displayEventNum,
-    isViewer,
-    effectiveEventColumns,
-    relationError,
-  ]);
+  const { rechartsLineData, hasChartData, numericPointCount } = useMemo(
+    () =>
+      buildEdgeRechartsLineData({
+        timeline,
+        labels,
+        edgePositivity,
+        displayEventNum,
+        isViewer,
+        effectiveEventColumns,
+        relationError,
+      }),
+    [
+      timeline,
+      labels,
+      edgePositivity,
+      displayEventNum,
+      isViewer,
+      effectiveEventColumns,
+      relationError,
+    ],
+  );
 
   const effectiveNoRelation = noRelation && !hasCurrentEdgeRelationData && !hasChartData && !relationError;
 
-  const positivityPercentage =
-    edgePositivity != null ? Math.round(edgePositivity * 100) : null;
+  const positivityDisplay = getPositivityDisplay(edgePositivity);
+  const positivityPercentage = edgePositivity != null ? positivityDisplay.percent : null;
   const positivityBarWidth =
     positivityPercentage != null ? Math.min(100, Math.abs(positivityPercentage)) : 0;
-  const relationStyle = getRelationStyle(edgePositivity);
 
   const explanationParts = useMemo(() => {
     if (typeof data?.explanation !== 'string' || !data.explanation) {
@@ -390,7 +237,7 @@ function UnifiedEdgeTooltip({
   const showDenseDots = rechartsLineData.length <= 6;
 
   const themeStyle = {
-    '--rel-color': relationStyle.color,
+    '--rel-color': positivityDisplay.color,
     '--pos-width': `${positivityBarWidth}%`,
   };
 
@@ -479,7 +326,7 @@ function UnifiedEdgeTooltip({
             <Line
               type="monotone"
               dataKey="y"
-              stroke={relationStyle.color}
+              stroke={positivityDisplay.color}
               strokeWidth={longTimeline ? 1.5 : 2}
               dot={(dotProps) => {
                 const { cx, cy, payload, index } = dotProps;
@@ -498,7 +345,7 @@ function UnifiedEdgeTooltip({
                     />
                   );
                 }
-                const fill = payload?.isChapter ? '#9ca3af' : relationStyle.color;
+                const fill = payload?.isChapter ? '#9ca3af' : positivityDisplay.color;
                 return (
                   <circle
                     key={`relation-timeline-dot-${index ?? `${cx}-${cy}`}`}
@@ -511,7 +358,7 @@ function UnifiedEdgeTooltip({
                   />
                 );
               }}
-              activeDot={{ r: 5, fill: relationStyle.color }}
+              activeDot={{ r: 5, fill: positivityDisplay.color }}
               connectNulls={false}
               isAnimationActive={false}
             />
@@ -541,24 +388,18 @@ function UnifiedEdgeTooltip({
 
   const renderTabs = () => (
     <div className="edge-tooltip-tabs" role="tablist">
-      <button
-        type="button"
-        role="tab"
-        aria-selected={viewMode === 'info'}
-        className={`edge-tooltip-tab${viewMode === 'info' ? ' active' : ''}`}
-        onClick={() => setViewMode('info')}
-      >
-        요약
-      </button>
-      <button
-        type="button"
-        role="tab"
-        aria-selected={viewMode === 'chart'}
-        className={`edge-tooltip-tab${viewMode === 'chart' ? ' active' : ''}`}
-        onClick={() => setViewMode('chart')}
-      >
-        변화
-      </button>
+      {VIEW_TABS.map(({ id, label }) => (
+        <button
+          key={id}
+          type="button"
+          role="tab"
+          aria-selected={viewMode === id}
+          className={`edge-tooltip-tab${viewMode === id ? ' active' : ''}`}
+          onClick={() => setViewMode(id)}
+        >
+          {label}
+        </button>
+      ))}
       <span
         className={`edge-tooltip-tab-indicator${viewMode === 'chart' ? ' chart' : ''}`}
         aria-hidden
@@ -569,7 +410,7 @@ function UnifiedEdgeTooltip({
   const renderPositivityRow = () => (
     <div className="relation-weight">
       <div className="weight-header">
-        <span className="weight-label">{relationStyle.text}</span>
+        <span className="weight-label">{positivityDisplay.label}</span>
         <span className="weight-value">
           {positivityPercentage != null ? `${positivityPercentage}%` : '—'}
         </span>
@@ -616,10 +457,10 @@ function UnifiedEdgeTooltip({
   );
 
   const chartTitle = isViewer
-    ? `Chapter ${currentChapter} 관계 변화`
-    : `Chapter ${currentChapter}까지의 누적 관계 변화`;
+    ? `챕터 ${currentChapter} 관계 변화`
+    : `챕터 ${currentChapter}까지의 누적 관계 변화`;
 
-  const renderInfoPanel = () => {
+  const renderInfoView = () => {
     if (isViewer && effectiveNoRelation) {
       return renderStatusMessage(NO_RELATION_MESSAGE);
     }
@@ -635,13 +476,7 @@ function UnifiedEdgeTooltip({
                 style={{
                   '--tag-color': getRelationColor(item.positivity),
                 }}
-                title={
-                  item.tone === 'added'
-                    ? '이 위치에서 처음 추가된 관계'
-                    : item.tone === 'changed'
-                      ? '이 위치에서 갱신된 관계'
-                      : '이전에 추가된 관계'
-                }
+                title={TAG_TONE_TITLE[item.tone] || TAG_TONE_TITLE.prior}
               >
                 {item.text}
               </span>
@@ -705,24 +540,20 @@ function UnifiedEdgeTooltip({
   };
 
   const closeButton = (
-    <button
-      type="button"
-      onClick={onClose}
-      className="tooltip-close-btn"
-      aria-label={isSidebar ? '사이드바 닫기' : undefined}
-    >
-      &times;
-    </button>
+    <TooltipCloseButton
+      onClose={onClose}
+      ariaLabel={isSidebar ? '사이드바 닫기' : undefined}
+    />
   );
 
   const panelBody = isSidebar ? (
     <>
-      {renderInfoPanel()}
+      {renderInfoView()}
       {renderChartPanel(240)}
     </>
   ) : (
     <div key={viewMode} className="edge-tooltip-panel-swap">
-      {viewMode === 'info' ? renderInfoPanel() : renderChartPanel(280)}
+      {viewMode === 'info' ? renderInfoView() : renderChartPanel(280)}
     </div>
   );
 

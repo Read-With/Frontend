@@ -1,4 +1,80 @@
-/** 숫자·문자열·locator 공통 값 유틸 */
+/** 숫자·문자열·locator 공통 값 유틸 · 공통 로깅(errorUtils) */
+
+const getErrorDetails = (error) => ({
+  message: error?.message || error?.toString() || '알 수 없는 오류',
+  status: error?.status || error?.statusCode || null,
+  code: error?.code || null,
+  stack: error?.stack || null,
+  name: error?.name || 'Error',
+});
+
+/** 하위 모듈(cacheManager 등)도 순환 없이 쓸 수 있도록 valueUtils에 둔다 */
+export const errorUtils = {
+  logError: (context, error, additionalData = {}) => {
+    console.error(`[${context}] error:`, {
+      ...getErrorDetails(error),
+      ...additionalData,
+      timestamp: new Date().toISOString(),
+    });
+  },
+
+  logWarning: (context, message, additionalData = {}) => {
+    console.warn(`[${context}] warn:`, {
+      message,
+      ...additionalData,
+      timestamp: new Date().toISOString(),
+    });
+  },
+
+  logInfo: (context, message, additionalData = {}) => {
+    if (import.meta.env.DEV) {
+      console.info(`[${context}] info:`, {
+        message,
+        ...additionalData,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  },
+
+  logDebug: (context, message, additionalData = {}) => {
+    if (import.meta.env.DEV) {
+      console.debug(`[${context}] debug:`, {
+        message,
+        ...additionalData,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  },
+
+  handleError: (context, error, fallbackValue = null, additionalData = {}) => {
+    errorUtils.logError(context, error, additionalData);
+    return fallbackValue;
+  },
+
+  isNetworkError: (error) =>
+    error?.message?.includes('Failed to fetch') ||
+    error?.message?.includes('NetworkError') ||
+    error?.name === 'TypeError' ||
+    error?.code === 'NETWORK_ERROR',
+
+  getUserFriendlyMessage: (error) => {
+    const status = error?.status || error?.statusCode;
+    const statusMessages = {
+      400: '잘못된 요청입니다',
+      401: '인증이 필요합니다. 다시 로그인해주세요',
+      403: '접근 권한이 없습니다',
+      404: '요청한 데이터를 찾을 수 없습니다',
+      500: '서버 오류가 발생했습니다',
+      502: '서버 연결 오류가 발생했습니다',
+      503: '서비스를 일시적으로 사용할 수 없습니다',
+    };
+
+    if (status && statusMessages[status]) return statusMessages[status];
+    if (errorUtils.isNetworkError(error)) return '네트워크 연결을 확인해주세요';
+    if (error?.message && !error.message.includes('Error:')) return error.message;
+    return '오류가 발생했습니다. 잠시 후 다시 시도해주세요';
+  },
+};
 
 export const toNumberOrNull = (value) => {
   if (value === null || value === undefined) return null;
@@ -13,6 +89,22 @@ export const toTrimmedStringOrNull = (value) => {
   const s = String(value).trim();
   return s.length > 0 ? s : null;
 };
+
+/** 길이 초과 시 말줄임 (레이더 축 라벨 등) */
+export function truncateWithEllipsis(text, maxLen) {
+  if (!text) return '';
+  const s = String(text);
+  if (!maxLen || s.length <= maxLen) return s;
+  if (maxLen <= 1) return '…';
+  return `${s.slice(0, maxLen - 1)}…`;
+}
+
+/** 순환 인덱스 (화살표·형제 전환) */
+export function cycleIndex(index, length, delta = 1) {
+  if (!length || length < 1) return 0;
+  const base = Number.isFinite(index) && index >= 0 ? Math.trunc(index) : 0;
+  return (base + delta + length) % length;
+}
 
 export const toStringOrNull = (value) => (value == null ? null : String(value));
 
@@ -38,6 +130,12 @@ export const toFiniteNumber = (value) => {
   const converted = typeof value === 'number' ? value : Number(value);
   return Number.isFinite(converted) ? converted : NaN;
 };
+
+/** 관계 긍정도 −1~+1. 비유한 값은 0 */
+export function clampPositivity(positivity) {
+  const value = Number(positivity);
+  return Number.isFinite(value) ? Math.max(-1, Math.min(1, value)) : 0;
+}
 
 export const toPositiveNumberOrNull = (value) => {
   const num = toNumberOrNull(value);
@@ -114,12 +212,14 @@ export const deepClone = (value) => {
   try {
     if (typeof structuredClone === 'function') return structuredClone(value);
   } catch (error) {
-    console.warn('structuredClone 실패, JSON 직렬화로 대체합니다.', error);
+    errorUtils.logWarning('deepClone', 'structuredClone 실패, JSON 직렬화로 대체', {
+      message: error?.message,
+    });
   }
   try {
     return JSON.parse(JSON.stringify(value));
   } catch (error) {
-    console.error('deepClone 실패:', error);
+    errorUtils.logWarning('deepClone', 'JSON 직렬화 실패', { message: error?.message });
     return value;
   }
 };

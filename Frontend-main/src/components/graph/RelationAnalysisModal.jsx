@@ -1,31 +1,36 @@
 import { memo, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   GRAPH_LAYOUT_CONSTANTS,
+  RELATION_CONNECTION_KIND,
 } from "../../utils/graph/graphCore";
 import {Radar,RadarChart,PolarGrid,PolarAngleAxis,PolarRadiusAxis,ResponsiveContainer,} from 'recharts';
-import { getRelationStyle } from '../../utils/styles/relationStyles.js';
-import { GRAPH_COLORS } from '../../utils/styles/graphStyles.js';
+import { getPositivityDisplay, clampPositivity, getPositivityGradientCss, GRAPH_COLORS, brandAlpha } from '../../utils/styles/graphStyles.js';
+import { truncateWithEllipsis, cycleIndex } from '../../utils/common/valueUtils.js';
+import { PersonSilhouette } from './GraphControls';
 import './RelationGraph.css';
 
-const NAME_LABEL_MAX = 6;
-const RADAR_GRID = 'rgba(92, 111, 92, 0.22)';
+const NAME_LABEL_MAX = 11; // truncate 시 10자 + …
+const RADAR_GRID = brandAlpha(0.22);
 const RADAR_AXIS_TICK = '#6f7f6f';
-const RADAR_FILL = 'rgba(92, 111, 92, 0.14)';
+const RADAR_FILL = brandAlpha(0.14);
+const RADAR_RADIUS_TICK_LABELS = {
+  0: '−100%',
+  50: '0%',
+  100: '+100%',
+};
 
-function positivityDisplay(positivity) {
-  const { color, text } = getRelationStyle(positivity);
-  return {
-    color,
-    label: text,
-    percent: Math.round((Number(positivity) || 0) * 100),
-  };
-}
+const CONNECTION = RELATION_CONNECTION_KIND;
+const POSITIVITY_GRADIENT = getPositivityGradientCss();
 
-function truncateLabel(name) {
-  if (!name) return '';
-  if (name.length <= NAME_LABEL_MAX) return name;
-  return `${name.slice(0, NAME_LABEL_MAX - 1)}…`;
-}
+const SIBLING_NAV = [
+  { dir: -1, label: '이전 연결 인물로 분석 전환', text: '‹' },
+  { dir: 1, label: '다음 연결 인물로 분석 전환', text: '›' },
+];
+
+const FOCUSABLE_SELECTOR =
+  'button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
+const joinClasses = (...parts) => parts.filter(Boolean).join(' ');
 
 function RelationTagsRow({ tags }) {
   if (!tags?.length) return null;
@@ -39,7 +44,7 @@ function RelationTagsRow({ tags }) {
 }
 
 function PositivityChip({ positivity }) {
-  const { color, label, percent } = positivityDisplay(positivity);
+  const { color, label, percent } = getPositivityDisplay(positivity);
   return (
     <div className="tooltip-positivity-chip" style={{ '--pos-color': color }}>
       <span className="tooltip-positivity-label">{label}</span>
@@ -49,7 +54,7 @@ function PositivityChip({ positivity }) {
 }
 
 function NameWithDot({ name, positivity, fontSize = '1rem' }) {
-  const { color } = positivityDisplay(positivity);
+  const { color } = getPositivityDisplay(positivity);
   return (
     <div
       className="tooltip-name-with-dot"
@@ -72,7 +77,7 @@ const RadarDot = memo(function RadarDot({
   const fullData = payload?.name != null ? (dataMap.get(payload.name) || payload) : null;
   if (!payload || cx == null || cy == null || !fullData) return null;
 
-  const { color } = positivityDisplay(fullData.positivity);
+  const { color } = getPositivityDisplay(fullData.positivity);
   const isActive = activeName === payload.name;
   const radius = isActive ? 7 : 4.5;
 
@@ -127,10 +132,27 @@ const RadarDot = memo(function RadarDot({
   );
 });
 
+function SwitchAnalysisButton({ item, onSwitch }) {
+  if (!item || !onSwitch) return null;
+  return (
+    <button
+      type="button"
+      className="relation-modal-action-btn relation-modal-action-btn--secondary relation-modal-switch-inline"
+      onClick={(e) => {
+        e.stopPropagation();
+        onSwitch(item);
+      }}
+    >
+      이 인물로 분석 전환
+    </button>
+  );
+}
+
 function RelationList({
   items,
   activeName,
   onSelect,
+  onSwitch,
   emptyMessage,
 }) {
   if (!items?.length) {
@@ -143,15 +165,18 @@ function RelationList({
     <ul className="relation-modal-list" role="listbox" aria-label="연결된 인물 목록">
       {items.map((item) => {
         const active = activeName === item.name;
-        const { color, label, percent } = positivityDisplay(item.positivity);
+        const { color, label, percent } = getPositivityDisplay(item.positivity);
         return (
-          <li key={item.id || item.name}>
+          <li
+            key={item.id || item.name}
+            className={`relation-modal-list-item${active ? ' is-active' : ''}`}
+            style={{ '--item-pos-color': color }}
+            role="option"
+            aria-selected={active}
+          >
             <button
               type="button"
-              role="option"
-              aria-selected={active}
-              className={`relation-modal-list-item${active ? ' is-active' : ''}`}
-              style={{ '--item-pos-color': color }}
+              className="relation-modal-list-item-main"
               onClick={() => onSelect(item)}
             >
               <div className="relation-modal-list-item-head">
@@ -167,6 +192,7 @@ function RelationList({
               </div>
               <RelationTagsRow tags={item.relationTags} />
             </button>
+            {active ? <SwitchAnalysisButton item={item} onSwitch={onSwitch} /> : null}
           </li>
         );
       })}
@@ -177,9 +203,9 @@ function RelationList({
 /** −1~+1 긍정성 미니 스케일 (연결 적을 때 레이더 대체) */
 function PositivityScaleBar({ positivity }) {
   const value = Number.isFinite(Number(positivity)) ? Number(positivity) : 0;
-  const clamped = Math.max(-1, Math.min(1, value));
+  const clamped = clampPositivity(value);
   const pct = ((clamped + 1) / 2) * 100;
-  const { color, label } = positivityDisplay(clamped);
+  const { color, label } = getPositivityDisplay(clamped);
 
   return (
     <div
@@ -187,7 +213,10 @@ function PositivityScaleBar({ positivity }) {
       role="img"
       aria-label={`긍정성 ${label} (${clamped.toFixed(2)})`}
     >
-      <div className="relation-positivity-scale-track">
+      <div
+        className="relation-positivity-scale-track"
+        style={{ background: POSITIVITY_GRADIENT }}
+      >
         <span className="relation-positivity-scale-zero" />
         <span
           className="relation-positivity-scale-marker"
@@ -203,28 +232,35 @@ function PositivityScaleBar({ positivity }) {
   );
 }
 
-function RelationCard({ item, active, onSelect, sourceName }) {
+function RelationCard({ item, active, onSelect, onSwitch, sourceName }) {
   if (!item) return null;
 
   return (
-    <button
-      type="button"
+    <div
       className={`relation-card${active ? ' is-active' : ''}`}
-      aria-pressed={active}
-      onClick={() => onSelect(item)}
+      role="option"
+      aria-selected={active}
     >
-      <div className="relation-card-top">
-        <NameWithDot name={item.name} positivity={item.positivity} fontSize="1.05rem" />
-        <PositivityChip positivity={item.positivity} />
-      </div>
-      {sourceName ? (
-        <p className="relation-card-pair-hint">
-          {sourceName} ↔ {item.name}
-        </p>
-      ) : null}
-      <PositivityScaleBar positivity={item.positivity} />
-      <RelationTagsRow tags={item.relationTags} />
-    </button>
+      <button
+        type="button"
+        className="relation-card-main"
+        aria-pressed={active}
+        onClick={() => onSelect(item)}
+      >
+        <div className="relation-card-top">
+          <NameWithDot name={item.name} positivity={item.positivity} fontSize="1.05rem" />
+          <PositivityChip positivity={item.positivity} />
+        </div>
+        {sourceName ? (
+          <p className="relation-card-pair-hint">
+            {sourceName} ↔ {item.name}
+          </p>
+        ) : null}
+        <PositivityScaleBar positivity={item.positivity} />
+        <RelationTagsRow tags={item.relationTags} />
+      </button>
+      {active ? <SwitchAnalysisButton item={item} onSwitch={onSwitch} /> : null}
+    </div>
   );
 }
 
@@ -232,10 +268,11 @@ function FewConnectionsPanel({
   items,
   activeName,
   onSelect,
+  onSwitch,
   sourceName,
   connectionKind,
 }) {
-  const isPair = connectionKind === 'pair_connections';
+  const isPair = connectionKind === CONNECTION.PAIR;
   return (
     <div className="relation-few-panel">
       <div className="relation-modal-side-title">
@@ -258,6 +295,7 @@ function FewConnectionsPanel({
             item={item}
             active={activeName === item.name}
             onSelect={onSelect}
+            onSwitch={onSwitch}
             sourceName={sourceName}
           />
         ))}
@@ -266,23 +304,18 @@ function FewConnectionsPanel({
   );
 }
 
-export function PersonSilhouette({ size = 48, circleFill = GRAPH_COLORS.border, bodyFill = '#bdbdbd' }) {
-  const cx = size / 2;
-  return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} fill="none" aria-hidden>
-      <circle cx={cx} cy={cx} r={cx} fill={circleFill} />
-      <ellipse cx={cx} cy={size * 0.375} rx={size * 0.21} ry={size * 0.21} fill={bodyFill} />
-      <ellipse cx={cx} cy={size * 0.79} rx={size * 0.29} ry={size * 0.17} fill={bodyFill} />
-    </svg>
-  );
-}
-
 function PersonAvatar({ node, size = 40 }) {
   const hasImage = !!node?.hasImage && node?.image;
   return (
     <div className="relation-modal-avatar" style={{ width: size, height: size }}>
       {hasImage ? (
-        <img src={node.image} alt="" crossOrigin="anonymous" />
+        <img
+          src={node.image}
+          alt=""
+          crossOrigin="anonymous"
+          decoding="async"
+          loading="eager"
+        />
       ) : (
         <PersonSilhouette size={size} />
       )}
@@ -292,8 +325,6 @@ function PersonAvatar({ node, size = 40 }) {
 
 function RelationAnalysisModalImpl({
   node,
-  currentChapter,
-  chapterScopeLabel = null,
   radarChartData = [],
   connectionKind,
   loadError = null,
@@ -319,7 +350,7 @@ function RelationAnalysisModalImpl({
     const left = Math.max(0, Number(chapterRailWidth) || 0) + inset;
     // sufficient_connections: 노드 슬라이드바까지 덮어 레이더 영역을 최대화
     const rightPad =
-      connectionKind === 'sufficient_connections'
+      connectionKind === CONNECTION.SUFFICIENT
         ? 0
         : Math.max(0, Number(reserveRight) || 0);
     const right = rightPad + inset;
@@ -337,8 +368,6 @@ function RelationAnalysisModalImpl({
     return map;
   }, [radarChartData]);
 
-  const activeItem = activeName ? dataMap.get(activeName) : null;
-
   const activeIndex = radarChartData.findIndex((item) => item.name === activeName);
   switchTargetsRef.current = radarChartData;
   activeNameRef.current = activeName;
@@ -353,9 +382,9 @@ function RelationAnalysisModalImpl({
 
     const previouslyFocused = returnFocusRef?.current || document.activeElement;
     const getFocusable = () =>
-      [...root.querySelectorAll(
-        'button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-      )].filter((el) => !el.hasAttribute('disabled') && el.getAttribute('aria-hidden') !== 'true');
+      [...root.querySelectorAll(FOCUSABLE_SELECTOR)].filter(
+        (el) => !el.hasAttribute('disabled') && el.getAttribute('aria-hidden') !== 'true',
+      );
 
     closeBtnRef.current?.focus();
 
@@ -372,14 +401,12 @@ function RelationAnalysisModalImpl({
 
       if ((e.key === 'ArrowRight' || e.key === 'ArrowDown') && targets.length) {
         e.preventDefault();
-        const next = (Math.max(idx, 0) + 1) % targets.length;
-        setActiveName(targets[next].name);
+        setActiveName(targets[cycleIndex(idx, targets.length, 1)].name);
         return;
       }
       if ((e.key === 'ArrowLeft' || e.key === 'ArrowUp') && targets.length) {
         e.preventDefault();
-        const prev = (Math.max(idx, 0) - 1 + targets.length) % targets.length;
-        setActiveName(targets[prev].name);
+        setActiveName(targets[cycleIndex(idx, targets.length, -1)].name);
         return;
       }
 
@@ -420,22 +447,20 @@ function RelationAnalysisModalImpl({
 
   const goSibling = useCallback((direction) => {
     if (!radarChartData.length) return;
-    const base = activeIndex >= 0 ? activeIndex : 0;
-    const next = (base + direction + radarChartData.length) % radarChartData.length;
-    switchToRelated(radarChartData[next]);
+    switchToRelated(radarChartData[cycleIndex(activeIndex, radarChartData.length, direction)]);
   }, [radarChartData, activeIndex, switchToRelated]);
 
   const renderPolarAngleAxis = ({ payload, x: tickX, y: tickY, cx, cy }) => {
     const point = dataMap.get(payload.value);
     const color = point?.positivity !== undefined
-      ? positivityDisplay(point.positivity).color
+      ? getPositivityDisplay(point.positivity).color
       : RADAR_AXIS_TICK;
     const active = activeName === payload.value;
     const dx = tickX - cx;
     const dy = tickY - cy;
     const distance = Math.sqrt(dx * dx + dy * dy) || 1;
     const raw = payload.value || '';
-    const label = truncateLabel(raw);
+    const label = truncateWithEllipsis(raw, NAME_LABEL_MAX);
     const scale = (distance + Math.max(34, 20 + (label.length * 1.8))) / distance;
 
     return (
@@ -457,14 +482,9 @@ function RelationAnalysisModalImpl({
     );
   };
 
-  const formatRadarRadiusTick = (value) => {
-    if (value === 0) return '−100%';
-    if (value === 50) return '0%';
-    if (value === 100) return '+100%';
-    return '';
-  };
+  const formatRadarRadiusTick = (value) => RADAR_RADIUS_TICK_LABELS[value] ?? '';
 
-  const chartPanel = connectionKind === 'sufficient_connections' ? (
+  const chartPanel = connectionKind === CONNECTION.SUFFICIENT ? (
     <div className="relation-modal-chart" role="img" aria-label={`${node?.displayName} 관계 레이더 차트`}>
       <ResponsiveContainer width="100%" height="100%">
         <RadarChart
@@ -518,12 +538,13 @@ function RelationAnalysisModalImpl({
   ) : null;
 
   const isCardView =
-    connectionKind === 'single_connection' || connectionKind === 'pair_connections';
-  const isCompactModal =
-    isCardView || connectionKind === 'no_connections' || connectionKind === 'load_error';
+    connectionKind === CONNECTION.SINGLE || connectionKind === CONNECTION.PAIR;
+  const isEmptyKind =
+    connectionKind === CONNECTION.NONE || connectionKind === CONNECTION.ERROR;
+  const isCompactModal = isCardView || isEmptyKind;
 
   let bodyPanel = null;
-  if (connectionKind === 'load_error') {
+  if (connectionKind === CONNECTION.ERROR) {
     bodyPanel = (
       <div className="relation-modal-empty-message is-error" role="alert">
         <p>
@@ -537,11 +558,12 @@ function RelationAnalysisModalImpl({
         items={radarChartData}
         activeName={activeName}
         onSelect={activateItem}
+        onSwitch={onSelectRelatedNode ? switchToRelated : null}
         sourceName={node?.displayName}
         connectionKind={connectionKind}
       />
     );
-  } else if (connectionKind === 'no_connections') {
+  } else if (connectionKind === CONNECTION.NONE) {
     bodyPanel = (
       <div className="relation-modal-empty-message" role="status">
         <p>
@@ -557,44 +579,37 @@ function RelationAnalysisModalImpl({
           items={radarChartData}
           activeName={activeName}
           onSelect={activateItem}
+          onSwitch={onSelectRelatedNode ? switchToRelated : null}
         />
       </div>
     );
   }
 
-  const ctaRow = activeItem && onSelectRelatedNode && connectionKind !== 'no_connections' && connectionKind !== 'load_error' ? (
-    <div className="relation-modal-cta-row">
-      <button
-        type="button"
-        className="relation-modal-action-btn relation-modal-action-btn--secondary"
-        onClick={() => switchToRelated(activeItem)}
-      >
-        이 인물로 분석 전환
-      </button>
-    </div>
-  ) : null;
-
   const titleId = 'relation-analysis-modal-title';
-  const bodyClassName = [
+  const bodyClassName = joinClasses(
     'tooltip-modal-body',
     'relation-modal-body',
-    connectionKind === 'sufficient_connections' ? 'has-chart' : '',
-    isCardView ? 'is-card-view' : '',
-    connectionKind === 'no_connections' || connectionKind === 'load_error' ? 'is-empty-view' : '',
-  ].filter(Boolean).join(' ');
+    connectionKind === CONNECTION.SUFFICIENT && 'has-chart',
+    isCardView && 'is-card-view',
+    isEmptyKind && 'is-empty-view',
+  );
 
-  const containerClassName = [
+  const containerClassName = joinClasses(
     'modal-container',
     'relation-modal-container',
-    isCompactModal ? 'relation-modal-container--compact' : '',
-    connectionKind === 'pair_connections' ? 'is-pair' : '',
-    connectionKind === 'single_connection' ? 'is-single' : '',
-    connectionKind === 'no_connections' || connectionKind === 'load_error' ? 'is-empty' : '',
-  ].filter(Boolean).join(' ');
+    isCompactModal && 'relation-modal-container--compact',
+    connectionKind === CONNECTION.PAIR && 'is-pair',
+    connectionKind === CONNECTION.SINGLE && 'is-single',
+    isEmptyKind && 'is-empty',
+  );
 
   return (
     <div
-      className={`modal-overlay relation-modal-overlay--graph-page${isCompactModal ? ' is-compact' : ''}`}
+      className={joinClasses(
+        'modal-overlay',
+        'relation-modal-overlay--graph-page',
+        isCompactModal && 'is-compact',
+      )}
       style={overlayStyle}
       onClick={onClose}
       role="presentation"
@@ -614,12 +629,7 @@ function RelationAnalysisModalImpl({
               <h2 id={titleId} className="tooltip-modal-title">
                 {node?.displayName || '인물'} 관계 분석
               </h2>
-              {(chapterScopeLabel || currentChapter != null) && (
-                <span className="relation-modal-chip">
-                  {chapterScopeLabel || `챕터 ${currentChapter}`}
-                </span>
-              )}
-              {connectionKind === 'load_error' ? (
+              {connectionKind === CONNECTION.ERROR ? (
                 <span className="relation-modal-chip relation-modal-chip--error">로드 실패</span>
               ) : (
                 <span className="relation-modal-chip">연결 {radarChartData.length}명</span>
@@ -629,22 +639,17 @@ function RelationAnalysisModalImpl({
           <div className="relation-modal-header-actions">
             {onSelectRelatedNode && radarChartData.length > 1 && (
               <div className="relation-modal-switcher">
-                <button
-                  type="button"
-                  className="relation-modal-nav-btn"
-                  aria-label="이전 연결 인물로 분석 전환"
-                  onClick={() => goSibling(-1)}
-                >
-                  ‹
-                </button>
-                <button
-                  type="button"
-                  className="relation-modal-nav-btn"
-                  aria-label="다음 연결 인물로 분석 전환"
-                  onClick={() => goSibling(1)}
-                >
-                  ›
-                </button>
+                {SIBLING_NAV.map(({ dir, label, text }) => (
+                  <button
+                    key={label}
+                    type="button"
+                    className="relation-modal-nav-btn"
+                    aria-label={label}
+                    onClick={() => goSibling(dir)}
+                  >
+                    {text}
+                  </button>
+                ))}
               </div>
             )}
             <button
@@ -659,12 +664,15 @@ function RelationAnalysisModalImpl({
           </div>
         </div>
 
-        {connectionKind === 'sufficient_connections' ? (
+        {connectionKind === CONNECTION.SUFFICIENT ? (
           <div className="relation-modal-legend" aria-hidden="false">
             <span className="relation-modal-legend-label">긍정성</span>
             <div className="relation-modal-legend-bar">
               <span>부정 (−100%)</span>
-              <span className="relation-modal-legend-gradient" />
+              <span
+                className="relation-modal-legend-gradient"
+                style={{ background: POSITIVITY_GRADIENT }}
+              />
               <span>긍정 (+100%)</span>
             </div>
           </div>
@@ -674,7 +682,6 @@ function RelationAnalysisModalImpl({
           {chartPanel}
           {bodyPanel}
         </div>
-        {ctaRow}
       </div>
     </div>
   );

@@ -20,8 +20,9 @@ import {
   GRAPH_IMAGE_DEFERRED_RETRY_MS,
 } from '../common/urlUtils';
 import { resolveChapterIndex, toPositiveInt, toPositiveNumberOrNull, asArray } from '../common/valueUtils';
-import { cacheKeyUtils, eventUtils, ELEMENTS_TO_RELATIONS_OPTS } from './viewerCore';
+import { cacheKeyUtils, eventUtils, ELEMENTS_TO_RELATIONS_OPTS, formatChapterOrdinalLabel } from './viewerCore';
 import { resolveServerEventMatch } from './viewerSession';
+import { getChapterData } from '../common/cache/manifestCache.js';
 
 export const DEFAULT_GRAPH_TRANSFORM_DEPS = {
   createCharacterMaps,
@@ -298,3 +299,73 @@ export const graphDataTransformUtils = {
     );
   },
 };
+
+/** 분할 그래프 API 에러 → 패널 표시용 */
+export function normalizeGraphApiError(raw) {
+  if (!raw) return null;
+  if (typeof raw === 'string') {
+    return {
+      message: '그래프 데이터를 불러올 수 없습니다',
+      details: raw,
+      retry: null,
+    };
+  }
+  return raw;
+}
+
+/** 분할 그래프 로딩 카피 */
+export function getViewerGraphLoadingNotice(isGraphRefreshing, isLocationDetermined, transitionType) {
+  if (isGraphRefreshing) {
+    return {
+      title: '이벤트 반영 중',
+      description: '현재 위치의 이벤트를 확정한 뒤 해당 그래프만 불러옵니다.',
+    };
+  }
+  if (!isLocationDetermined) {
+    return {
+      title: '위치 정보를 확인하는 중',
+      description: '현재 읽고 있는 위치를 파악하고 있습니다. 잠시만 기다려 주세요.',
+    };
+  }
+  if (transitionType === 'chapter') {
+    return {
+      title: '챕터 전환 중',
+      description: '새 챕터의 이벤트를 계산한 뒤 맞는 그래프만 표시합니다.',
+    };
+  }
+  return {
+    title: '그래프 정보를 불러오는 중',
+    description: '인물 관계 데이터를 불러오고 있습니다.',
+  };
+}
+
+/** 분할 상단바용 챕터 번호 해석·라벨 */
+export function resolveViewerSplitChapterMeta(bookId, currentChapter) {
+  const rawChapter = Number(currentChapter);
+  const hasValidChapter = Number.isFinite(rawChapter) && rawChapter >= 1;
+  const displayChapter = hasValidChapter ? rawChapter : null;
+
+  if (bookId == null) {
+    return {
+      resolvedServerChapter: displayChapter,
+      chapterDisplayLabel: formatChapterOrdinalLabel(displayChapter),
+    };
+  }
+
+  const byCurrent = getChapterData(bookId, currentChapter);
+  const resolvedFromData = byCurrent ? resolveChapterIndex(byCurrent) : null;
+  // manifest에 없으면 fallback 1로 API/표시를 속이지 않음
+  const resolvedServerChapter = resolvedFromData ?? displayChapter;
+
+  if (resolvedServerChapter == null) {
+    return {
+      resolvedServerChapter: null,
+      chapterDisplayLabel: formatChapterOrdinalLabel(null),
+    };
+  }
+
+  return {
+    resolvedServerChapter,
+    chapterDisplayLabel: formatChapterOrdinalLabel(resolvedServerChapter),
+  };
+}

@@ -13,6 +13,17 @@ export function useLatestRef(value) {
   return ref;
 }
 
+/** imperative handle 슬롯: mount 시 할당, unmount 시 null */
+export function useRefSlot(slotRef, value) {
+  useEffect(() => {
+    if (!slotRef) return undefined;
+    slotRef.current = value;
+    return () => {
+      slotRef.current = null;
+    };
+  }, [slotRef, value]);
+}
+
 /** 비동기 effect race 방지용 request id */
 export function useAsyncRequestGuard() {
   const requestIdRef = useRef(0);
@@ -75,7 +86,7 @@ export function useLocalStorageNumber(key, initialValue, options = {}) {
       try {
         localStorage.setItem(key, sanitizedInitial.toString());
       } catch (error) {
-        console.error(`[useLocalStorageNumber] 초기값 강제 저장 실패 (key: ${key}):`, error);
+        errorUtils.logWarning('useLocalStorageNumber', '초기값 강제 저장 실패', { key, message: error?.message });
       }
       return sanitizedInitial;
     }
@@ -85,7 +96,7 @@ export function useLocalStorageNumber(key, initialValue, options = {}) {
       const parsedValue = item ? Number(item) : sanitizedInitial;
       return isNaN(parsedValue) ? sanitizedInitial : parsedValue;
     } catch (error) {
-      console.error(`[useLocalStorageNumber] 초기값 로드 실패 (key: ${key}):`, error);
+      errorUtils.logWarning('useLocalStorageNumber', '초기값 로드 실패', { key, message: error?.message });
       return sanitizedInitial;
     }
   });
@@ -107,7 +118,7 @@ export function useLocalStorageNumber(key, initialValue, options = {}) {
         detail: { key, newValue: numericValue.toString() }
       }));
     } catch (error) {
-      console.error(`[useLocalStorageNumber] 저장 실패 (key: ${key}):`, error);
+      errorUtils.logWarning('useLocalStorageNumber', '저장 실패', { key, message: error?.message });
       setStoredValue(previousValue);
     }
   }, [key, storedValue]);
@@ -121,7 +132,7 @@ export function useLocalStorageNumber(key, initialValue, options = {}) {
             setStoredValue(parsedValue);
           }
         } catch (error) {
-          console.error(`[useLocalStorageNumber] storage 이벤트 처리 실패 (key: ${key}):`, error);
+          errorUtils.logWarning('useLocalStorageNumber', 'storage 이벤트 처리 실패', { key, message: error?.message });
         }
       }
     };

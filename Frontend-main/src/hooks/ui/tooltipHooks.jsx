@@ -1,13 +1,28 @@
 /** 툴팁: 외부 클릭 감지·드래그 위치·활성 툴팁 상태 */
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { constrainToGraphCanvas, constrainToWindow } from '../../utils/graph/graphCy';
 
-function constrainTooltipPosition(bounds, x, y, width, height) {
+/** {x,y} 중심점이 유효하면 그대로, 아니면 null */
+export function resolveCanvasAvoidPoint(center) {
+  if (center && Number.isFinite(center.x) && Number.isFinite(center.y)) return center;
+  return null;
+}
+
+export function useCanvasAvoidPoint(center) {
+  const x = center?.x;
+  const y = center?.y;
+  return useMemo(
+    () => (Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null),
+    [x, y],
+  );
+}
+
+function constrainTooltipPosition(bounds, x, y, width, height, boundsRect = null) {
   if (bounds === 'window') {
     return constrainToWindow(x, y, width, height);
   }
-  return constrainToGraphCanvas(x, y, width, height);
+  return constrainToGraphCanvas(x, y, width, height, boundsRect);
 }
 
 const TOOLTIP_CLEAR_DELAY_MS = 150;
@@ -173,6 +188,7 @@ export function useTooltipState({
  *   bounds?: 'canvas' | 'window',
  *   avoidPoint?: { x: number, y: number } | null,
  *   avoidPad?: number,
+ *   boundsRef?: { current: HTMLElement | null } | null,
  * }} [options]
  *   bounds: 'canvas'(기본) 그래프 영역 / 'window' 뷰포트(뷰어 툴팁용)
  *   avoidPoint: 클릭/선택 focus를 가리지 않도록 실측 후 재배치
@@ -182,6 +198,7 @@ export function useTooltipPosition(initialX, initialY, options = {}) {
   const bounds = options.bounds === 'window' ? 'window' : 'canvas';
   const avoidPoint = options.avoidPoint ?? null;
   const avoidPad = Number.isFinite(options.avoidPad) ? options.avoidPad : 48;
+  const boundsRef = options.boundsRef ?? null;
   const avoidX = avoidPoint && Number.isFinite(avoidPoint.x) ? avoidPoint.x : null;
   const avoidY = avoidPoint && Number.isFinite(avoidPoint.y) ? avoidPoint.y : null;
   const [position, setPosition] = useState({ x: 200, y: 200 });
@@ -191,6 +208,11 @@ export function useTooltipPosition(initialX, initialY, options = {}) {
   const tooltipRef = useRef(null);
   const dragOffsetRef = useRef({ x: 0, y: 0 });
   const isDraggingRef = useRef(false);
+  const [layoutRevision, setLayoutRevision] = useState(0);
+
+  const readBoundsRect = useCallback(() => {
+    return boundsRef?.current?.getBoundingClientRect?.() ?? null;
+  }, [boundsRef]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -236,6 +258,7 @@ export function useTooltipPosition(initialX, initialY, options = {}) {
           newY,
           tooltipRect.width,
           tooltipRect.height,
+          readBoundsRect(),
         ),
       );
       setHasDragged(true);
@@ -262,7 +285,39 @@ export function useTooltipPosition(initialX, initialY, options = {}) {
       window.removeEventListener('mouseup', handleMouseUp);
       document.body.style.userSelect = '';
     };
-  }, [enabled, isDragging, bounds]);
+  }, [enabled, isDragging, bounds, readBoundsRect]);
+
+  useEffect(() => {
+    if (!enabled || typeof ResizeObserver === 'undefined') return undefined;
+    let updateTimer = 0;
+    const observer = new ResizeObserver(() => {
+      if (updateTimer) window.clearTimeout(updateTimer);
+      updateTimer = window.setTimeout(() => {
+        updateTimer = 0;
+        setLayoutRevision((value) => value + 1);
+      }, 50);
+    });
+    if (tooltipRef.current) observer.observe(tooltipRef.current);
+    if (boundsRef?.current) observer.observe(boundsRef.current);
+    return () => {
+      observer.disconnect();
+      if (updateTimer) window.clearTimeout(updateTimer);
+    };
+  }, [enabled, boundsRef]);
+
+  useEffect(() => {
+    if (!enabled || !hasDragged || isDragging || !tooltipRef.current) return;
+    const rect = tooltipRef.current.getBoundingClientRect();
+    setPosition((current) =>
+      constrainTooltipPosition(
+        bounds,
+        current.x,
+        current.y,
+        rect.width,
+        rect.height,
+        readBoundsRect(),
+      ));
+  }, [enabled, hasDragged, isDragging, bounds, layoutRevision, readBoundsRect]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -279,7 +334,14 @@ export function useTooltipPosition(initialX, initialY, options = {}) {
     const tooltipRect = tooltipRef.current.getBoundingClientRect();
     const width = tooltipRect.width || 1;
     const height = tooltipRect.height || 1;
-    let next = constrainTooltipPosition(bounds, initialX, initialY, width, height);
+    let next = constrainTooltipPosition(
+      bounds,
+      initialX,
+      initialY,
+      width,
+      height,
+      readBoundsRect(),
+    );
 
     if (avoidX != null && avoidY != null) {
       const tip = {
@@ -307,7 +369,14 @@ export function useTooltipPosition(initialX, initialY, options = {}) {
         let best = next;
         let bestDist = Infinity;
         for (const c of candidates) {
-          const p = constrainTooltipPosition(bounds, c.x, c.y, width, height);
+          const p = constrainTooltipPosition(
+            bounds,
+            c.x,
+            c.y,
+            width,
+            height,
+            readBoundsRect(),
+          );
           const covers =
             avoidX >= p.x - 4 &&
             avoidX <= p.x + width + 4 &&
@@ -336,6 +405,8 @@ export function useTooltipPosition(initialX, initialY, options = {}) {
     avoidX,
     avoidY,
     avoidPad,
+    layoutRevision,
+    readBoundsRect,
   ]);
 
   if (!enabled) {

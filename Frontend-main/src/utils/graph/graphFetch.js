@@ -263,13 +263,23 @@ const saveToLocalStorageCache = (cacheKey, data) => {
   saveToStorage(cacheKey, { ...data, _savedAt: Date.now() }, 'localStorage');
 };
 
-export const hasMacroGraphStorageCache = (bookId, chapter) => {
+function resolveMacroCacheRefs(bookId, chapter) {
   const normalizedBookId = toPositiveInt(bookId);
   const normalizedChapter = toPositiveInt(chapter);
-  if (!isValidChapterRef(normalizedBookId, normalizedChapter)) return false;
-  if (macroSessionCache.has(cacheKeyUtils.macroSession(normalizedBookId, normalizedChapter))) return true;
-  const cacheKey = cacheKeyUtils.macroGraphStorage(normalizedBookId, normalizedChapter);
-  return hasGraphPayload(checkLocalStorageCache(cacheKey));
+  if (!isValidChapterRef(normalizedBookId, normalizedChapter)) return null;
+  return {
+    bookId: normalizedBookId,
+    chapter: normalizedChapter,
+    sessionKey: cacheKeyUtils.macroSession(normalizedBookId, normalizedChapter),
+    storageKey: cacheKeyUtils.macroGraphStorage(normalizedBookId, normalizedChapter),
+  };
+}
+
+export const hasMacroGraphStorageCache = (bookId, chapter) => {
+  const refs = resolveMacroCacheRefs(bookId, chapter);
+  if (!refs) return false;
+  if (macroSessionCache.has(refs.sessionKey)) return true;
+  return hasGraphPayload(checkLocalStorageCache(refs.storageKey));
 };
 
 const handleLoaderSuccess = (data, onSuccess, cacheKey) => {
@@ -289,23 +299,25 @@ const processApiResponse = (response, cacheKey, onSuccess, bookId, chapter, onEr
 
   const apiError = new Error(response?.message || 'API 응답이 실패했습니다');
   apiError.status = response?.code || null;
-  errorUtils.logWarning('GraphDataLoader', 'API 응답 실패', { bookId, chapter, response });
+  errorUtils.logWarning('GraphDataLoader', 'API 응답 실패', {
+    bookId,
+    chapter,
+    response,
+  });
   onError?.(apiError);
   return null;
 };
 
 export const prefetchMacroGraphToCache = async (bookId, chapter, apiCall) => {
-  const normalizedBookId = toPositiveInt(bookId);
-  const normalizedChapter = toPositiveInt(chapter);
-  if (!isValidChapterRef(normalizedBookId, normalizedChapter)) return;
-  if (macroSessionCache.has(cacheKeyUtils.macroSession(normalizedBookId, normalizedChapter))) return;
-  const cacheKey = cacheKeyUtils.macroGraphStorage(normalizedBookId, normalizedChapter);
-  if (hasGraphPayload(checkLocalStorageCache(cacheKey))) return;
+  const refs = resolveMacroCacheRefs(bookId, chapter);
+  if (!refs) return;
+  if (macroSessionCache.has(refs.sessionKey)) return;
+  if (hasGraphPayload(checkLocalStorageCache(refs.storageKey))) return;
   try {
-    const response = await withInflight(inflightRequests, cacheKey, apiCall);
+    const response = await withInflight(inflightRequests, refs.storageKey, apiCall);
     if (response?.isSuccess && response?.result && hasGraphPayload(response.result)) {
-      saveToLocalStorageCache(cacheKey, response.result);
-      saveMacroToSessionCache(normalizedBookId, normalizedChapter, response.result);
+      saveToLocalStorageCache(refs.storageKey, response.result);
+      saveMacroToSessionCache(refs.bookId, refs.chapter, response.result);
     }
   } catch {
     /* 프리페치 실패 무시 */
@@ -532,13 +544,16 @@ function readEdgePositivityValue(edgeOrRelation) {
   return Number.isFinite(n) ? finitePositivityOrZero(n) : null;
 }
 
-function collectIndexedRelationEvents(lastEventIdx, lastOnly, getEdgeAt) {
-  const relationEvents = [];
-  const indices = lastOnly
+function walkEventIndices(lastEventIdx, lastOnly) {
+  if (!(lastEventIdx > 0)) return [];
+  return lastOnly
     ? Array.from({ length: lastEventIdx }, (_, i) => lastEventIdx - i)
     : Array.from({ length: lastEventIdx }, (_, i) => i + 1);
+}
 
-  for (const idx of indices) {
+function collectIndexedRelationEvents(lastEventIdx, lastOnly, getEdgeAt) {
+  const relationEvents = [];
+  for (const idx of walkEventIndices(lastEventIdx, lastOnly)) {
     const edge = getEdgeAt(idx);
     if (!edge) continue;
     const positivity = readEdgePositivityValue(edge);
@@ -605,11 +620,8 @@ async function collectRelationEventsViaApi(fetchEventData, chapter, lastEventIdx
 
   const relationEvents = [];
   const failedIds = [];
-  const indices = lastOnly
-    ? Array.from({ length: lastEventIdx }, (_, i) => lastEventIdx - i)
-    : Array.from({ length: lastEventIdx }, (_, i) => i + 1);
 
-  for (const idx of indices) {
+  for (const idx of walkEventIndices(lastEventIdx, lastOnly)) {
     try {
       const event = relationEventFromApiResult(await fetchEventData(chapter, idx), id1, id2, idx);
       if (!event) continue;

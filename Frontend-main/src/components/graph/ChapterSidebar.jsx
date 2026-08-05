@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
+import { BookOpen, ChevronLeft, ChevronRight } from 'lucide-react';
 import { buildChapterSidebarItems } from '../../utils/graph/graphCore.js';
 import { useIsNarrowViewport } from '../../hooks/graph/useGraphViewState.js';
 import './RelationGraph.css';
@@ -140,9 +141,7 @@ export default function ChapterSidebar({
           aria-label={toggleLabel}
           aria-expanded={false}
         >
-          <span className="material-symbols-outlined" aria-hidden>
-            menu_book
-          </span>
+          <BookOpen size={20} aria-hidden />
         </button>
       ) : null}
 
@@ -160,9 +159,11 @@ export default function ChapterSidebar({
             aria-label={toggleLabel}
             aria-expanded={isSidebarOpen}
           >
-            <span className="material-symbols-outlined" aria-hidden>
-              {isSidebarOpen ? 'chevron_left' : 'chevron_right'}
-            </span>
+            {isSidebarOpen ? (
+              <ChevronLeft size={20} aria-hidden />
+            ) : (
+              <ChevronRight size={20} aria-hidden />
+            )}
           </button>
           {isSidebarOpen ? (
             <span className="graph-chapter-rail-title">챕터</span>

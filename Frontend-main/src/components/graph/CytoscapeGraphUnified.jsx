@@ -1,12 +1,16 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import PropTypes from "prop-types";
 import cytoscape from "cytoscape";
+import { UserSearch } from "lucide-react";
 import {
   detectAndResolveOverlap,
   OVERLAP_RESOLVE,
+  OVERLAP_PROFILES,
+  readNodeRadius,
   buildElementsGraphFingerprint,
   buildElementsStructureFingerprint,
   visualElementSignature,
+  visualSignatureImagePart,
 } from "../../utils/graph/graphModel.js";
 import {
   applySearchFadeEffect,
@@ -16,13 +20,19 @@ import {
   isGraphContainerSizeReady,
   syncReciprocalPairJunctionOffsets,
   clearHighlightClassesOn,
-  calculateSpiralPlacement,
-  fitGraphToNodes,
+  calculateAnchorAwarePlacement,
   zoomGraphByFactor,
+  fitGraphViewportInContainer,
+  safeCyCall,
+  syncCyElementData,
+  elementDefIdSet,
+  collectContinuingNodeLayoutSeed,
+  stableIdListKey,
 } from "../../utils/graph/graphCy.js";
 import { GRAPH_ZOOM } from "../../utils/graph/graphCore.js";
 import {
   applyNormalizedNodeSizes,
+  getResponsiveNodeSizeRange,
   PRESET_LAYOUT,
 } from "../../utils/styles/graphStyles.js";
 import {
@@ -30,7 +40,14 @@ import {
   useGraphLayout,
   useCyInstance,
 } from '../../hooks/graph/useGraphCy.js';
+import { useRefSlot } from '../../hooks/common/hooksShared.js';
 import { eventUtils } from "../../utils/viewer/viewerCore";
+import { errorUtils } from "../../utils/common/urlUtils";
+
+const ZOOM_CONTROL_BUTTONS = [
+  { factor: GRAPH_ZOOM.STEP, label: '그래프 확대', title: '확대', text: '+' },
+  { factor: 1 / GRAPH_ZOOM.STEP, label: '그래프 축소', title: '축소', text: '−' },
+];
 
 function GraphZoomControls({ cy, className = 'graph-zoom-controls' }) {
   const handleZoom = useCallback((e, factor) => {
@@ -46,24 +63,18 @@ function GraphZoomControls({ cy, className = 'graph-zoom-controls' }) {
       onClick={(e) => e.stopPropagation()}
       onMouseDown={(e) => e.stopPropagation()}
     >
-      <button
-        type="button"
-        className="graph-zoom-btn"
-        onClick={(e) => handleZoom(e, GRAPH_ZOOM.STEP)}
-        aria-label="그래프 확대"
-        title="확대"
-      >
-        +
-      </button>
-      <button
-        type="button"
-        className="graph-zoom-btn"
-        onClick={(e) => handleZoom(e, 1 / GRAPH_ZOOM.STEP)}
-        aria-label="그래프 축소"
-        title="축소"
-      >
-        −
-      </button>
+      {ZOOM_CONTROL_BUTTONS.map(({ factor, label, title, text }) => (
+        <button
+          key={label}
+          type="button"
+          className="graph-zoom-btn"
+          onClick={(e) => handleZoom(e, factor)}
+          aria-label={label}
+          title={title}
+        >
+          {text}
+        </button>
+      ))}
     </div>
   );
 }
@@ -81,6 +92,7 @@ const EMPTY_ELEMENTS_UPDATE = {
   hasChanges: false,
   dataChangedIds: [],
   incrementalLayoutScope: false,
+  needsLocalReorder: false,
 };
 
 const isEmpty = (arr) => !arr || arr.length === 0;
@@ -99,14 +111,12 @@ const CytoscapeGraphUnified = ({
   selectedElementRef,
   graphClearRef = null,
   graphSelectNodeRef = null,
+  graphSelectElementRef = null,
   isDataRefreshing = false,
-  currentChapter,
-  /** 변경 시 fit 재실행. 없으면 currentChapter만 사용 */
-  viewportRefitKey,
-  /** true면 viewportRefitKey 변경으로 fit하지 않음 (이벤트 전환 중 등) */
-  skipViewportRefit = false,
   showZoomControls = true,
   onCyReady = null,
+  /** 챕터 전환 등 뷰포트 재맞춤 트리거 (값이 바뀌면 전체 fit) */
+  viewportFitKey = null,
 }) => {
   const containerRef = useRef(null);
   const [isGraphVisible, setIsGraphVisible] = useState(false);
@@ -114,20 +124,24 @@ const CytoscapeGraphUnified = ({
   const elementsVisualSigRef = useRef(new Map());
   const lastElementsGraphFingerprintRef = useRef("");
   const prevStructureFingerprintRef = useRef("");
-  const resolvedRefitKey =
-    viewportRefitKey != null && String(viewportRefitKey) !== ""
-      ? String(viewportRefitKey)
-      : currentChapter != null && currentChapter !== ""
-        ? String(currentChapter)
-        : "";
-  const prevRefitKeyRef = useRef(resolvedRefitKey);
+  const initialStylesheetRef = useRef(stylesheet);
+  initialStylesheetRef.current = stylesheet;
   const [isInitialLoad, setIsInitialLoad] = useState(true);
-  /** 챕터/이벤트 키 변경 후, 다음 elements 적용 시에만 fit */
-  const pendingViewportFitRef = useRef(null);
-  const [elementsApplyGen, setElementsApplyGen] = useState(0);
-  const elementsApplyGenRef = useRef(0);
-  elementsApplyGenRef.current = elementsApplyGen;
+  const pendingInitialFitRef = useRef(false);
+  /** 챕터 전환 직후 이전 fingerprint와 같으면 fit 보류 */
+  const blockFitWhileFingerprintRef = useRef(null);
+  const lastViewportFitKeyRef = useRef(viewportFitKey);
+  const elementsGraphFingerprintRef = useRef("");
   const cy = useCyInstance(externalCyRef, cyReady);
+
+  // 챕터 전환: 새 elements 레이아웃/resize에서 fit
+  useEffect(() => {
+    if (viewportFitKey == null || viewportFitKey === '') return;
+    if (lastViewportFitKeyRef.current === viewportFitKey) return;
+    lastViewportFitKeyRef.current = viewportFitKey;
+    pendingInitialFitRef.current = true;
+    blockFitWhileFingerprintRef.current = elementsGraphFingerprintRef.current || "";
+  }, [viewportFitKey]);
 
   useEffect(() => {
     if (!onCyReady) return undefined;
@@ -143,42 +157,39 @@ const CytoscapeGraphUnified = ({
     () => (isEmpty(elements) ? "" : buildElementsGraphFingerprint(elements)),
     [elements]
   );
+  elementsGraphFingerprintRef.current = elementsGraphFingerprint;
   const elementsLength = Array.isArray(elements) ? elements.length : 0;
 
-  const fitNodeIdsKey = useMemo(() => {
-    if (!fitNodeIds?.length) return "";
-    return [...fitNodeIds].map(String).sort().join("\x1f");
-  }, [fitNodeIds]);
-
-  const safeCyOperation = useCallback((operation) => {
-    try {
-      return operation();
-    } catch (err) {
-      if (import.meta.env?.DEV) {
-        console.warn("[CytoscapeGraphUnified] cy operation failed:", err);
-      }
-      return null;
-    }
+  const canApplyPendingViewportFit = useCallback(() => {
+    const blocked = blockFitWhileFingerprintRef.current;
+    if (blocked == null) return true;
+    return elementsGraphFingerprintRef.current !== blocked;
   }, []);
 
-  const resetGraphTrackingState = () => {
-    elementsVisualSigRef.current = new Map();
-    lastElementsGraphFingerprintRef.current = "";
-    prevStructureFingerprintRef.current = "";
-  };
+  const clearPendingViewportFitBlock = useCallback(() => {
+    blockFitWhileFingerprintRef.current = null;
+  }, []);
 
-  const updateStylesheet = useCallback((cy) => {
-    if (!cy || !stylesheet) return;
-    
-    return safeCyOperation(() => {
-      cy.style(stylesheet);
-      cy.style().update();
+  const fitNodeIdsKey = useMemo(
+    () => stableIdListKey(fitNodeIds),
+    [fitNodeIds],
+  );
+
+  const updateStylesheet = useCallback((cyInst) => {
+    if (!cyInst || !stylesheet) return;
+    return safeCyCall(cyInst, () => {
+      cyInst.style(stylesheet);
+      cyInst.style().update();
       return true;
-    });
-  }, [stylesheet, safeCyOperation]);
+    }, 'CytoscapeGraphUnified:style');
+  }, [stylesheet]);
 
-  const applyNodeSizes = useCallback((cy, nodes, scale = 1) => {
-    applyNormalizedNodeSizes(cy, { scaledNodes: nodes, scale });
+  const applyNodeSizes = useCallback((cyInst, nodes, scale = 1) => {
+    applyNormalizedNodeSizes(cyInst, {
+      scaledNodes: nodes,
+      scale,
+      containerWidth: containerRef.current?.clientWidth,
+    });
   }, []);
 
   const reapplySearchFade = useCallback(() => {
@@ -193,6 +204,7 @@ const CytoscapeGraphUnified = ({
     clearSelection,
     reapplySelectionHighlight,
     selectNodeByIdOrName,
+    selectElementById,
   } = useGraphInteractions({
     cyRef: externalCyRef,
     onShowNodeTooltip,
@@ -202,45 +214,9 @@ const CytoscapeGraphUnified = ({
     onAfterReset: reapplySearchFade,
   });
 
-  useEffect(() => {
-    if (!graphClearRef) return undefined;
-    graphClearRef.current = clearSelection;
-    return () => {
-      graphClearRef.current = null;
-    };
-  }, [graphClearRef, clearSelection]);
-
-  useEffect(() => {
-    if (!graphSelectNodeRef) return undefined;
-    graphSelectNodeRef.current = selectNodeByIdOrName;
-    return () => {
-      graphSelectNodeRef.current = null;
-    };
-  }, [graphSelectNodeRef, selectNodeByIdOrName]);
-
-  // viewport/챕터 키가 바뀌면 fit을 예약. 새 elements 적용 후에만 실제 fit (조기 소비 방지)
-  useEffect(() => {
-    if (!cy) return;
-
-    if (
-      skipViewportRefit ||
-      resolvedRefitKey === "" ||
-      resolvedRefitKey === prevRefitKeyRef.current
-    ) {
-      return;
-    }
-
-    setIsInitialLoad(true);
-    pendingViewportFitRef.current = {
-      applyGenWhenArmed: elementsApplyGenRef.current,
-    };
-    resetGraphTrackingState();
-    prevRefitKeyRef.current = resolvedRefitKey;
-  }, [
-    cy,
-    resolvedRefitKey,
-    skipViewportRefit,
-  ]);
+  useRefSlot(graphClearRef, clearSelection);
+  useRefSlot(graphSelectNodeRef, selectNodeByIdOrName);
+  useRefSlot(graphSelectElementRef, selectElementById);
 
   useEffect(() => {
     if (!containerRef.current) {
@@ -249,7 +225,8 @@ const CytoscapeGraphUnified = ({
 
     let cyInstance;
     let didCreateInstance = false;
-    let overlapTimeoutId = 0;
+    let overlapRafId = 0;
+    let activeDragNode = null;
 
     try {
       cyInstance = externalCyRef?.current;
@@ -261,11 +238,12 @@ const CytoscapeGraphUnified = ({
         cyInstance = cytoscape({
           container: containerRef.current,
           elements: [],
-          style: stylesheet,
+          style: initialStylesheetRef.current,
           layout: PRESET_LAYOUT,
+          pixelRatio: 'auto',
           userZoomingEnabled: true,
           userPanningEnabled: true,
-          wheelSensitivity: 1,
+          wheelSensitivity: GRAPH_ZOOM.WHEEL_SENSITIVITY,
           minZoom: GRAPH_ZOOM.MIN,
           maxZoom: GRAPH_ZOOM.MAX,
           autoungrabify: false,
@@ -281,9 +259,9 @@ const CytoscapeGraphUnified = ({
         cyInstance.mount(containerRef.current);
       }
     } catch (err) {
-      if (import.meta.env?.DEV) {
-        console.warn("[CytoscapeGraphUnified] cy init failed:", err);
-      }
+      errorUtils.logDebug('CytoscapeGraphUnified', 'cy init failed', {
+        message: err?.message,
+      });
       return;
     }
 
@@ -291,20 +269,52 @@ const CytoscapeGraphUnified = ({
       return;
     }
 
-    const handleDragFreeOn = () => {
-      if (overlapTimeoutId) window.clearTimeout(overlapTimeoutId);
-      overlapTimeoutId = window.setTimeout(() => {
-        overlapTimeoutId = 0;
-        detectAndResolveOverlap(cyInstance, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE, {
-          maxIterations: OVERLAP_RESOLVE.MAX_ITERATIONS_LIGHT,
-          padding: OVERLAP_RESOLVE.PADDING,
-        });
-        syncReciprocalPairJunctionOffsets(cyInstance, { immediate: true });
-      }, 50);
+    /** 드래그 노드 좌표는 고정, 겹친 주변만 밀어냄 (앵커 배치 로직 미적용) */
+    const resolveUserDragCollisions = (draggedNode, { clampBounds = false } = {}) => {
+      if (!draggedNode || draggedNode.length === 0) return;
+      if (clampBounds && isGraphContainerSizeReady(containerRef.current)) {
+        ensureElementsInBounds(cyInstance, containerRef.current, { nodes: draggedNode });
+      }
+      const profile = OVERLAP_PROFILES.USER_DRAG;
+      const draggedPos = draggedNode.position();
+      const draggedRadius = readNodeRadius(draggedNode, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE);
+      const proximity = Math.max(0, (profile.padding ?? 0) - (profile.tolerance ?? 0));
+      const movableIds = [];
+      cyInstance.nodes(':visible').forEach((node) => {
+        if (node.id() === draggedNode.id()) return;
+        const pos = node.position();
+        const radius = readNodeRadius(node, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE);
+        const activationDistance = draggedRadius + radius + proximity;
+        if (Math.hypot(pos.x - draggedPos.x, pos.y - draggedPos.y) < activationDistance) {
+          movableIds.push(node.id());
+        }
+      });
+      if (movableIds.length === 0) return;
+      detectAndResolveOverlap(cyInstance, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE, {
+        ...profile,
+        movableIds,
+      });
+      syncReciprocalPairJunctionOffsets(cyInstance, { immediate: true });
+    };
+
+    const handleDragFreeOn = (evt) => {
+      activeDragNode = null;
+      if (overlapRafId) {
+        window.cancelAnimationFrame(overlapRafId);
+        overlapRafId = 0;
+      }
+      resolveUserDragCollisions(evt?.target, { clampBounds: true });
     };
 
     const handleDrag = (evt) => {
       evt.target.style("transition-property", "none");
+      activeDragNode = evt.target;
+      if (overlapRafId) return;
+      overlapRafId = window.requestAnimationFrame(() => {
+        overlapRafId = 0;
+        if (!activeDragNode) return;
+        resolveUserDragCollisions(activeDragNode, { clampBounds: false });
+      });
     };
 
     const handleDragFree = (evt) => {
@@ -338,7 +348,8 @@ const CytoscapeGraphUnified = ({
 
     return () => {
       setCyReady(false);
-      if (overlapTimeoutId) window.clearTimeout(overlapTimeoutId);
+      activeDragNode = null;
+      if (overlapRafId) window.cancelAnimationFrame(overlapRafId);
       cyInstance.removeListener("position", "node", handlePosition);
       cyInstance.removeListener("dragfreeon", "node", handleDragFreeOn);
       cyInstance.removeListener("drag", "node", handleDrag);
@@ -376,6 +387,12 @@ const CytoscapeGraphUnified = ({
   useEffect(() => {
     if (!cy) return;
 
+    const resetGraphTrackingState = () => {
+      elementsVisualSigRef.current = new Map();
+      lastElementsGraphFingerprintRef.current = "";
+      prevStructureFingerprintRef.current = "";
+    };
+
     if (isEmpty(elements)) {
       elementsUpdateRef.current = EMPTY_ELEMENTS_UPDATE;
       lastElementsGraphFingerprintRef.current = "";
@@ -405,12 +422,8 @@ const CytoscapeGraphUnified = ({
       const prevNodeIds = new Set(cy.nodes().map((n) => String(n.id())));
       const prevEdgeIds = new Set(cy.edges().map((e) => String(e.id())));
       const hadExistingGraph = prevNodeIds.size > 0;
-      const nextNodeIds = new Set(
-        nodes.map((n) => (n?.data?.id != null ? String(n.data.id) : "")).filter(Boolean)
-      );
-      const nextEdgeIds = new Set(
-        edges.map((e) => (e?.data?.id != null ? String(e.data.id) : "")).filter(Boolean)
-      );
+      const nextNodeIds = elementDefIdSet(nodes);
+      const nextEdgeIds = elementDefIdSet(edges);
 
       // 이미 그려진 id가 다음 props에도 모두 있으면 "순증가"만 → 제거 루프 생략(전체 깜빡임·불필요한 재구성 방지)
       const pureAdditive =
@@ -428,56 +441,40 @@ const CytoscapeGraphUnified = ({
       }
 
       // 유지되는 요소는 data만 동기화. 좌표는 Cytoscape에 유지(이벤트 전환 시 기존 배치 보존)
-      nodes.forEach((nodeDef) => {
-        const rawId = nodeDef?.data?.id;
-        if (rawId == null || rawId === "") return;
-        const el = cy.getElementById(String(rawId));
-        if (el.length > 0) {
-          try {
-            el.data(nodeDef.data);
-          } catch {
-            /* ignore */
-          }
-        }
-      });
-      edges.forEach((edgeDef) => {
-        const rawId = edgeDef?.data?.id;
-        if (rawId == null || rawId === "") return;
-        const el = cy.getElementById(String(rawId));
-        if (el.length > 0) {
-          try {
-            el.data(edgeDef.data);
-          } catch {
-            /* ignore */
-          }
-        }
-      });
+      syncCyElementData(cy, nodes);
+      syncCyElementData(cy, edges);
 
-      const placedPositions = [];
-      prevNodeIds.forEach((id) => {
-        if (!nextNodeIds.has(id)) return;
-        const n = cy.getElementById(id);
-        if (n.length > 0) {
-          try {
-            placedPositions.push(n.position());
-          } catch {
-            /* ignore */
-          }
-        }
-      });
+      const { placedPositions, placedWeights } = collectContinuingNodeLayoutSeed(
+        cy,
+        prevNodeIds,
+        nextNodeIds,
+      );
       const nodesToAdd = nodes.filter(
         (node) => node?.data?.id != null && !prevNodeIds.has(String(node.data.id))
       );
       const edgesToAdd = edges.filter(
         (edge) => edge?.data?.id != null && !prevEdgeIds.has(String(edge.data.id))
       );
-      
+
       const containerWidth = containerRef.current?.clientWidth || 800;
       const containerHeight = containerRef.current?.clientHeight || 600;
+      let needsLocalReorder = false;
+      // 유지되는 기존 노드가 있을 때만 증분 앵커 배치. 전부 교체면 cose 시드 유지
+      const canIncrementalPlace = hadExistingGraph && placedPositions.length > 0;
       if (nodesToAdd.length > 0) {
-        // 기존 그래프에 붙일 때만 스파이럴. 최초(빈 그래프)는 buildVisibleNodes 좌표를 cose 시드로 유지
-        if (hadExistingGraph) {
-          calculateSpiralPlacement(nodesToAdd, placedPositions, containerWidth, containerHeight);
+        if (canIncrementalPlace) {
+          const placed = calculateAnchorAwarePlacement(
+            nodesToAdd,
+            placedPositions,
+            edges,
+            containerWidth,
+            containerHeight,
+            {
+              padding: OVERLAP_RESOLVE.PADDING,
+              weightsForRange: placedWeights,
+            },
+          );
+          needsLocalReorder = Boolean(placed?.needsLocalReorder);
         }
         cy.add(nodesToAdd);
       }
@@ -515,7 +512,12 @@ const CytoscapeGraphUnified = ({
         nodesToAdd.length === 0 &&
         edgesToAdd.length === 0
       ) {
-        dataChangedIds = [];
+        // 골격 동일 시 라벨 등 변경은 펄스 생략. 이미지만 blob resolve된 노드는 style 갱신 유지
+        dataChangedIds = dataChangedIds.filter((sid) => {
+          const prev = prevSig.get(sid);
+          const next = nextSig.get(sid);
+          return visualSignatureImagePart(prev) !== visualSignatureImagePart(next);
+        });
       }
       prevStructureFingerprintRef.current = structureFp || "";
 
@@ -524,15 +526,15 @@ const CytoscapeGraphUnified = ({
         edgesToAdd,
         hasChanges: nodesToAdd.length > 0 || edgesToAdd.length > 0,
         dataChangedIds,
-        incrementalLayoutScope: hadExistingGraph && nodesToAdd.length > 0,
+        incrementalLayoutScope: canIncrementalPlace && nodesToAdd.length > 0,
+        needsLocalReorder,
       };
       // junction sync는 useGraphLayout handleLayoutComplete에서 1회만
     });
 
     lastElementsGraphFingerprintRef.current = elementsGraphFingerprint;
-    setElementsApplyGen((g) => g + 1);
     setIsGraphVisible(true);
-  }, [elementsGraphFingerprint, elementsLength, isDataRefreshing, cy]);
+  }, [elements, elementsGraphFingerprint, elementsLength, isDataRefreshing, cy]);
 
   useGraphLayout({
     cy,
@@ -545,8 +547,9 @@ const CytoscapeGraphUnified = ({
     isInitialLoad,
     setIsInitialLoad,
     containerRef,
-    pendingViewportFitRef,
-    elementsApplyGen,
+    pendingInitialFitRef,
+    canApplyPendingViewportFit,
+    clearPendingViewportFitBlock,
   });
 
   useEffect(() => {
@@ -557,7 +560,8 @@ const CytoscapeGraphUnified = ({
         const fitIdSet = new Set(fitNodeIds.map(String));
         const nodes = cy.nodes().filter((n) => fitIdSet.has(n.id()));
         if (nodes.length > 0) {
-          fitGraphToNodes(cy, { eles: nodes, duration: GRAPH_ZOOM.FIT_DURATION_MS });
+          // 검색 결과 이동도 사용자가 설정한 배율은 유지하고 중심만 이동한다.
+          cy.center(nodes);
           const prevHl = cy.nodes(".search-highlight");
           if (prevHl.length > 0) prevHl.removeClass("search-highlight");
           nodes.addClass("search-highlight");
@@ -568,11 +572,11 @@ const CytoscapeGraphUnified = ({
         if (hl.length > 0) hl.removeClass("search-highlight");
       }
     });
-  }, [cy, elementsGraphFingerprint, elementsLength, fitNodeIdsKey, isSearchActive, applyNodeSizes]);
+  }, [cy, elementsGraphFingerprint, elementsLength, fitNodeIds, fitNodeIdsKey, isSearchActive, applyNodeSizes]);
 
   const filteredElementIdsStr = useMemo(() => {
-    if (!filteredElements || filteredElements.length === 0) return '';
-    return filteredElements.map(e => e.data?.id).filter(Boolean).sort().join(',');
+    if (!filteredElements?.length) return '';
+    return stableIdListKey(filteredElements.map((e) => e.data?.id).filter(Boolean));
   }, [filteredElements]);
 
   const prevIsSearchActiveRef = useRef(isSearchActive);
@@ -590,48 +594,60 @@ const CytoscapeGraphUnified = ({
     }
     // 검색 fade가 selection highlight를 덮어쓰지 않도록 선택 상태를 다시 적용
     reapplySelectionHighlight();
-  }, [cy, isSearchActive, filteredElementIdsStr, reapplySelectionHighlight]);
+  }, [cy, isSearchActive, filteredElements, filteredElementIdsStr, reapplySelectionHighlight]);
 
   useEffect(() => {
     if (!cy || !containerRef.current) return undefined;
 
     let resizeTimeoutId = 0;
-    let lastW = 0;
-    let lastH = 0;
+    let lastNodeSizeRangeKey = "";
 
     const handleSize = () => {
       if (!cy || cy.destroyed?.()) return;
 
-      safeCyOperation(() => {
+      safeCyCall(cy, () => {
         cy.resize();
         if (resizeTimeoutId) window.clearTimeout(resizeTimeoutId);
         resizeTimeoutId = window.setTimeout(() => {
           resizeTimeoutId = 0;
           const el = containerRef.current;
           if (!isGraphContainerSizeReady(el)) {
-            lastW = 0;
-            lastH = 0;
+            lastNodeSizeRangeKey = "";
             return;
           }
 
           const w = el.clientWidth;
-          const h = el.clientHeight;
-          const wasEmpty = lastW <= 0 || lastH <= 0;
-          const grewSignificantly =
-            lastW > 0 &&
-            lastH > 0 &&
-            (Math.abs(w - lastW) / lastW > 0.12 || Math.abs(h - lastH) / lastH > 0.12);
-          lastW = w;
-          lastH = h;
+          const nodeSizeRange = getResponsiveNodeSizeRange(w);
+          const nodeSizeRangeKey = `${nodeSizeRange.min}:${nodeSizeRange.max}`;
+          const nodeSizeRangeChanged =
+            lastNodeSizeRangeKey !== "" && lastNodeSizeRangeKey !== nodeSizeRangeKey;
+          lastNodeSizeRangeKey = nodeSizeRangeKey;
 
-          safeCyOperation(() => {
-            ensureElementsInBounds(cy, el);
-            if ((wasEmpty || grewSignificantly) && cy.nodes().length > 0) {
-              fitGraphToNodes(cy, { duration: GRAPH_ZOOM.FIT_DURATION_MS });
+          safeCyCall(cy, () => {
+            const highlightedNodes = cy.nodes(".search-highlight");
+            const hasHighlightedNodes = highlightedNodes.length > 0;
+            applyNodeSizes(
+              cy,
+              hasHighlightedNodes ? highlightedNodes : null,
+              hasHighlightedNodes ? 1.2 : 1,
+            );
+            if (nodeSizeRangeChanged) {
+              detectAndResolveOverlap(cy, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE, {
+                ...OVERLAP_PROFILES.RESIZE,
+              });
             }
-          });
+            // pending(최초/챕터 fit)일 때만 — 이전 챕터 잔여 데이터면 보류
+            if (
+              pendingInitialFitRef.current &&
+              canApplyPendingViewportFit() &&
+              fitGraphViewportInContainer(cy, el)
+            ) {
+              pendingInitialFitRef.current = false;
+              clearPendingViewportFitBlock();
+            }
+          }, 'CytoscapeGraphUnified:resizeInner');
         }, 120);
-      });
+      }, 'CytoscapeGraphUnified:resize');
     };
 
     const observer = new ResizeObserver(handleSize);
@@ -643,20 +659,7 @@ const CytoscapeGraphUnified = ({
       window.removeEventListener("resize", handleSize);
       if (resizeTimeoutId) window.clearTimeout(resizeTimeoutId);
     };
-  }, [cy, safeCyOperation]);
-
-  const containerStyle = useMemo(() => ({
-    width: "100%",
-    height: "100%",
-    background: "#ffffff",
-    position: "relative",
-    overflow: "hidden",
-    zIndex: 1,
-    visibility: isGraphVisible ? "visible" : "hidden",
-    minWidth: 0,
-    minHeight: 0,
-    boxSizing: "border-box",
-  }), [isGraphVisible]);
+  }, [cy, applyNodeSizes, canApplyPendingViewportFit, clearPendingViewportFitBlock]);
 
   const noResultsMessage = shouldShowNoSearchResults(isSearchActive, searchTerm, fitNodeIds)
     ? getNoSearchResultsMessage(searchTerm)
@@ -666,13 +669,13 @@ const CytoscapeGraphUnified = ({
     <div className="graph-cy-shell">
       <div
         ref={containerRef}
-        style={containerStyle}
-        className="graph-cy-container"
+        className={`graph-cy-container${isGraphVisible ? '' : ' is-pending'}`}
+        aria-hidden="true"
       />
       {noResultsMessage && (
         <div className="graph-no-results" role="status">
           <div className="graph-no-results-icon" aria-hidden>
-            <span className="material-symbols-outlined">person_search</span>
+            <UserSearch size={28} aria-hidden />
           </div>
           <div className="graph-no-results-title">
             {noResultsMessage.title}
@@ -730,12 +733,13 @@ CytoscapeGraphUnified.propTypes = {
   graphSelectNodeRef: PropTypes.shape({
     current: PropTypes.func,
   }),
+  graphSelectElementRef: PropTypes.shape({
+    current: PropTypes.func,
+  }),
   isDataRefreshing: PropTypes.bool,
-  currentChapter: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-  viewportRefitKey: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-  skipViewportRefit: PropTypes.bool,
   showZoomControls: PropTypes.bool,
   onCyReady: PropTypes.func,
+  viewportFitKey: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
 };
 
 export default CytoscapeGraphUnified;

@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'react-toastify';
 import useAuth from '../hooks/auth/useAuth';
-import { startGoogleOAuthLogin } from '../utils/common/urlUtils';
+import { startGoogleOAuthLogin, errorUtils } from '../utils/common/urlUtils';
+import landingHero from '../assets/landing-hero-book.jpg';
 import './HomePage.css';
 
 function GoogleIcon({ className, ...props }) {
@@ -31,28 +33,38 @@ export default function HomePage() {
     const result = startGoogleOAuthLogin();
     if (!result?.ok) {
       setIsLoggingIn(false);
-      alert(result.error || '구글 로그인을 시작할 수 없습니다.');
+      errorUtils.logWarning('HomePage', result?.error || '구글 로그인 시작 실패', {
+        action: 'startGoogleOAuthLogin',
+      });
+      toast.error(result.error || '구글 로그인을 시작할 수 없습니다.');
     }
   };
 
   return (
     <section className="landing-page">
+      <div className="landing-hero-media" aria-hidden="true">
+        <img
+          className="landing-hero-img"
+          src={landingHero}
+          alt=""
+          width={1536}
+          height={1024}
+          decoding="async"
+          fetchPriority="high"
+        />
+      </div>
+      <div className="landing-scrim" aria-hidden="true" />
+
       <div className="landing-content">
-        <p className="landing-logo" lang="en">ReadWith</p>
+        <h1 className="landing-logo" lang="en">
+          ReadWith
+        </h1>
 
-        <h1 className="landing-title">이 책, 등장인물 관계가 어떻게 되더라?</h1>
+        <p className="landing-title">이 책, 등장인물 관계가 어떻게 되더라?</p>
 
-        <div className="landing-body">
-          <p className="landing-lead">
-            책을 읽다 보면 누구나 한 번쯤 멈춥니다. 누가 누구 편인지, 언제부터 사이가 달라졌는지.
-          </p>
-          <p className="landing-desc">
-            <span className="landing-desc-line">
-              <span lang="en">ReadWith</span>는 읽는 위치에 맞춰 인물 관계도를 보여줍니다.
-            </span>
-            <span className="landing-desc-line">책을 올리고 읽다가, 헷갈리면 그래프를 열어보면 됩니다.</span>
-          </p>
-        </div>
+        <p className="landing-lead">
+          읽는 위치에 맞춰 인물 관계도를 보여줍니다. 헷갈리면 그래프를 열어보세요.
+        </p>
 
         <button
           type="button"

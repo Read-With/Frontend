@@ -1,6 +1,6 @@
 /** 인증·토큰 갱신·authenticatedFetch */
 
-import { getApiBaseUrl } from '../common/urlUtils';
+import { getApiBaseUrl, errorUtils } from '../common/urlUtils';
 import {
   getStoredAccessToken,
   setStoredAccessToken,
@@ -117,17 +117,16 @@ export const isTokenValid = (token) => {
 
   const payload = decodeJwtPayload(token);
   if (!payload) {
-    console.warn('⚠️ 토큰 파싱 실패');
+    errorUtils.logInfo('isTokenValid', '토큰 파싱 실패');
     return false;
   }
 
   const currentTime = Math.floor(Date.now() / 1000);
 
   if (payload.exp && payload.exp < currentTime) {
-    console.warn('⚠️ 토큰이 만료되었습니다:', {
+    errorUtils.logInfo('isTokenValid', '토큰이 만료되었습니다', {
       exp: payload.exp,
       currentTime,
-      expired: payload.exp < currentTime,
     });
     return false;
   }
@@ -185,7 +184,9 @@ async function refreshAccessTokenIfExpiringSoon() {
     await refreshToken();
     token = getStoredAccessToken();
   } catch (error) {
-    console.warn('토큰 자동 갱신 실패:', error);
+    errorUtils.logWarning('ensureValidAccessToken', '토큰 자동 갱신 실패', {
+      message: error?.message,
+    });
   }
   return token;
 }
@@ -275,18 +276,30 @@ const softFailFromStatus = (status) => {
  * @param {number[]} [options.softFailStatuses] throw 대신 makeSilentError를 반환할 HTTP 상태
  * @param {number} [options.maxAttempts] 일시 실패 재시도 횟수 (기본 3)
  * @param {boolean} [options.retry] false면 재시도 안 함
+ * @param {boolean} [options.silent] true면 hard-fail 시 authenticatedRequest 자체 로그 생략
  */
 export const authenticatedRequest = async (endpoint, options = {}) => {
   const {
     softFailStatuses = [],
     maxAttempts = API_REQUEST_MAX_ATTEMPTS,
     retry = true,
+    silent = false,
     ...requestOptions
   } = options;
   const isFormData = requestOptions.body instanceof FormData;
   const method = String(requestOptions.method || 'GET').toUpperCase();
   const attempts = retry === false ? 1 : Math.max(1, Number(maxAttempts) || API_REQUEST_MAX_ATTEMPTS);
   const url = `${getApiBaseUrl()}/api${endpoint}`;
+
+  const logHardFail = (error, extra = {}) => {
+    if (silent) return;
+    if (error?.status === 401 || error?.statusCode === 401) return;
+    errorUtils.logError('authenticatedRequest', error, {
+      endpoint,
+      method,
+      ...extra,
+    });
+  };
 
   for (let attempt = 1; attempt <= attempts; attempt++) {
     let response;
@@ -298,7 +311,10 @@ export const authenticatedRequest = async (endpoint, options = {}) => {
       });
     } catch (error) {
       if (error?.status === 401) throw error;
-      if (!isNetworkFetchError(error) || attempt >= attempts) throw error;
+      if (!isNetworkFetchError(error) || attempt >= attempts) {
+        logHardFail(error, { attempt, kind: 'network' });
+        throw error;
+      }
       await sleep(API_REQUEST_RETRY_BASE_MS * attempt);
       continue;
     }
@@ -321,10 +337,14 @@ export const authenticatedRequest = async (endpoint, options = {}) => {
       continue;
     }
 
-    throw await toHttpError(response);
+    const httpError = await toHttpError(response);
+    logHardFail(httpError, { attempt, status: response.status, kind: 'http' });
+    throw httpError;
   }
 
-  throw new Error('API 요청 실패');
+  const exhausted = new Error('API 요청 실패');
+  logHardFail(exhausted, { kind: 'exhausted' });
+  throw exhausted;
 };
 
 export const refreshToken = async (options = {}) => {
@@ -380,7 +400,7 @@ export const refreshToken = async (options = {}) => {
     throw new Error(data.message || '토큰 갱신 실패');
   } catch (error) {
     if (!silent) {
-      console.error('토큰 갱신 실패:', error);
+      errorUtils.logError('refreshToken', error);
     }
     throw error;
   }
@@ -425,7 +445,9 @@ export const logout = async () => {
       method: 'POST',
     });
   } catch (error) {
-    console.error('로그아웃 API 호출 실패:', error);
+    errorUtils.logWarning('logout', '로그아웃 API 호출 실패', {
+      message: error?.message,
+    });
   } finally {
     clearAuthData();
   }

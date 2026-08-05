@@ -2,7 +2,9 @@
   "name": "readwith-frontend-monorepo",
   "private": true,
   "scripts": {
+    "install:app": "npm install --prefix Frontend-main",
     "build": "npm run build --prefix Frontend-main",
-    "dev": "npm run dev --prefix Frontend-main"
+    "dev": "npm run dev --prefix Frontend-main",
+    "preview": "npm run preview --prefix Frontend-main"
   }
 }

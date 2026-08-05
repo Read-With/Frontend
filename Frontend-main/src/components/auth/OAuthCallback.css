@@ -1,7 +1,7 @@
 .oauth-callback-page {
-  --oauth-brand: #3e4f2f;
-  --oauth-brand-mid: #586544;
-  --oauth-brand-light: #717b59;
+  --oauth-brand: var(--brand-accent);
+  --oauth-brand-mid: var(--brand-accent-mid);
+  --oauth-brand-light: var(--brand-accent-light);
   --oauth-fg: #fefefe;
   --oauth-fg-muted: rgba(255, 255, 255, 0.9);
   --oauth-fg-soft: rgba(255, 255, 255, 0.72);
@@ -105,8 +105,6 @@
   margin: 0;
   font-weight: 400;
   letter-spacing: 0.02em;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
 }
 
 .oauth-callback-detail,
@@ -124,12 +122,13 @@
   color: var(--oauth-fg-soft);
 }
 
-/* 온점으로 끝나는 문장 = 한 줄 (문장 중간 줄바꿈 금지) */
+/* 온점 기준 문장 단위로 블록 분리, 화면 너비 안에서는 자연 줄바꿈 */
 .oauth-callback-sentence {
   display: block;
-  width: max-content;
-  max-width: none;
-  white-space: nowrap;
+  width: 100%;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 
 .oauth-callback-steps {
@@ -171,8 +170,6 @@
   background: var(--oauth-surface);
   border-radius: var(--oauth-radius);
   border: 0.0625rem solid var(--oauth-surface-border);
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
   animation: oauth-callback-fade-in 0.4s ease;
 }
 
@@ -290,7 +287,7 @@
 }
 
 .oauth-callback-home-btn:hover {
-  background: #f5f1e6;
+  background: var(--brand-cream);
   border-color: var(--oauth-fg);
   transform: translateY(-0.0625rem);
 }
@@ -298,13 +295,6 @@
 .oauth-callback-home-btn:active {
   transform: translateY(0);
   box-shadow: 0 0.0625rem 0.125rem rgba(62, 79, 47, 0.12);
-}
-
-.oauth-callback-home-btn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-  transform: none;
-  box-shadow: none;
 }
 
 .oauth-callback-home-btn:focus-visible {

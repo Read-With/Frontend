@@ -13,7 +13,7 @@
  * 8. Book relationship deltas
  */
 
-import { sanitizeAssetUrl, resolveApiArtifactUrl } from '../common/urlUtils';
+import { sanitizeAssetUrl, resolveApiArtifactUrl, errorUtils } from '../common/urlUtils';
 import {
   isGraphEdgeElement,
   isGraphNodeElement,
@@ -22,9 +22,11 @@ import {
   undirectedPairKey,
   directedEdgeElementId,
   uniqueStrings,
+  sortedUniqueJoin,
   normalizeRelation,
   pickLastRelationLabel,
   mergeRelationLabelHistory,
+  labelEventOrderHint,
   relationEventMetaPassthrough,
   pickCharacterDisplayName,
   lookupRememberedCharacterDisplayName,
@@ -129,7 +131,7 @@ export function createCharacterMaps(characters) {
         if (validatedUrl) {
           idToProfileImage[id] = validatedUrl;
         } else if (import.meta.env.DEV) {
-          console.debug(`[이미지 검증 실패] 캐릭터 ID: ${id}`);
+          errorUtils.logDebug('graphModel', '이미지 검증 실패', { characterId: id });
         }
       } else {
         missingProfileImage += 1;
@@ -137,12 +139,12 @@ export function createCharacterMaps(characters) {
     });
 
     if (import.meta.env.DEV && missingProfileImage > 0) {
-      console.debug(`[이미지 없음] 캐릭터 ${missingProfileImage}명 (프로필 이미지 미설정)`);
+      errorUtils.logDebug('graphModel', '프로필 이미지 미설정 캐릭터', { count: missingProfileImage });
     }
 
     return maps;
   } catch (error) {
-    console.error('createCharacterMaps 실패:', error);
+    errorUtils.logError('createCharacterMaps', error);
     return createEmptyCharacterMaps();
   }
 }
@@ -163,7 +165,7 @@ function validateAndNormalizeProfileImageUrl(profileImage) {
       return trimmed;
     } catch {
       if (import.meta.env.DEV) {
-        console.debug(`[이미지 검증] 유효하지 않은 절대 URL`);
+        errorUtils.logDebug('graphModel', '유효하지 않은 절대 URL');
       }
       return null;
     }
@@ -175,7 +177,7 @@ function validateAndNormalizeProfileImageUrl(profileImage) {
       return resolved.origin + resolved.pathname + resolved.search + resolved.hash;
     } catch {
       if (import.meta.env.DEV) {
-        console.debug(`[이미지 검증] 유효하지 않은 프로토콜 상대 URL`);
+        errorUtils.logDebug('graphModel', '유효하지 않은 프로토콜 상대 URL');
       }
       return null;
     }
@@ -186,7 +188,7 @@ function validateAndNormalizeProfileImageUrl(profileImage) {
   }
 
   if (import.meta.env.DEV) {
-    console.debug(`[이미지 검증] 유효하지 않은 이미지 URL 형식`);
+    errorUtils.logDebug('graphModel', '유효하지 않은 이미지 URL 형식');
   }
   return null;
 }
@@ -195,21 +197,30 @@ function validateAndNormalizeProfileImageUrl(profileImage) {
  * 2. Node weights
  * ═══════════════════════════════════════════════════════════════════════════ */
 
+/** number 리터럴이면서 양의 유한수인지 (문자열 강제 변환 없음) */
+function isPositiveFiniteNumberLiteral(n) {
+  return typeof n === 'number' && Number.isFinite(n) && n > 0;
+}
+
 /**
  * 노드 weight가 양의 유한수인지 검사.
  * @param {*} weight
  * @returns {boolean}
  */
 export function isValidNodeWeight(weight) {
-  return typeof weight === 'number' && Number.isFinite(weight) && weight > 0;
+  return isPositiveFiniteNumberLiteral(weight);
 }
 
 function isValidNodeCount(count) {
-  return typeof count === 'number' && Number.isFinite(count) && count > 0;
+  return isPositiveFiniteNumberLiteral(count);
 }
 
 function isNodeWeightEntryVisible(entry) {
-  return Boolean(entry && isValidNodeWeight(entry.weight) && isValidNodeCount(entry.count));
+  return Boolean(
+    entry &&
+    isValidNodeWeight(entry.weight) &&
+    isValidNodeCount(entry.count)
+  );
 }
 
 function resolveNodeWeightAndCount(char, previousEntry = null) {
@@ -413,11 +424,41 @@ export function buildElementsFromGraphPayload({
   };
 }
 
-function mergeEdgeLabels(a, b) {
-  const t1 = String(a ?? '').trim();
-  const t2 = String(b ?? '').trim();
-  // 양방향 합칠 때도 한쪽(최근) 라벨만 겉에 표시
-  return t2 || t1;
+function resolveMostRecentRelationLabel(history, latestLabels = null, fallbackLabel = '') {
+  if (!history || typeof history !== 'object') {
+    return pickLastRelationLabel(latestLabels) || String(fallbackLabel ?? '').trim();
+  }
+  let latestText = '';
+  let latestOrder = null;
+
+  for (const [text, meta] of Object.entries(history)) {
+    const trimmed = String(meta?.text || text || '').trim();
+    if (!trimmed) continue;
+    const order = labelEventOrderHint(meta?.lastEventId, meta?.lastEventOrdinal);
+    if (latestOrder == null || (order != null && order >= latestOrder)) {
+      latestText = trimmed;
+      latestOrder = order ?? latestOrder;
+    }
+  }
+
+  return (
+    latestText ||
+    pickLastRelationLabel(latestLabels) ||
+    String(fallbackLabel ?? '').trim()
+  );
+}
+
+/** relation / latestLabels / labelHistory 필드 머지 */
+function mergeEdgeLabelFields(a = {}, b = {}) {
+  const relationA = Array.isArray(a.relation) ? a.relation : [];
+  const relationB = Array.isArray(b.relation) ? b.relation : [];
+  const latestA = Array.isArray(a.latestLabels) ? a.latestLabels : [];
+  const latestB = Array.isArray(b.latestLabels) ? b.latestLabels : [];
+  return {
+    relation: uniqueStrings([...relationA, ...relationB]),
+    latestLabels: uniqueStrings([...latestA, ...latestB]),
+    labelHistory: mergeRelationLabelHistory(a.labelHistory, b.labelHistory),
+  };
 }
 
 function mergePositivity(a, b) {
@@ -432,7 +473,7 @@ function mergePositivity(a, b) {
 }
 
 function normalizedRelationTagKey(data) {
-  return uniqueStrings(Array.isArray(data?.relation) ? data.relation : []).sort().join('\x1e');
+  return sortedUniqueJoin(Array.isArray(data?.relation) ? data.relation : []);
 }
 
 function positivityToken(data) {
@@ -487,21 +528,19 @@ function finalizeDirectedEdges(edgeMap) {
     if (s0 === t1 && t0 === s1) {
       if (relationPayloadEquivalent(e0.data, e1.data)) {
         const [a, b] = String(s0) <= String(t0) ? [s0, t0] : [t0, s0];
-        const r0 = Array.isArray(e0.data.relation) ? e0.data.relation : [];
-        const r1 = Array.isArray(e1.data.relation) ? e1.data.relation : [];
         const pos = mergePositivity(e0.data.positivity, e1.data.positivity);
+        const merged = mergeEdgeLabelFields(e0.data, e1.data);
         const baseData = {
           id: `${a}-${b}`,
           source: a,
           target: b,
           bidirectional: true,
-          relation: uniqueStrings([...r0, ...r1]),
-          label: mergeEdgeLabels(e0.data.label, e1.data.label),
-          latestLabels: uniqueStrings([
-            ...(Array.isArray(e0.data.latestLabels) ? e0.data.latestLabels : []),
-            ...(Array.isArray(e1.data.latestLabels) ? e1.data.latestLabels : []),
-          ]),
-          labelHistory: mergeRelationLabelHistory(e0.data.labelHistory, e1.data.labelHistory),
+          ...merged,
+          label: resolveMostRecentRelationLabel(
+            merged.labelHistory,
+            merged.latestLabels,
+            e1.data.label || e0.data.label
+          ),
           snapshotEventId: e0.data.snapshotEventId ?? e1.data.snapshotEventId ?? null,
         };
         if (Number.isFinite(Number(pos))) {
@@ -536,12 +575,7 @@ function isRelationVisibleAtEvent(rel, eventData) {
 
   const meta = relationEventMetaPassthrough(rel);
   const relationChapter = toPositiveIntOrNaN(meta.chapterIdx);
-  const relationEventIdx = toPositiveIntOrNaN(
-    eventUtils.resolveEventOrdinal(rel) ??
-    eventUtils.resolveEventOrdinal(meta) ??
-    rel?.event_id ??
-    rel?.event?.event_id
-  );
+  const relationEventIdx = resolveRelationEventOrdinal(rel, { fallback: NaN });
 
   if (Number.isFinite(targetChapter) && Number.isFinite(relationChapter)) {
     if (relationChapter > targetChapter) return false;
@@ -569,7 +603,8 @@ function resolveEdgeDisplayLabel(r) {
   );
 }
 
-function relationEventOrdinal(rel) {
+/** relation 이벤트 ordinal 후보를 공통 순서로 해석 */
+function resolveRelationEventOrdinal(rel, { fallback = 0 } = {}) {
   const meta = relationEventMetaPassthrough(rel);
   const candidates = [
     eventUtils.resolveEventOrdinal(rel),
@@ -581,7 +616,7 @@ function relationEventOrdinal(rel) {
     const n = toPositiveIntOrNaN(candidate);
     if (Number.isFinite(n)) return n;
   }
-  return 0;
+  return fallback;
 }
 
 /** relations + orphan characters → 등장 노드 id 목록 */
@@ -759,7 +794,7 @@ function accumulateDirectedEdges(relations, { nodeSet, visibleNodeIdSet, eventDa
     }
 
     const relationLabel = resolveEdgeDisplayLabel(r);
-    const relEv = relationEventOrdinal(rel);
+    const relEv = resolveRelationEventOrdinal(rel);
     const snapshotEventId =
       eventData?.eventId ??
       eventData?.id ??
@@ -768,23 +803,12 @@ function accumulateDirectedEdges(relations, { nodeSet, visibleNodeIdSet, eventDa
 
     if (edgeMap.has(edgeKey)) {
       const existingEdge = edgeMap.get(edgeKey);
-      existingEdge.data.relation = uniqueStrings([...existingEdge.data.relation, ...r.relation]);
-      existingEdge.data.latestLabels = uniqueStrings([
-        ...(Array.isArray(existingEdge.data.latestLabels) ? existingEdge.data.latestLabels : []),
-        ...(Array.isArray(r.latestLabels) ? r.latestLabels : []),
-      ]);
-      existingEdge.data.labelHistory = mergeRelationLabelHistory(
-        existingEdge.data.labelHistory,
-        r.labelHistory
-      );
+      Object.assign(existingEdge.data, mergeEdgeLabelFields(existingEdge.data, r));
       if (snapshotEventId != null) {
         existingEdge.data.snapshotEventId = snapshotEventId;
       }
       const prevEv = existingEdge.data._labelEventIdx ?? -1;
-      if (relationLabel && relEv >= prevEv) {
-        existingEdge.data.label = relationLabel;
-        existingEdge.data._labelEventIdx = relEv;
-      } else if (!existingEdge.data.label && relationLabel) {
+      if (relationLabel && (!existingEdge.data.label || relEv >= prevEv)) {
         existingEdge.data.label = relationLabel;
         existingEdge.data._labelEventIdx = relEv;
       }
@@ -974,6 +998,7 @@ function calcGraphDiff(prevElements, currElements) {
 
 /**
  * Cytoscape 동기화 스킵용: 동일 id의 시각적 data만 문자열화.
+ * 노드 image 포함 — blob resolve 전후 fingerprint가 달라져야 data 동기화가 스킵되지 않음.
  * @param {Object} el
  * @returns {string}
  */
@@ -985,7 +1010,15 @@ export function visualElementSignature(el) {
     const topo = d.bidirectional ? "b" : d.reciprocalPair ? "r" : "";
     return `e:${rel}:${d.label ?? ""}:${d.positivity ?? ""}:${d.lineStyle ?? ""}:${d.width ?? ""}:${topo}`;
   }
-  return `n:${d.label ?? ""}:${d.weight ?? ""}:${d.count ?? ""}:${d.isMainCharacter ?? ""}:${d.positivity ?? ""}`;
+  const image = typeof d.image === 'string' ? d.image : '';
+  return `n:${d.label ?? ""}:${d.weight ?? ""}:${d.count ?? ""}:${d.isMainCharacter ?? ""}:${d.positivity ?? ""}\x1e${image}`;
+}
+
+/** visualElementSignature 노드 문자열에서 image 구간만 추출 (blob resolve 감지용) */
+export function visualSignatureImagePart(sig) {
+  if (typeof sig !== 'string' || !sig.startsWith('n:')) return '';
+  const sep = sig.indexOf('\x1e');
+  return sep >= 0 ? sig.slice(sep + 1) : '';
 }
 
 /**
@@ -1101,7 +1134,7 @@ export function filterMainCharacters(elements, filterStage) {
   return elements;
 }
 
-function readNodeRadius(node, fallbackSize = 40) {
+export function readNodeRadius(node, fallbackSize = 40) {
   try {
     const w = typeof node.outerWidth === 'function' ? node.outerWidth() : 0;
     const h = typeof node.outerHeight === 'function' ? node.outerHeight() : 0;
@@ -1118,71 +1151,182 @@ function readNodeRadius(node, fallbackSize = 40) {
 /** detectAndResolveOverlap / 호출부 공용 기본값 */
 export const OVERLAP_RESOLVE = Object.freeze({
   FALLBACK_NODE_SIZE: 40,
-  PADDING: 16,
-  MAX_ITERATIONS: 12,
-  MAX_ITERATIONS_LIGHT: 8,
-  MAX_NODES: 150,
+  PADDING: 8,
+  MAX_ITERATIONS: 8,
+  MAX_ITERATIONS_LIGHT: 3,
+  /** 메인 반복 후에도 겹치면 추가 패스 */
+  EXTRA_PASSES: 1,
+  /** 양측·편측 밀어내기 공통 여유(px) */
+  PUSH_EXTRA: 2,
+  /** 이 깊이(px) 이하의 본체 겹침은 시각적 안정성을 위해 허용 */
+  OVERLAP_TOLERANCE: 3,
+  /** 이 깊이(px) 이상이면 완전한 여유 간격까지 강하게 분리 */
+  SEVERE_OVERLAP: 12,
+  /** spatial hash로 검사하므로 일반적인 책 그래프는 전량 검사 */
+  MAX_NODES: 2000,
 });
 
+export const OVERLAP_PROFILES = Object.freeze({
+  /** 최초 로딩·전체 재배치: 본체 겹침 허용 없음 */
+  INITIAL: Object.freeze({ padding: 8, tolerance: 0, maxIterations: 16, extraPasses: 3 }),
+  /** 동시 등장 신규 노드끼리: 본체 겹침 허용 없음 */
+  APPEAR: Object.freeze({ padding: 8, tolerance: 0, maxIterations: 12, extraPasses: 2 }),
+  INCREMENTAL: Object.freeze({ padding: 6, tolerance: 3, maxIterations: 4, extraPasses: 1 }),
+  RESIZE: Object.freeze({ padding: 5, tolerance: 3, maxIterations: 2, extraPasses: 0 }),
+  /** 사용자 드래그: 본체 겹침 즉시 반응, 드래그 노드는 movableIds에서 제외해 자유 배치 유지 */
+  USER_DRAG: Object.freeze({
+    padding: 10,
+    tolerance: 0,
+    maxIterations: 8,
+    extraPasses: 1,
+    pushExtra: 2,
+    severeOverlap: 1,
+  }),
+});
+
+function cyNodesToArray(collection) {
+  const out = [];
+  if (!collection) return out;
+  collection.forEach((n) => out.push(n));
+  return out;
+}
+
 /**
- * 노드 겹침 감지 및 자동 조정
- * @param {Object} cy - Cytoscape 인스턴스
- * @param {number} [nodeSize=OVERLAP_RESOLVE.FALLBACK_NODE_SIZE] - 크기 읽기 실패 시 fallback (지름)
- * @param {Object} [options]
- * @param {Iterable<string>|null} [options.movableIds] - 지정 시 해당 노드만 이동(기존 노드 위치 유지)
- * @param {number} [options.maxIterations] - 밀어내기 반복 횟수
- * @param {number} [options.padding] - 반경 합에 더하는 여유 간격
- * @returns {boolean} 겹침이 있었는지 여부
+ * 겹침 해결 대상 선정. MAX_NODES 이하면 visible(없으면 전체).
+ * 초과 시 movable → selected → movable 근처 → visible 균등 샘플.
  */
-export function detectAndResolveOverlap(
-  cy,
-  nodeSize = OVERLAP_RESOLVE.FALLBACK_NODE_SIZE,
-  options = {},
+function collectOverlapCandidateNodes(cy, movableIdSet, maxNodes, nodeSize, padding) {
+  let pool = cyNodesToArray(cy.nodes(':visible'));
+  if (pool.length === 0) pool = cyNodesToArray(cy.nodes());
+  if (pool.length <= maxNodes) return pool;
+
+  const chosen = new Map();
+  const addNode = (n) => {
+    if (!n || (typeof n.length === 'number' && n.length === 0)) return;
+    const id = String(typeof n.id === 'function' ? n.id() : '');
+    if (!id || chosen.has(id)) return;
+    chosen.set(id, n);
+  };
+
+  if (movableIdSet) {
+    for (const id of movableIdSet) {
+      addNode(cy.getElementById(id));
+    }
+  }
+
+  cyNodesToArray(cy.nodes(':selected')).forEach(addNode);
+
+  if (movableIdSet && movableIdSet.size > 0 && chosen.size < maxNodes) {
+    const anchors = [];
+    for (const id of movableIdSet) {
+      const n = chosen.get(id);
+      if (!n) continue;
+      anchors.push({ pos: n.position(), radius: readNodeRadius(n, nodeSize) });
+    }
+    const scored = [];
+    for (const n of pool) {
+      const id = String(n.id());
+      if (chosen.has(id)) continue;
+      const pos = n.position();
+      const r = readNodeRadius(n, nodeSize);
+      let minD = Infinity;
+      for (const a of anchors) {
+        const dx = pos.x - a.pos.x;
+        const dy = pos.y - a.pos.y;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d < minD) minD = d;
+      }
+      const neighborhood = anchors.reduce(
+        (m, a) => Math.max(m, a.radius + r + padding * 4),
+        0,
+      );
+      scored.push({ n, minD, near: minD <= neighborhood * 2 });
+    }
+    scored.sort((a, b) => {
+      if (a.near !== b.near) return a.near ? -1 : 1;
+      return a.minD - b.minD;
+    });
+    for (let i = 0; i < scored.length && chosen.size < maxNodes; i += 1) {
+      addNode(scored[i].n);
+    }
+  }
+
+  if (chosen.size < maxNodes) {
+    const remaining = pool.filter((n) => !chosen.has(String(n.id())));
+    const need = maxNodes - chosen.size;
+    if (remaining.length <= need) {
+      remaining.forEach(addNode);
+    } else {
+      const step = remaining.length / need;
+      for (let i = 0; i < need; i += 1) {
+        addNode(remaining[Math.floor(i * step)]);
+      }
+    }
+  }
+
+  return Array.from(chosen.values());
+}
+
+function collectNearbyPairIndexes(nodePositions, padding) {
+  const maxRadius = nodePositions.reduce((max, item) => Math.max(max, item.radius), 1);
+  const cellSize = Math.max(1, maxRadius * 2 + padding);
+  const buckets = new Map();
+  nodePositions.forEach((item, index) => {
+    const x = Math.floor(item.pos.x / cellSize);
+    const y = Math.floor(item.pos.y / cellSize);
+    const key = `${x}:${y}`;
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(index);
+  });
+
+  const pairs = [];
+  nodePositions.forEach((item, i) => {
+    const x = Math.floor(item.pos.x / cellSize);
+    const y = Math.floor(item.pos.y / cellSize);
+    for (let dx = -1; dx <= 1; dx += 1) {
+      for (let dy = -1; dy <= 1; dy += 1) {
+        const candidates = buckets.get(`${x + dx}:${y + dy}`) || [];
+        for (const j of candidates) {
+          if (j <= i) continue;
+          pairs.push([i, j]);
+        }
+      }
+    }
+  });
+  return pairs;
+}
+
+function pairStillOverlaps(nodePositions, movableIdSet, padding, tolerance = 0) {
+  const pairs = collectNearbyPairIndexes(nodePositions, padding);
+  for (const [i, j] of pairs) {
+      const a = nodePositions[i];
+      const b = nodePositions[j];
+      const aMovable = !movableIdSet || movableIdSet.has(a.id);
+      const bMovable = !movableIdSet || movableIdSet.has(b.id);
+      if (!aMovable && !bMovable) continue;
+      const minDistance = Math.max(0, a.radius + b.radius - tolerance);
+      const dx = a.pos.x - b.pos.x;
+      const dy = a.pos.y - b.pos.y;
+      if (dx * dx + dy * dy < minDistance * minDistance) return true;
+  }
+  return false;
+}
+
+function runOverlapPushPasses(
+  nodePositions,
+  movableIdSet,
+  padding,
+  pushExtra,
+  maxIterations,
+  tolerance,
+  severeOverlap,
 ) {
-  if (!cy) {
-    return false;
-  }
-
-  if (typeof nodeSize !== 'number' || nodeSize <= 0) {
-    nodeSize = OVERLAP_RESOLVE.FALLBACK_NODE_SIZE;
-  }
-
-  const movableIdSet = options.movableIds
-    ? new Set([...options.movableIds].map(String).filter((id) => id !== ''))
-    : null;
-  if (movableIdSet && movableIdSet.size === 0) {
-    return false;
-  }
-
-  const nodes = cy.nodes();
-  const padding =
-    typeof options.padding === 'number' && options.padding >= 0
-      ? options.padding
-      : OVERLAP_RESOLVE.PADDING;
-  const maxIterations =
-    typeof options.maxIterations === 'number' && options.maxIterations > 0
-      ? options.maxIterations
-      : movableIdSet
-        ? OVERLAP_RESOLVE.MAX_ITERATIONS
-        : OVERLAP_RESOLVE.MAX_ITERATIONS_LIGHT;
   let hasOverlap = false;
-
-  if (nodes.length > OVERLAP_RESOLVE.MAX_NODES) {
-    return false;
-  }
-
-  const nodePositions = nodes.map((node) => ({
-    node,
-    id: String(node.id()),
-    pos: node.position(),
-    radius: readNodeRadius(node, nodeSize),
-  }));
-
-  for (let iter = 0; iter < maxIterations; iter++) {
+  for (let iter = 0; iter < maxIterations; iter += 1) {
     let movedThisPass = false;
 
-    for (let i = 0; i < nodePositions.length; i++) {
-      for (let j = i + 1; j < nodePositions.length; j++) {
+    const pairs = collectNearbyPairIndexes(nodePositions, padding);
+    for (const [i, j] of pairs) {
         const { node: node1, id: id1, pos: pos1, radius: r1 } = nodePositions[i];
         const { node: node2, id: id2, pos: pos2, radius: r2 } = nodePositions[j];
 
@@ -1190,21 +1334,26 @@ export function detectAndResolveOverlap(
         const node2Movable = !movableIdSet || movableIdSet.has(id2);
         if (!node1Movable && !node2Movable) continue;
 
-        const minDistance = r1 + r2 + padding;
+        const bodyDistance = r1 + r2;
+        const activationDistance = Math.max(0, bodyDistance - tolerance);
         const dx = pos1.x - pos2.x;
         const dy = pos1.y - pos2.y;
         const distanceSquared = dx * dx + dy * dy;
 
-        if (distanceSquared >= minDistance * minDistance) continue;
+        if (distanceSquared >= activationDistance * activationDistance) continue;
 
         hasOverlap = true;
         movedThisPass = true;
         const distance = Math.sqrt(distanceSquared);
+        const penetration = bodyDistance - distance;
+        const severe = penetration >= severeOverlap;
+        const targetGap = severe ? padding : Math.min(padding, 2);
+        const targetSeparation = bodyDistance + targetGap + (severe ? pushExtra : 0);
         const angle =
           distance < 1e-6
             ? (i + j) * 0.7
             : Math.atan2(dy, dx);
-        const pushDistance = minDistance - distance + 8;
+        const pushDistance = targetSeparation - distance;
         const cos = Math.cos(angle);
         const sin = Math.sin(angle);
 
@@ -1218,26 +1367,204 @@ export function detectAndResolveOverlap(
           nodePositions[j].pos = newPos2;
         } else if (node1Movable) {
           const newPos1 = {
-            x: pos2.x + cos * minDistance,
-            y: pos2.y + sin * minDistance,
+            x: pos2.x + cos * targetSeparation,
+            y: pos2.y + sin * targetSeparation,
           };
           node1.position(newPos1);
           nodePositions[i].pos = newPos1;
         } else {
           const newPos2 = {
-            x: pos1.x - cos * minDistance,
-            y: pos1.y - sin * minDistance,
+            x: pos1.x - cos * targetSeparation,
+            y: pos1.y - sin * targetSeparation,
           };
           node2.position(newPos2);
           nodePositions[j].pos = newPos2;
         }
-      }
     }
 
     if (!movedThisPass) break;
   }
+  return hasOverlap;
+}
+
+function parseOverlapOptions(nodeSize, options = {}) {
+  const size =
+    typeof nodeSize === 'number' && nodeSize > 0
+      ? nodeSize
+      : OVERLAP_RESOLVE.FALLBACK_NODE_SIZE;
+  const movableIdSet = options.movableIds
+    ? new Set([...options.movableIds].map(String).filter((id) => id !== ''))
+    : null;
+  const padding =
+    typeof options.padding === 'number' && options.padding >= 0
+      ? options.padding
+      : OVERLAP_RESOLVE.PADDING;
+  const tolerance =
+    typeof options.tolerance === 'number' && options.tolerance >= 0
+      ? options.tolerance
+      : OVERLAP_RESOLVE.OVERLAP_TOLERANCE;
+  return { nodeSize: size, movableIdSet, padding, tolerance, options };
+}
+
+function buildOverlapNodePositions(cy, movableIdSet, nodeSize, padding) {
+  const nodes = collectOverlapCandidateNodes(
+    cy,
+    movableIdSet,
+    OVERLAP_RESOLVE.MAX_NODES,
+    nodeSize,
+    padding,
+  );
+  if (nodes.length < 2) return null;
+  return nodes.map((node) => ({
+    node,
+    id: String(node.id()),
+    pos: node.position(),
+    radius: readNodeRadius(node, nodeSize),
+  }));
+}
+
+/**
+ * 노드 겹침 감지 및 자동 조정
+ * @param {Object} cy - Cytoscape 인스턴스
+ * @param {number} [nodeSize=OVERLAP_RESOLVE.FALLBACK_NODE_SIZE] - 크기 읽기 실패 시 fallback (지름)
+ * @param {Object} [options]
+ * @param {Iterable<string>|null} [options.movableIds] - 지정 시 해당 노드만 이동(기존 노드 위치 유지)
+ * @param {number} [options.maxIterations] - 밀어내기 반복 횟수
+ * @param {number} [options.extraPasses] - 잔여 겹침 시 추가 반복
+ * @param {number} [options.padding] - 반경 합에 더하는 여유 간격
+ * @returns {boolean} 겹침이 있었는지 여부
+ */
+export function detectAndResolveOverlap(
+  cy,
+  nodeSize = OVERLAP_RESOLVE.FALLBACK_NODE_SIZE,
+  options = {},
+) {
+  if (!cy) {
+    return false;
+  }
+
+  const parsed = parseOverlapOptions(nodeSize, options);
+  const { movableIdSet, padding, tolerance } = parsed;
+  nodeSize = parsed.nodeSize;
+  if (movableIdSet && movableIdSet.size === 0) {
+    return false;
+  }
+
+  const pushExtra =
+    typeof options.pushExtra === 'number' && options.pushExtra >= 0
+      ? options.pushExtra
+      : OVERLAP_RESOLVE.PUSH_EXTRA;
+  const severeOverlap =
+    typeof options.severeOverlap === 'number' && options.severeOverlap > 0
+      ? options.severeOverlap
+      : OVERLAP_RESOLVE.SEVERE_OVERLAP;
+  const maxIterations =
+    typeof options.maxIterations === 'number' && options.maxIterations > 0
+      ? options.maxIterations
+      : movableIdSet
+        ? OVERLAP_RESOLVE.MAX_ITERATIONS
+        : OVERLAP_RESOLVE.MAX_ITERATIONS_LIGHT;
+  const extraPasses =
+    typeof options.extraPasses === 'number' && options.extraPasses >= 0
+      ? options.extraPasses
+      : OVERLAP_RESOLVE.EXTRA_PASSES;
+
+  const nodePositions = buildOverlapNodePositions(cy, movableIdSet, nodeSize, padding);
+  if (!nodePositions) {
+    return false;
+  }
+
+  let hasOverlap = false;
+  const apply = () => {
+    hasOverlap = runOverlapPushPasses(
+      nodePositions,
+      movableIdSet,
+      padding,
+      pushExtra,
+      maxIterations,
+      tolerance,
+      severeOverlap,
+    ) || hasOverlap;
+
+    if (pairStillOverlaps(nodePositions, movableIdSet, padding, tolerance) && extraPasses > 0) {
+      hasOverlap = runOverlapPushPasses(
+        nodePositions,
+        movableIdSet,
+        padding,
+        pushExtra,
+        extraPasses,
+        tolerance,
+        severeOverlap,
+      ) || hasOverlap;
+    }
+  };
+
+  if (typeof cy.batch === 'function') {
+    cy.batch(apply);
+  } else {
+    apply();
+  }
+
+  if (
+    pairStillOverlaps(nodePositions, movableIdSet, padding, tolerance)
+    && typeof import.meta !== 'undefined'
+    && import.meta.env?.DEV
+  ) {
+    errorUtils.logDebug('detectAndResolveOverlap', 'residual overlaps remain', {
+      candidates: nodePositions.length,
+      maxNodes: OVERLAP_RESOLVE.MAX_NODES,
+    });
+  }
 
   return hasOverlap;
+}
+
+/**
+ * movableIds가 있으면 그중 하나 이상 포함된 쌍만 검사.
+ * @returns {boolean} 겹치는 쌍이 있으면 true
+ */
+export function hasOverlappingNodes(
+  cy,
+  nodeSize = OVERLAP_RESOLVE.FALLBACK_NODE_SIZE,
+  options = {},
+) {
+  if (!cy) return false;
+  const { movableIdSet, padding, tolerance, nodeSize: size } = parseOverlapOptions(nodeSize, options);
+  if (movableIdSet && movableIdSet.size === 0) return false;
+
+  const nodePositions = buildOverlapNodePositions(cy, movableIdSet, size, padding);
+  if (!nodePositions) return false;
+  return pairStillOverlaps(nodePositions, movableIdSet, padding, tolerance);
+}
+
+/** seedIds 기준 undirected N-hop 이웃(시드 포함) */
+export function collectNeighborhoodNodeIds(cy, seedIds, hops = 1) {
+  const seeds = [...(seedIds || [])].map(String).filter(Boolean);
+  const all = new Set(seeds);
+  if (!cy || hops < 1 || seeds.length === 0) return all;
+
+  let frontier = new Set(seeds);
+  for (let h = 0; h < hops; h += 1) {
+    const next = new Set();
+    for (const id of frontier) {
+      const node = cy.getElementById(id);
+      if (!node || node.length === 0) continue;
+      try {
+        node.neighborhood('node').forEach((n) => {
+          const nid = String(n.id());
+          if (!all.has(nid)) {
+            all.add(nid);
+            next.add(nid);
+          }
+        });
+      } catch {
+        /* ignore */
+      }
+    }
+    if (next.size === 0) break;
+    frontier = next;
+  }
+  return all;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -1319,7 +1646,7 @@ function buildEventSnapshotRow(bookId, chapterIdx, event) {
     convertedElements = built.elements;
     snapshotCharacters = built.characters;
   } catch (error) {
-    console.error('buildElementsFromGraphPayload 실패:', error);
+    errorUtils.logError('buildElementsFromGraphPayload', error);
   }
 
   const summaryEventNum = Number(event.eventNum);
@@ -1495,7 +1822,7 @@ const readGraphBookCache = (bookId) => {
   try {
     return hydrateCacheFromStorage('graphBookCache', key, 'localStorage');
   } catch (error) {
-    console.warn('그래프 책 캐시 로드 실패:', error);
+    errorUtils.logDebug('graphModel', '그래프 책 캐시 로드 실패', { message: error?.message });
     return null;
   }
 };
@@ -1691,7 +2018,7 @@ export const getCachedChapterEvents = (bookId, chapterIdx) => {
     if (!cacheKey) return null;
     return loadTtlStorage(cacheKey, CHAPTER_EVENT_CACHE_MAX_AGE_MS, 'localStorage');
   } catch (error) {
-    console.error('챕터 이벤트 캐시 로드 실패:', error);
+    errorUtils.logDebug('graphModel', '챕터 이벤트 캐시 로드 실패', { message: error?.message });
     return null;
   }
 };
@@ -1720,7 +2047,7 @@ const setCachedChapterEvents = (bookId, chapterIdx, eventData) => {
     saveTtlStorage(cacheKey, cacheData, 'localStorage');
     return true;
   } catch (error) {
-    console.error('챕터 이벤트 캐시 저장 실패:', error);
+    errorUtils.logDebug('graphModel', '챕터 이벤트 캐시 저장 실패', { message: error?.message });
     return false;
   }
 };
@@ -1748,7 +2075,7 @@ function loadManifestEventStructures(bookId, chapterIdx) {
       })
       .filter((e) => e.eventIdx > 0);
   } catch (error) {
-    console.warn('manifest 이벤트 구조 로드 실패:', error);
+    errorUtils.logDebug('graphModel', 'manifest 이벤트 구조 로드 실패', { message: error?.message });
     return [];
   }
 }
@@ -1781,7 +2108,7 @@ function publishChapterPartialCache(bookId, chapterIdx, apiEvents, onPartialCach
     try {
       onPartialCache(payload);
     } catch (error) {
-      console.warn('onPartialCache 콜백 실패:', error);
+      errorUtils.logDebug('graphModel', 'onPartialCache 콜백 실패', { message: error?.message });
     }
   }
 }
@@ -1890,7 +2217,7 @@ async function collectEventsFromDeltas(ctx, indicesToFetch, manifestEventMap) {
     });
   } catch (error) {
     if (import.meta.env.DEV) {
-      console.debug(`챕터 ${chapterIdx} relationship-deltas 조회 실패`, error?.message || error);
+      errorUtils.logDebug('graphModel', 'relationship-deltas 조회 실패', { chapterIdx, message: error?.message || String(error) });
     }
     return;
   }
@@ -1951,7 +2278,7 @@ async function discoverWithoutManifest(ctx, cappedMaxEventIdx) {
     }
   } catch (error) {
     if (import.meta.env.DEV) {
-      console.debug(`챕터 ${chapterIdx} relationship-deltas(챕터) 조회 실패`, error?.message || error);
+      errorUtils.logDebug('graphModel', 'relationship-deltas(챕터) 조회 실패', { chapterIdx, message: error?.message || String(error) });
     }
   }
 }
@@ -2040,7 +2367,7 @@ const discoverChapterEvents = async (
 
     if (!apiEvents.length) {
       if (import.meta.env.DEV) {
-        console.debug(`챕터 ${chapterIdx}: relationship-deltas 이벤트 없음`);
+        errorUtils.logDebug('graphModel', 'relationship-deltas 이벤트 없음', { chapterIdx });
       }
       // EMPTY를 캐시에 쓰지 않음 — "빈 성공" 고착 방지 (재요청 가능)
       return null;
@@ -2086,7 +2413,7 @@ const hasUsableChapterCache = (bookId, chapterIdx) => {
   const cached = getCachedChapterEvents(bookId, chapterIdx);
   if (!cached) return false;
   if (isUnusableChapterGraphCacheSource(cached.source)) return false;
-  return true;
+  return cached;
 };
 
 /**
@@ -2097,10 +2424,11 @@ const hasUsableChapterCache = (bookId, chapterIdx) => {
  * @returns {boolean}
  */
 export const hasUsableChapterCacheThrough = (bookId, chapterIdx, throughEventIdx = null) => {
-  if (!hasUsableChapterCache(bookId, chapterIdx)) return false;
+  const cached = hasUsableChapterCache(bookId, chapterIdx);
+  if (!cached) return false;
   const through = Number(throughEventIdx);
   if (!Number.isFinite(through) || through < 1) return true;
-  const cachedMax = Number(getCachedChapterEvents(bookId, chapterIdx)?.maxEventIdx) || 0;
+  const cachedMax = Number(cached.maxEventIdx) || 0;
   return cachedMax >= through;
 };
 

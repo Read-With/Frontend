@@ -6,12 +6,15 @@ import {
   getChapterData,
   getManifestFromCache,
 } from '../common/cache/manifestCache.js';
+import { getProgressFromCache } from '../common/cache/progressCache.js';
 import {
   toPositiveNumberOrNull,
   toPositiveNumberFromId,
   toFiniteNumber,
+  toNumberOrNull,
   toTrimmedStringOrNull,
   asArray,
+  clampPositivity,
 } from '../common/valueUtils';
 import {
   formatFallbackChapterLabel,
@@ -72,6 +75,11 @@ export const uniqueStrings = (values, { caseInsensitive = false } = {}) => {
   return result;
 };
 
+/** uniqueStrings → 정렬 후 join (태그 fingerprint 등) */
+export function sortedUniqueJoin(values, sep = '\x1e', options) {
+  return uniqueStrings(values, options).sort().join(sep);
+}
+
 export function normalizeRelationArray(relation, label = '') {
   const values = Array.isArray(relation)
     ? relation
@@ -100,7 +108,7 @@ function labelHistoryLookupKey(text) {
 }
 
 /** eventId·ordinal에서 상대 순서 힌트 (작을수록 이른 등장) */
-function labelEventOrderHint(eventId, ordinal) {
+export function labelEventOrderHint(eventId, ordinal) {
   // Number(null) === 0 이므로 null ordinal은 무시
   if (ordinal != null && Number.isFinite(Number(ordinal))) return Number(ordinal);
   return toPositiveNumberFromId(eventId);
@@ -356,10 +364,17 @@ export const GRAPH_LAYOUT_CONSTANTS = {
 /** Cytoscape 뷰포트 줌 (휠·버튼·초기 fit 공통) */
 export const GRAPH_ZOOM = {
   STEP: 1.25,
+  /** 마우스 휠 한 단계의 확대·축소 변화량. 낮을수록 더 세밀하다. */
+  WHEEL_SENSITIVITY: 0.25,
   MIN: 0.2,
-  MAX: 2.4,
-  /** cy.fit 여백 — 줌·범례 버튼 등 가장자리 여유 */
-  FIT_PADDING: 56,
+  /** 소규모 그래프가 화면에 가깝게 채워지도록 상한을 넉넉히 */
+  MAX: 3.2,
+  /** cy.fit 여백 — 가장자리 여유 (작을수록 그래프가 크게 보임) */
+  FIT_PADDING: 32,
+  /** 최초/챕터 fit 전용 여백 */
+  FIT_PADDING_INITIAL: 24,
+  /** 초기 fit 후 살짝 줌인 (1 = 추가 없음). 라벨이 살짝 잘려도 본체가 읽히게 */
+  FIT_FILL: 1.1,
   /** 초기/영역 맞춤 — 짧게 유지해 등장감 완화 */
   FIT_DURATION_MS: 140,
 };
@@ -406,11 +421,6 @@ export function buildChapterSidebarItems(chapterList, manifestBookId, bookTitle,
     const label = stripChapterOrdinalPrefix(base, row.chapter) || base;
     return { ...row, label };
   });
-}
-
-/** 챕터·이벤트 전환 시 Cytoscape viewport fit 키 */
-export function buildGraphViewportRefitKey(chapter, eventNum) {
-  return `${chapter ?? ''}:${eventNum ?? ''}`;
 }
 
 /* ─── 관계 정규화 · 태그 · 레이더 ─── */
@@ -792,4 +802,272 @@ export function enrichGraphPayload(payload, bookId) {
     next.elements = applyDisplayNamesToElements(payload.elements, { bookId, characters });
   }
   return next;
+}
+
+/** 상단 메타·스크러버 공통: `Event 3` / `Event ?` */
+export function formatGraphEventMetaLabel(eventNum, { unknown = '?' } = {}) {
+  const n = Number(eventNum);
+  if (Number.isFinite(n) && n > 0) return `Event ${Math.trunc(n)}`;
+  return `Event ${unknown}`;
+}
+
+/** 챕터 manifest events → 정렬된 eventIdx 목록 */
+export function listChapterEventIndices(bookId, chapter, manifestHint) {
+  if (bookId == null) return [];
+  const ch = getChapterData(bookId, chapter, manifestHint);
+  const events = Array.isArray(ch?.events) ? ch.events : [];
+  const nums = [];
+  const seen = new Set();
+  for (const ev of events) {
+    const n = eventUtils.resolveEventNum(ev);
+    if (n > 0 && !seen.has(n)) {
+      seen.add(n);
+      nums.push(n);
+    }
+  }
+  nums.sort((a, b) => a - b);
+  return nums;
+}
+
+/** 진도 캐시 기준, 해당 챕터의 읽기 중 사건 번호 */
+export function resolveReadingEventNumForChapter(bookId, chapter) {
+  if (bookId == null) return null;
+  const progress = getProgressFromCache(bookId);
+  if (!progress) return null;
+  const ch = Number(progress.chapterIdx);
+  const ev = Number(progress.eventNum);
+  if (ch === Number(chapter) && Number.isFinite(ev) && ev > 0) {
+    return Math.trunc(ev);
+  }
+  return null;
+}
+
+/* ─── 노드 툴팁 · 관계 분석 연결 상태 ─── */
+
+export const RELATION_CONNECTION_KIND = Object.freeze({
+  SUFFICIENT: 'sufficient_connections',
+  SINGLE: 'single_connection',
+  PAIR: 'pair_connections',
+  NONE: 'no_connections',
+  ERROR: 'load_error',
+});
+
+/** 레이더 연결 수 → 모달 connectionKind */
+export function resolveRelationConnectionKind(connectionCount, { hasError = false, enabled = true } = {}) {
+  if (!enabled) return RELATION_CONNECTION_KIND.NONE;
+  if (hasError) return RELATION_CONNECTION_KIND.ERROR;
+  const n = Number(connectionCount) || 0;
+  if (n === 0) return RELATION_CONNECTION_KIND.NONE;
+  if (n === 1) return RELATION_CONNECTION_KIND.SINGLE;
+  if (n === 2) return RELATION_CONNECTION_KIND.PAIR;
+  return RELATION_CONNECTION_KIND.SUFFICIENT;
+}
+
+/** POV/레이더 뷰 상태 (FETCH_STATUS.EMPTY와 구분) */
+export const NODE_TOOLTIP_VIEW_STATUS = Object.freeze({
+  NO_DATA: 'no-data',
+  OK: 'ok',
+  ERROR: 'error',
+  LOADING: 'loading',
+  READY: 'ready',
+  PENDING: 'pending',
+});
+
+export function normalizeMatchName(value) {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+}
+
+export function collectNodeMatchNames(node) {
+  const names = [];
+  const push = (v) => {
+    if (typeof v !== 'string') return;
+    const n = normalizeMatchName(v);
+    if (n) names.push(n);
+  };
+  push(node?.common_name);
+  push(node?.label);
+  push(node?.displayName);
+  push(node?.name);
+  if (Array.isArray(node?.names)) {
+    node.names.forEach(push);
+  }
+  return [...new Set(names)];
+}
+
+/** id/이름 비교용 문자열 */
+export function normalizeGraphIdString(value) {
+  if (value == null) return '';
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? String(Math.trunc(value)) : '';
+  }
+  return String(value).trim();
+}
+
+export function buildNodeIdentityContext(nodeLike) {
+  const normalizedNodeId = normalizeGraphIdString(nodeLike?.id);
+  return {
+    normalizedNodeId,
+    nodeIdNum: toNumberOrNull(normalizedNodeId),
+    normalizedNodeName: normalizeGraphIdString(
+      nodeLike?.common_name ?? nodeLike?.label ?? nodeLike?.name,
+    ),
+  };
+}
+
+export function isSameNodeIdentifier(candidate, idCtx) {
+  if (!candidate || !idCtx) return false;
+  const candidateId =
+    candidate.id ??
+    candidate.character_id ??
+    candidate.characterId ??
+    candidate.char_id ??
+    candidate.pk ??
+    candidate.node_id;
+  const candidateName =
+    candidate.common_name ?? candidate.name ?? candidate.label ?? candidate.displayName;
+
+  const candidateIdStr = normalizeGraphIdString(candidateId);
+  if (candidateIdStr && idCtx.normalizedNodeId && candidateIdStr === idCtx.normalizedNodeId) {
+    return true;
+  }
+
+  const candidateIdNum = toNumberOrNull(candidateIdStr);
+  if (candidateIdNum !== null && idCtx.nodeIdNum !== null && candidateIdNum === idCtx.nodeIdNum) {
+    return true;
+  }
+
+  const candidateNameStr = normalizeGraphIdString(candidateName);
+  return !!(
+    candidateNameStr &&
+    idCtx.normalizedNodeName &&
+    candidateNameStr === idCtx.normalizedNodeName
+  );
+}
+
+/** 무방향 관계 목록 (동일 쌍 1회) */
+export function collectUndirectedRelations(rawRelations, targetNodeId = null) {
+  const relationMap = new Map();
+  const targetStr = targetNodeId != null ? String(targetNodeId) : null;
+
+  asArray(rawRelations).forEach((rel) => {
+    const id1 = rel.id1 ?? rel.source;
+    const id2 = rel.id2 ?? rel.target;
+    if (id1 == null || id2 == null) return;
+    if (targetStr != null && String(id1) !== targetStr && String(id2) !== targetStr) return;
+
+    const key = undirectedPairKey(id1, id2);
+    if (relationMap.has(key)) return;
+
+    const positivityRaw = toFiniteNumber(rel.positivity);
+    relationMap.set(key, {
+      id1,
+      id2,
+      relation: rel.relation || ['관계'],
+      count: rel.count || rel.strength || 1,
+      positivity: Number.isFinite(positivityRaw) ? clampPositivity(positivityRaw) : 0,
+    });
+  });
+
+  return Array.from(relationMap.values());
+}
+
+/** 툴팁용 노드 표시 모델 */
+export function buildProcessedNode(data) {
+  const raw = (data && (data.id || data.label))
+    ? data
+    : (data?.data || { id: data?.id, label: data?.label });
+  if (!raw) return null;
+
+  // personalityText만 표시 (profileText/프롬프트 폴백 금지)
+  const description = String(raw.personalityText || raw.description || '').trim();
+  return {
+    ...raw,
+    names: normalizeRelationArray(raw.names || [], raw.common_name),
+    displayName: raw.common_name || raw.label || 'Unknown',
+    hasImage: !!raw.image,
+    isMainCharacter: !!raw.isMainCharacter,
+    description,
+  };
+}
+
+const POV_SPOILER_SESSION_KEY = 'readwith:pov-spoiler-unlocked';
+
+/** @deprecated 세션 유지 안 함 — 선택 해제 후 안내 문구가 다시 보이도록 false 고정 */
+export function readPovSpoilerUnlocked() {
+  return false;
+}
+
+/** @deprecated 세션에 저장하지 않음 */
+export function unlockPovSpoilerSession() {
+  clearPovSpoilerSession();
+}
+
+export function clearPovSpoilerSession() {
+  try {
+    sessionStorage.removeItem(POV_SPOILER_SESSION_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * @returns {{ text: string, status: string }}
+ */
+export function resolvePovSummary(
+  node,
+  currentChapter,
+  povSummaries,
+  povError = null,
+  { isLoading = false, povCached = null } = {},
+) {
+  const S = NODE_TOOLTIP_VIEW_STATUS;
+  if (!node) {
+    return {
+      text: '해당 챕터에서는 해당 캐릭터의 등장 비중이 낮아 별도의 분석 내용이 제공되지 않습니다.',
+      status: S.NO_DATA,
+    };
+  }
+
+  if (isLoading) {
+    return { text: '시점 요약을 불러오는 중…', status: S.LOADING };
+  }
+
+  if (povError) {
+    return {
+      text: typeof povError === 'string' ? povError : '관점 요약을 불러오지 못했습니다.',
+      status: S.ERROR,
+    };
+  }
+
+  const list = povSummaries?.povSummaries;
+  if (Array.isArray(list) && list.length > 0) {
+    const nodeId = Number(node.id);
+    let match = Number.isFinite(nodeId)
+      ? list.find((s) => Number(s.characterId) === nodeId)
+      : null;
+    if (!match) {
+      const names = collectNodeMatchNames(node);
+      match = list.find((s) => names.includes(normalizeMatchName(s.characterName)));
+    }
+    const summaryText = typeof match?.summaryText === 'string' ? match.summaryText.trim() : '';
+    if (summaryText) {
+      return { text: summaryText, status: S.READY };
+    }
+  }
+
+  const chapterLabel = currentChapter || 1;
+  if (povCached === false) {
+    return {
+      text: `${node.displayName}의 챕터 ${chapterLabel} 시점 요약은 아직 준비되지 않았습니다. 잠시 후 다시 확인해 주세요.`,
+      status: S.PENDING,
+    };
+  }
+
+  return {
+    text: `${node.displayName}에 대한 챕터 ${chapterLabel} 시점 요약이 아직 준비되지 않았습니다.`,
+    status: S.PENDING,
+  };
 }

@@ -4,6 +4,9 @@
  */
 
 import { clearBooksCache } from '../common/cache/cacheManager';
+import { errorUtils } from '../common/valueUtils';
+
+export const AUTH_CLEARED_EVENT = 'readwith:auth-cleared';
 
 const KEY_ACCESS = 'accessToken';
 const KEY_SESSION_ACCESS = 'readwith_session_access';
@@ -126,7 +129,12 @@ export function clearAuthData() {
     localStorage.removeItem(KEY_REFRESH);
     localStorage.removeItem(KEY_GOOGLE_USER);
     sessionStorage.removeItem(KEY_SESSION_ACCESS);
-  } catch {
-    console.error('localStorage 접근 실패');
+  } catch (error) {
+    errorUtils.logWarning('authTokenStorage', 'localStorage 접근 실패', {
+      message: error?.message,
+    });
+  }
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(AUTH_CLEARED_EVENT));
   }
 }

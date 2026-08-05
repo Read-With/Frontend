@@ -1,7 +1,6 @@
 /* Library modal chrome — BookDetailModal + FileUpload 공유 */
 
 .book-detail-modal {
-  /* Design tokens (inherited by all descendants) */
   --bd-page: #fefcf8;
   --bd-overlay: rgba(26, 32, 26, 0.45);
 
@@ -12,19 +11,19 @@
   --bd-surface-header-from: #f4f6f3;
   --bd-surface-footer-to: #f8faf6;
 
-  --bd-accent: #5c6f5c;
-  --bd-accent-light: #6d826d;
-  --bd-accent-dark: #4f624f;
-  --bd-accent-dark-2: #5f735f;
-  --bd-accent-soft: rgba(92, 111, 92, 0.14);
-  --bd-accent-soft-weak: rgba(92, 111, 92, 0.06);
-  --bd-accent-soft-mid: rgba(92, 111, 92, 0.1);
-  --bd-accent-border: rgba(92, 111, 92, 0.32);
-  --bd-accent-border-soft: rgba(92, 111, 92, 0.25);
-  --bd-accent-border-dashed: rgba(92, 111, 92, 0.35);
-  --bd-accent-bg-hover: rgba(92, 111, 92, 0.07);
-  --bd-accent-bg-current: rgba(92, 111, 92, 0.04);
-  --bd-accent-shadow: rgba(92, 111, 92, 0.26);
+  --bd-accent: var(--brand-accent);
+  --bd-accent-light: var(--brand-accent-light);
+  --bd-accent-dark: var(--brand-accent-mid);
+  --bd-accent-dark-2: var(--brand-accent-light);
+  --bd-accent-soft: var(--brand-alpha-14);
+  --bd-accent-soft-weak: var(--brand-alpha-06);
+  --bd-accent-soft-mid: var(--brand-alpha-10);
+  --bd-accent-border: var(--brand-alpha-32);
+  --bd-accent-border-soft: var(--brand-alpha-25);
+  --bd-accent-border-dashed: var(--brand-alpha-35);
+  --bd-accent-bg-hover: var(--brand-alpha-07);
+  --bd-accent-bg-current: var(--brand-alpha-04);
+  --bd-accent-shadow: var(--brand-alpha-26);
   --bd-accent-gradient: linear-gradient(90deg, var(--bd-accent-light), var(--bd-accent));
   --bd-accent-gradient-diag: linear-gradient(135deg, var(--bd-accent-light), var(--bd-accent));
   --bd-accent-gradient-hover: linear-gradient(135deg, var(--bd-accent-dark-2), var(--bd-accent-dark));
@@ -62,8 +61,8 @@
   --bd-shadow-faint: rgba(0, 0, 0, 0.04);
   --bd-shadow-deep: rgba(46, 58, 46, 0.12);
 
-  --bd-focus: rgba(92, 111, 92, 0.45);
-  --bd-focus-soft: rgba(92, 111, 92, 0.35);
+  --bd-focus: var(--brand-focus);
+  --bd-focus-soft: var(--brand-alpha-35);
   --bd-focus-danger: rgba(185, 28, 28, 0.45);
 
   --bd-shimmer: linear-gradient(90deg, #ebece8 0%, #f4f5f2 45%, #ebece8 100%);
@@ -79,7 +78,7 @@
   z-index: 1000;
   display: flex;
   align-items: center;
-  justify-content: center;åç
+  justify-content: center;
   padding:
     max(1.25rem, env(safe-area-inset-top, 0px))
     max(1.25rem, env(safe-area-inset-right, 0px))
@@ -89,7 +88,6 @@
   backdrop-filter: blur(0.375rem);
 }
 
-/* Shared visually-hidden utility (modal description + panel toggle label) */
 .book-detail-modal-desc,
 .book-detail-panel-toggle-sr {
   position: absolute;
