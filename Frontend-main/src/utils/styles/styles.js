@@ -22,18 +22,22 @@ export function mergeRefs(...refs) {
 /** GRAPH_COLORS 재export (소비자는 COLORS 또는 GRAPH_COLORS) */
 export const COLORS = GRAPH_COLORS;
 
+export { brandAlpha, BRAND_RGB } from './graphStyles';
+
+const opacityTransition = `opacity ${ANIMATION_VALUES.DURATION.NORMAL}`;
+
 const createConditionalTransition = (condition, normalTransition, disabledTransition = 'none') =>
   condition ? disabledTransition : normalTransition;
 
 /** UnifiedNodeInfo 드래그 중 transition 억제 */
 export const unifiedNodeAnimations = {
   tooltipSimpleTransition: (isDragging) =>
-    createConditionalTransition(isDragging, `opacity ${ANIMATION_VALUES.DURATION.NORMAL}`, 'none'),
+    createConditionalTransition(isDragging, opacityTransition, 'none'),
 
   tooltipComplexTransition: (isDragging) =>
     createConditionalTransition(
       isDragging,
-      `opacity ${ANIMATION_VALUES.DURATION.NORMAL}, transform ${ANIMATION_VALUES.DURATION.SLOW}`,
-      'none'
+      `${opacityTransition}, transform ${ANIMATION_VALUES.DURATION.SLOW}`,
+      'none',
     ),
 };

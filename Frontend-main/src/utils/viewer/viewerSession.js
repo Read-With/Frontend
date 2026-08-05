@@ -1,5 +1,6 @@
 /** 뷰어 세션: 이벤트 매칭·진도·TopBar·저장 payload·런타임(UI/ref)·뷰어 설정 */
 
+import { PanelsTopLeft, FileText } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { errorUtils } from '../common/urlUtils';
 import { storageUtils } from '../common/cache/cacheManager';
@@ -25,8 +26,8 @@ import { getProgressFromCache } from '../common/cache/progressCache';
 import { eventUtils, resolveServerBookId } from './viewerCore';
 
 export const VIEWER_MODE_OPTIONS = [
-  { showGraph: true, icon: 'view_sidebar', label: '단일 뷰어 & 그래프' },
-  { showGraph: false, icon: 'article', label: '단일 뷰어' },
+  { showGraph: false, Icon: FileText, label: '본문만' },
+  { showGraph: true, Icon: PanelsTopLeft, label: '본문+그래프' },
 ];
 
 /** UI 미노출 필드 포함. XhtmlViewer 본문 기본값으로 사용·저장 */
@@ -35,7 +36,7 @@ export const defaultSettings = {
   lineHeight: 1.5,
   margin: 20,
   fontFamily: 'Noto Serif KR',
-  showGraph: true,
+  showGraph: false,
 };
 
 export const SETTINGS_STORAGE_KEY = 'xhtml_viewer_settings';
@@ -69,7 +70,7 @@ function needsSettingsPersist(raw, normalized) {
 export function findViewerModeOption(showGraph) {
   return (
     VIEWER_MODE_OPTIONS.find((opt) => opt.showGraph === Boolean(showGraph)) ??
-    VIEWER_MODE_OPTIONS[1]
+    VIEWER_MODE_OPTIONS[0]
   );
 }
 

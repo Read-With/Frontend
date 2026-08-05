@@ -1,19 +1,24 @@
-import { memo, useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { lazy, memo, Suspense, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useParams } from "react-router-dom";
 import {
   processRelations,
-  normalizeRelationArray,
   extractRadarChartData,
   extractApiBookId,
-  undirectedPairKey,
   isGraphNodeElement,
   GRAPH_LAYOUT_CONSTANTS,
+  buildProcessedNode,
+  buildNodeIdentityContext,
+  isSameNodeIdentifier,
+  collectUndirectedRelations,
+  resolvePovSummary,
+  resolveRelationConnectionKind,
+  clearPovSpoilerSession,
+  NODE_TOOLTIP_VIEW_STATUS,
 } from "../../utils/graph/graphCore";
 import { getEventDataByIndex } from "../../utils/graph/graphFetch.js";
 import { hasGraphPayload } from "../../utils/api/graphApi.js";
-import { useTooltipPosition, useClickOutside } from "../../hooks/ui/tooltipHooks";
+import { useTooltipPosition, useClickOutside, useCanvasAvoidPoint } from "../../hooks/ui/tooltipHooks";
 import { getUnifiedEventInfoForTooltip } from "../../utils/viewer/viewerSession";
-import { toNumberOrNull } from "../../utils/common/valueUtils.js";
 import { USER_GRAPH_PREFIX } from "../../utils/common/urlUtils";
 import { finitePositivityOrZero } from "../../utils/styles/graphStyles";
 import {
@@ -21,168 +26,33 @@ import {
   mergeRefs,
   unifiedNodeAnimations,
 } from "../../utils/styles/styles.js";
-import './RelationGraph.css';
-import RelationAnalysisModal, { PersonSilhouette } from './RelationAnalysisModal';
+import {
+  PersonSilhouette,
+  TooltipCloseButton,
+  ActionButton,
+  NodeTooltipShell,
+  CenteredStatus,
+  NodeProfileAvatar,
+} from './GraphControls';
 
-/** 뷰 전용 — FETCH_STATUS.EMPTY('empty')와 구분 */
-const UI_VIEW_STATUS = Object.freeze({
-  NO_DATA: 'no-data',
-  OK: 'ok',
-  ERROR: 'error',
-  LOADING: 'loading',
-  READY: 'ready',
-  PENDING: 'pending',
-});
+const RelationAnalysisModal = lazy(() => import('./RelationAnalysisModal'));
 
-const RADAR_EMPTY = Object.freeze({ items: [], status: UI_VIEW_STATUS.NO_DATA });
+const RADAR_EMPTY = Object.freeze({ items: [], status: NODE_TOOLTIP_VIEW_STATUS.NO_DATA });
 const radarOk = (items) => ({
   items,
-  status: items.length > 0 ? UI_VIEW_STATUS.OK : UI_VIEW_STATUS.NO_DATA,
+  status: items.length > 0 ? NODE_TOOLTIP_VIEW_STATUS.OK : NODE_TOOLTIP_VIEW_STATUS.NO_DATA,
 });
 const radarError = (message) => ({
   items: [],
-  status: UI_VIEW_STATUS.ERROR,
+  status: NODE_TOOLTIP_VIEW_STATUS.ERROR,
   error: message || '관계 분석 데이터를 만들지 못했습니다.',
 });
 
 const Z_INDEX_TOOLTIP = 99999;
 const SUMMARY = { COLLAPSED: 'collapsed', WARNING: 'warning', CONTENT: 'content' };
-const POV_SPOILER_SESSION_KEY = 'readwith:pov-spoiler-unlocked';
 
 /** 뷰어처럼 key remount 되어도 분석 모달을 유지하기 위한 플래그 */
 let pendingKeepAnalysisOpen = false;
-
-function readPovSpoilerUnlocked() {
-  try {
-    return sessionStorage.getItem(POV_SPOILER_SESSION_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
-
-function unlockPovSpoilerSession() {
-  try {
-    sessionStorage.setItem(POV_SPOILER_SESSION_KEY, '1');
-  } catch {
-    /* ignore */
-  }
-}
-
-function normalizeMatchName(value) {
-  return String(value ?? '')
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, ' ');
-}
-
-function collectNodeMatchNames(node) {
-  const names = [];
-  const push = (v) => {
-    if (typeof v !== 'string') return;
-    const n = normalizeMatchName(v);
-    if (n) names.push(n);
-  };
-  push(node?.common_name);
-  push(node?.label);
-  push(node?.displayName);
-  push(node?.name);
-  if (Array.isArray(node?.names)) {
-    node.names.forEach(push);
-  }
-  return [...new Set(names)];
-}
-
-function normalizeToString(value) {
-  if (value == null) return "";
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? String(Math.trunc(value)) : "";
-  }
-  return String(value).trim();
-}
-
-function buildProcessedNode(data) {
-  const raw = (data && (data.id || data.label))
-    ? data
-    : (data?.data || { id: data?.id, label: data?.label });
-  if (!raw) return null;
-
-  // personalityText만 표시 (profileText/프롬프트 폴백 금지)
-  const description = String(raw.personalityText || raw.description || '').trim();
-  return {
-    ...raw,
-    names: normalizeRelationArray(raw.names || [], raw.common_name),
-    displayName: raw.common_name || raw.label || "Unknown",
-    hasImage: !!raw.image,
-    isMainCharacter: !!raw.isMainCharacter,
-    description,
-  };
-}
-
-function buildIdentityContext(nodeLike) {
-  const normalizedNodeId = normalizeToString(nodeLike?.id);
-  return {
-    normalizedNodeId,
-    nodeIdNum: toNumberOrNull(normalizedNodeId),
-    normalizedNodeName: normalizeToString(
-      nodeLike?.common_name ?? nodeLike?.label ?? nodeLike?.name
-    ),
-  };
-}
-
-function isSameIdentifier(candidate, idCtx) {
-  if (!candidate) return false;
-  const candidateId =
-    candidate.id ??
-    candidate.character_id ??
-    candidate.characterId ??
-    candidate.char_id ??
-    candidate.pk ??
-    candidate.node_id;
-  const candidateName =
-    candidate.common_name ?? candidate.name ?? candidate.label ?? candidate.displayName;
-
-  const candidateIdStr = normalizeToString(candidateId);
-  if (candidateIdStr && idCtx.normalizedNodeId && candidateIdStr === idCtx.normalizedNodeId) {
-    return true;
-  }
-
-  const candidateIdNum = toNumberOrNull(candidateIdStr);
-  if (candidateIdNum !== null && idCtx.nodeIdNum !== null && candidateIdNum === idCtx.nodeIdNum) {
-    return true;
-  }
-
-  const candidateNameStr = normalizeToString(candidateName);
-  return !!(
-    candidateNameStr &&
-    idCtx.normalizedNodeName &&
-    candidateNameStr === idCtx.normalizedNodeName
-  );
-}
-
-function collectUndirectedRelations(rawRelations, targetNodeId = null) {
-  const relationMap = new Map();
-  const targetStr = targetNodeId != null ? String(targetNodeId) : null;
-
-  rawRelations.forEach((rel) => {
-    const id1 = rel.id1 ?? rel.source;
-    const id2 = rel.id2 ?? rel.target;
-    if (id1 == null || id2 == null) return;
-    if (targetStr != null && String(id1) !== targetStr && String(id2) !== targetStr) return;
-
-    const key = undirectedPairKey(id1, id2);
-    if (relationMap.has(key)) return;
-
-    relationMap.set(key, {
-      id1,
-      id2,
-      relation: rel.relation || ['관계'],
-      count: rel.count || rel.strength || 1,
-      positivity: finitePositivityOrZero(rel.positivity),
-    });
-  });
-
-  return Array.from(relationMap.values());
-}
 
 function checkNodeAppearance({ isSidebar, data, node, currentChapter, folderKey, eventNum, elements }) {
   const isGraphOnlyPage =
@@ -196,7 +66,7 @@ function checkNodeAppearance({ isSidebar, data, node, currentChapter, folderKey,
 
   try {
     const json = getEventDataByIndex(folderKey, currentChapter, eventNum);
-    const idCtx = buildIdentityContext({
+    const idCtx = buildNodeIdentityContext({
       id: node?.id ?? data?.id ?? data?.data?.id,
       common_name:
         node?.common_name ??
@@ -209,7 +79,7 @@ function checkNodeAppearance({ isSidebar, data, node, currentChapter, folderKey,
 
     const inElements = Array.isArray(elements) && elements.some((el) => {
       if (!el || el.data?.source) return false;
-      return isSameIdentifier(
+      return isSameNodeIdentifier(
         { id: el.data?.id ?? el.id, name: el.data?.common_name ?? el.data?.label },
         idCtx,
       );
@@ -221,72 +91,17 @@ function checkNodeAppearance({ isSidebar, data, node, currentChapter, folderKey,
 
     const relations = processRelations(json.relations);
     const inCharacters = Array.isArray(json.characters)
-      && json.characters.some((c) => isSameIdentifier(c, idCtx));
+      && json.characters.some((c) => isSameNodeIdentifier(c, idCtx));
     const inRelations = relations.some(
       (rel) =>
-        isSameIdentifier({ id: rel.id1, name: rel.name1 }, idCtx) ||
-        isSameIdentifier({ id: rel.id2, name: rel.name2 }, idCtx),
+        isSameNodeIdentifier({ id: rel.id1, name: rel.name1 }, idCtx) ||
+        isSameNodeIdentifier({ id: rel.id2, name: rel.name2 }, idCtx),
     );
 
     return { appeared: inCharacters || inRelations || inElements, error: null };
   } catch (err) {
     return { appeared: false, error: err.message };
   }
-}
-
-/**
- * @returns {{ text: string, status: 'no-data'|'loading'|'error'|'ready'|'pending' }}
- */
-function resolvePovSummary(
-  node,
-  currentChapter,
-  povSummaries,
-  povError = null,
-  { isLoading = false, povCached = null } = {},
-) {
-  if (!node) {
-    return { text: '해당 챕터에서는 해당 캐릭터의 등장 비중이 낮아 별도의 분석 내용이 제공되지 않습니다.', status: UI_VIEW_STATUS.NO_DATA };
-  }
-
-  if (isLoading) {
-    return { text: '시점 요약을 불러오는 중…', status: UI_VIEW_STATUS.LOADING };
-  }
-
-  if (povError) {
-    return {
-      text: typeof povError === 'string' ? povError : '관점 요약을 불러오지 못했습니다.',
-      status: UI_VIEW_STATUS.ERROR,
-    };
-  }
-
-  const list = povSummaries?.povSummaries;
-  if (Array.isArray(list) && list.length > 0) {
-    const nodeId = Number(node.id);
-    let match = Number.isFinite(nodeId)
-      ? list.find((s) => Number(s.characterId) === nodeId)
-      : null;
-    if (!match) {
-      const names = collectNodeMatchNames(node);
-      match = list.find((s) => names.includes(normalizeMatchName(s.characterName)));
-    }
-    const summaryText = typeof match?.summaryText === 'string' ? match.summaryText.trim() : '';
-    if (summaryText) {
-      return { text: summaryText, status: UI_VIEW_STATUS.READY };
-    }
-  }
-
-  const chapterLabel = currentChapter || 1;
-  if (povCached === false) {
-    return {
-      text: `${node.displayName}의 챕터 ${chapterLabel} 시점 요약이 아직 생성·캐시되지 않았습니다.`,
-      status: UI_VIEW_STATUS.PENDING,
-    };
-  }
-
-  return {
-    text: `${node.displayName}에 대한 챕터 ${chapterLabel} 시점 요약이 아직 준비되지 않았습니다.`,
-    status: UI_VIEW_STATUS.PENDING,
-  };
 }
 
 function buildRadarChartData({
@@ -364,106 +179,6 @@ function buildRadarChartData({
   }
 }
 
-function handleProfileImageError(e) {
-  e.target.style.display = "none";
-  if (e.target.nextSibling) e.target.nextSibling.style.display = "block";
-}
-
-function TooltipCloseButton({ onClose, ariaLabel, className }) {
-  return (
-    <button
-      type="button"
-      onClick={onClose}
-      aria-label={ariaLabel}
-      className={['tooltip-close-btn', className].filter(Boolean).join(' ')}
-    >
-      &times;
-    </button>
-  );
-}
-
-function ActionButton({ variant = 'secondary', onClick, children, ariaLabel, title }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={ariaLabel}
-      title={title}
-      className={`tooltip-action-btn tooltip-action-btn--${variant === 'primary' ? 'primary' : 'secondary'}`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function NodeTooltipShell({
-  children,
-  shellRef,
-  className = "graph-node-tooltip",
-  position,
-  zIndex = Z_INDEX_TOOLTIP,
-  showContent,
-  isDragging,
-  handleMouseDown,
-  transition,
-  closeButton = null,
-}) {
-  return (
-    <div
-      ref={shellRef}
-      className={className}
-      style={{
-        left: position.x,
-        top: position.y,
-        zIndex,
-        ...(showContent !== undefined
-          ? {
-              opacity: showContent ? 1 : 0,
-              transition,
-              cursor: isDragging ? "grabbing" : "grab",
-            }
-          : null),
-      }}
-      onMouseDown={handleMouseDown}
-    >
-      {closeButton}
-      {children}
-    </div>
-  );
-}
-
-function CenteredStatus({ children, color = COLORS.textSecondary, fullHeight = true }) {
-  return (
-    <div
-      className={`tooltip-centered-status${fullHeight ? '' : ' tooltip-centered-status--compact'}`}
-      style={{ '--status-color': color }}
-    >
-      {children}
-    </div>
-  );
-}
-
-function NodeProfileAvatar({ node }) {
-  const hasImage = !!node?.hasImage;
-  return (
-    <div className="profile-image-placeholder">
-      <div className="profile-img">
-        {hasImage ? (
-          <img
-            src={node.image}
-            alt={node?.displayName || "character"}
-            crossOrigin="anonymous"
-            onError={handleProfileImageError}
-          />
-        ) : null}
-        <div style={{ display: hasImage ? "none" : "block" }}>
-          <PersonSilhouette size={48} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function RelationAnalysisCta({
   node,
   connectionCount,
@@ -518,6 +233,7 @@ function UnifiedNodeInfo({
   apiBookGraphData = null,
   onSelectRelatedNode = null,
   chapterRailWidth = null,
+  tooltipBoundsRef = null,
 }) {
   const { filename: urlFilename } = useParams();
   const isSidebar = displayMode === 'sidebar';
@@ -527,7 +243,6 @@ function UnifiedNodeInfo({
 
   const [appeared, setAppeared] = useState(false);
   const [error, setError] = useState(null);
-  const [spoilerUnlocked, setSpoilerUnlocked] = useState(readPovSpoilerUnlocked);
   const [summaryStage, setSummaryStage] = useState(SUMMARY.COLLAPSED);
   const [isModalOpen, setIsModalOpen] = useState(() => {
     if (pendingKeepAnalysisOpen) {
@@ -538,6 +253,7 @@ function UnifiedNodeInfo({
   });
   const keepModalOpenRef = useRef(false);
   const analysisBtnRef = useRef(null);
+  const unlockedPovNodeIdsRef = useRef(new Set());
 
   const openModal = useCallback(() => setIsModalOpen(true), []);
   const closeModal = useCallback(() => {
@@ -557,7 +273,13 @@ function UnifiedNodeInfo({
     return onSelectRelatedNode(idOrName, options);
   }, [onSelectRelatedNode]);
 
+  const isPovUnlockedForNode = useCallback((nodeId) => {
+    if (nodeId == null || nodeId === '') return false;
+    return unlockedPovNodeIdsRef.current.has(String(nodeId));
+  }, []);
+
   useEffect(() => {
+    clearPovSpoilerSession();
     setSummaryStage(SUMMARY.COLLAPSED);
     if (keepModalOpenRef.current) {
       keepModalOpenRef.current = false;
@@ -567,14 +289,20 @@ function UnifiedNodeInfo({
     }
   }, [node?.id]);
 
-  const avoidPoint = useMemo(() => {
-    const c = data?.nodeCenter;
-    if (c && Number.isFinite(c.x) && Number.isFinite(c.y)) return c;
-    return null;
-  }, [data?.nodeCenter]);
+  useEffect(() => () => {
+    unlockedPovNodeIdsRef.current.clear();
+    clearPovSpoilerSession();
+  }, []);
+
+  const avoidPoint = useCanvasAvoidPoint(data?.nodeCenter);
 
   const { position, showContent, isDragging, tooltipRef, handleMouseDown } = useTooltipPosition(
-    x, y, { enabled: !isSidebar, bounds: 'canvas', avoidPoint }
+    x, y, {
+      enabled: !isSidebar,
+      bounds: 'canvas',
+      avoidPoint,
+      boundsRef: tooltipBoundsRef,
+    }
   );
 
   const clickOutsideRef = useClickOutside(
@@ -615,9 +343,9 @@ function UnifiedNodeInfo({
       }),
     [node, currentChapter, povSummaries, povError, povIsLoading, povCached],
   );
-  const summaryIsError = summaryStatus === UI_VIEW_STATUS.ERROR;
-  const summaryIsLoading = summaryStatus === UI_VIEW_STATUS.LOADING;
-  const summaryIsPending = summaryStatus === UI_VIEW_STATUS.PENDING;
+  const summaryIsError = summaryStatus === NODE_TOOLTIP_VIEW_STATUS.ERROR;
+  const summaryIsLoading = summaryStatus === NODE_TOOLTIP_VIEW_STATUS.LOADING;
+  const summaryIsPending = summaryStatus === NODE_TOOLTIP_VIEW_STATUS.PENDING;
   const chapterSummaryTitle =
     currentChapter != null && Number(currentChapter) >= 1
       ? `챕터 ${currentChapter} 시점 요약`
@@ -626,15 +354,16 @@ function UnifiedNodeInfo({
   const openSummarySection = useCallback(() => {
     setSummaryStage((s) => {
       if (s !== SUMMARY.COLLAPSED) return SUMMARY.COLLAPSED;
-      return spoilerUnlocked ? SUMMARY.CONTENT : SUMMARY.WARNING;
+      return isPovUnlockedForNode(node?.id) ? SUMMARY.CONTENT : SUMMARY.WARNING;
     });
-  }, [spoilerUnlocked]);
+  }, [isPovUnlockedForNode, node?.id]);
 
   const confirmSpoiler = useCallback(() => {
-    unlockPovSpoilerSession();
-    setSpoilerUnlocked(true);
+    if (node?.id != null && node.id !== '') {
+      unlockedPovNodeIdsRef.current.add(String(node.id));
+    }
     setSummaryStage(SUMMARY.CONTENT);
-  }, []);
+  }, [node?.id]);
 
   const radarResult = useMemo(() => {
     if (!isSidebar) return RADAR_EMPTY;
@@ -649,17 +378,17 @@ function UnifiedNodeInfo({
   }, [isSidebar, node, currentChapter, folderKey, elements, apiBookGraphData, eventInfo]);
 
   const radarChartData = radarResult.items;
-  const radarLoadError = radarResult.status === UI_VIEW_STATUS.ERROR ? radarResult.error : null;
+  const radarLoadError =
+    radarResult.status === NODE_TOOLTIP_VIEW_STATUS.ERROR ? radarResult.error : null;
 
-  const connectionKind = useMemo(() => {
-    if (!isSidebar) return 'no_connections';
-    if (radarResult.status === UI_VIEW_STATUS.ERROR) return 'load_error';
-    const n = radarChartData.length;
-    if (n === 0) return 'no_connections';
-    if (n === 1) return 'single_connection';
-    if (n === 2) return 'pair_connections';
-    return 'sufficient_connections';
-  }, [isSidebar, radarResult.status, radarChartData]);
+  const connectionKind = useMemo(
+    () =>
+      resolveRelationConnectionKind(radarChartData.length, {
+        enabled: isSidebar,
+        hasError: radarResult.status === NODE_TOOLTIP_VIEW_STATUS.ERROR,
+      }),
+    [isSidebar, radarResult.status, radarChartData.length],
+  );
 
   const isWarning = summaryStage === SUMMARY.WARNING;
   const isContent = summaryStage === SUMMARY.CONTENT;
@@ -743,13 +472,9 @@ function UnifiedNodeInfo({
               </p>
             )}
             {summaryIsError && typeof onRetryPov === 'function' && (
-              <button
-                type="button"
-                className="tooltip-action-btn tooltip-action-btn--secondary"
-                onClick={onRetryPov}
-              >
+              <ActionButton onClick={onRetryPov}>
                 다시 시도
-              </button>
+              </ActionButton>
             )}
           </div>
         </div>
@@ -767,21 +492,21 @@ function UnifiedNodeInfo({
   };
 
   const analysisModal = isSidebar && isModalOpen ? (
-    <RelationAnalysisModal
-      node={node}
-      currentChapter={currentChapter}
-      chapterScopeLabel={currentChapter != null ? `챕터 1–${currentChapter} 누적` : null}
-      radarChartData={radarChartData}
-      connectionKind={connectionKind}
-      loadError={radarLoadError}
-      onClose={closeModal}
-      onSelectRelatedNode={onSelectRelatedNode ? handleSelectRelatedNode : null}
-      returnFocusRef={analysisBtnRef}
-      chapterRailWidth={
-        chapterRailWidth ?? GRAPH_LAYOUT_CONSTANTS.SIDEBAR.OPEN_WIDTH
-      }
-      reserveRight={GRAPH_LAYOUT_CONSTANTS.TOOLTIP_SIDEBAR_WIDTH}
-    />
+    <Suspense fallback={<div role="status" aria-live="polite">관계 분석을 불러오는 중…</div>}>
+      <RelationAnalysisModal
+        node={node}
+        radarChartData={radarChartData}
+        connectionKind={connectionKind}
+        loadError={radarLoadError}
+        onClose={closeModal}
+        onSelectRelatedNode={onSelectRelatedNode ? handleSelectRelatedNode : null}
+        returnFocusRef={analysisBtnRef}
+        chapterRailWidth={
+          chapterRailWidth ?? GRAPH_LAYOUT_CONSTANTS.SIDEBAR.OPEN_WIDTH
+        }
+        reserveRight={GRAPH_LAYOUT_CONSTANTS.TOOLTIP_SIDEBAR_WIDTH}
+      />
+    </Suspense>
   ) : null;
 
   if (error) {

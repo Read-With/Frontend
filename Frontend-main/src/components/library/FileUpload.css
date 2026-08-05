@@ -6,19 +6,19 @@
   --fu-surface: #fff;
   --fu-surface-disabled: #f3f4f0;
   --fu-muted: #9aa396;
-  --fu-accent: #5c6f5c;
-  --fu-accent-dark: #4f614f;
-  --fu-accent-light: #7a8a7a;
-  --fu-accent-soft: rgba(92, 111, 92, 0.14);
-  --fu-accent-border: rgba(92, 111, 92, 0.28);
-  --fu-text: #3e4f2f;
-  --fu-text-mid: #586544;
-  --fu-text-soft: #717b59;
-  --fu-dash: #b3b6a0;
+  --fu-accent: var(--brand-accent);
+  --fu-accent-dark: var(--brand-accent-mid);
+  --fu-accent-light: var(--brand-accent-light);
+  --fu-accent-soft: var(--brand-alpha-14);
+  --fu-accent-border: var(--brand-alpha-28);
+  --fu-text: var(--brand-accent);
+  --fu-text-mid: var(--brand-accent-mid);
+  --fu-text-soft: var(--brand-accent-light);
+  --fu-dash: var(--brand-olive);
   --fu-radius: 0.75rem;
   --fu-radius-lg: 1.25rem;
   --fu-border: 0.0625rem solid rgba(0, 0, 0, 0.06);
-  --fu-focus: rgba(92, 111, 92, 0.45);
+  --fu-focus: var(--brand-focus);
   --fu-gradient-icon: linear-gradient(135deg, var(--fu-accent), var(--fu-accent-light));
 }
 

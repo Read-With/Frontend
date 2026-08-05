@@ -9,15 +9,15 @@
   --bl-surface-muted-hover: #e8ebef;
   --bl-border: 0.0625rem solid rgba(0, 0, 0, 0.06);
   --bl-border-soft: #f0f4fa;
-  --bl-accent: #5c6f5c;
-  --bl-accent-light: #7a8a7a;
-  --bl-accent-deep: #2d3e24;
-  --bl-accent-mid: #4a5a3a;
-  --bl-accent-soft: rgba(92, 111, 92, 0.12);
-  --bl-accent-soft-strong: rgba(92, 111, 92, 0.28);
-  --bl-accent-hover-bg: rgba(92, 111, 92, 0.07);
-  --bl-brand-dark: #3e4f2f;
-  --bl-brand-mid: #586544;
+  --bl-accent: var(--brand-accent);
+  --bl-accent-light: var(--brand-accent-light);
+  --bl-accent-deep: var(--brand-accent-deep);
+  --bl-accent-mid: var(--brand-accent-mid);
+  --bl-accent-soft: var(--brand-alpha-12);
+  --bl-accent-soft-strong: var(--brand-alpha-28);
+  --bl-accent-hover-bg: var(--brand-alpha-07);
+  --bl-brand-dark: var(--brand-accent);
+  --bl-brand-mid: var(--brand-accent-mid);
   --bl-text: #333;
   --bl-text-muted: #666;
   --bl-text-faint: #999;
@@ -31,12 +31,12 @@
   --bl-radius-md: 0.625rem;
   --bl-radius-sm: 0.5rem;
   --bl-radius-pill: 62.4375rem;
-  --bl-shadow: 0 0.125rem 0.75rem rgba(0, 0, 0, 0.04);
-  --bl-shadow-hover: 0 0.75rem 2rem rgba(62, 79, 47, 0.14);
+  --bl-shadow: 0 0.0625rem 0.375rem rgba(0, 0, 0, 0.03);
+  --bl-shadow-hover: 0 0.375rem 1rem var(--brand-alpha-10);
   --bl-gradient-accent: linear-gradient(90deg, var(--bl-accent), var(--bl-accent-light));
   --bl-gradient-primary: linear-gradient(135deg, var(--bl-accent), var(--bl-accent-light));
   --bl-gradient-primary-hover: linear-gradient(135deg, var(--bl-accent-deep), var(--bl-accent-mid));
-  --bl-focus: rgba(92, 111, 92, 0.45);
+  --bl-focus: var(--brand-focus);
   --bl-focus-danger: rgba(220, 38, 38, 0.45);
 }
 
@@ -70,7 +70,7 @@
 }
 
 .book-card:hover {
-  transform: translateY(-0.375rem);
+  transform: translateY(-0.1875rem);
   box-shadow: var(--bl-shadow-hover);
   border-color: var(--bl-accent-soft-strong);
 }
@@ -79,14 +79,30 @@
   opacity: 1;
 }
 
-.book-card:focus-visible {
-  outline: 0.125rem solid var(--bl-focus);
-  outline-offset: 0.125rem;
+.book-card-open {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+.book-card-open:focus-visible {
+  outline: 0.1875rem solid var(--bl-focus);
+  outline-offset: -0.1875rem;
+}
+
+.book-card-open:disabled {
+  cursor: wait;
 }
 
 /* ==================== 카드 헤더 ==================== */
 .book-card-header {
   position: relative;
+  pointer-events: none;
   padding: 1.5rem 1.25rem 1rem;
   display: flex;
   justify-content: center;
@@ -125,31 +141,32 @@
 /* ==================== 원형 아이콘 버튼 (즐겨찾기·더보기) ==================== */
 .book-favorite-btn,
 .book-context-trigger {
-  position: absolute;
-  top: 0.75rem;
+  box-sizing: border-box;
   width: 2.25rem;
   height: 2.25rem;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.95);
   -webkit-backdrop-filter: blur(0.625rem);
   backdrop-filter: blur(0.625rem);
-  border: none;
+  border: 0.125rem solid transparent;
   font-size: 1.2rem;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.3s ease, background 0.3s ease, box-shadow 0.3s ease;
+  transition: transform 0.3s ease, background 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
   box-shadow: 0 0.125rem 0.5rem rgba(0, 0, 0, 0.1);
 }
 
 .book-favorite-btn {
+  position: absolute;
+  top: 0.75rem;
   left: 0.75rem;
   z-index: 2;
 }
 
 .book-context-trigger {
-  right: 0.75rem;
+  position: relative;
 }
 
 .book-favorite-btn:hover,
@@ -201,7 +218,7 @@
 
 .progress-bar-bg {
   height: 0.375rem;
-  background: rgba(92, 111, 92, 0.14);
+  background: var(--brand-alpha-14);
   border-radius: var(--bl-radius-md);
   overflow: hidden;
 }
@@ -211,11 +228,13 @@
   background: var(--bl-gradient-accent);
   border-radius: var(--bl-radius-md);
   transition: width 0.5s ease;
-  box-shadow: 0 0 0.5rem rgba(92, 111, 92, 0.35);
+  box-shadow: 0 0 0.5rem var(--brand-alpha-35);
 }
 
 /* ==================== 카드 바디 ==================== */
 .book-card-body {
+  position: relative;
+  pointer-events: none;
   flex: 1;
   padding: 1.25rem 1.25rem 1rem;
   display: flex;
@@ -268,6 +287,8 @@
 
 /* ==================== 액션 버튼 ==================== */
 .book-card-actions {
+  position: relative;
+  z-index: 2;
   padding: 0.75rem 1rem 1rem;
   display: flex;
   gap: 0.5rem;
@@ -381,7 +402,7 @@
 
 .book-context-dropdown {
   position: absolute;
-  top: 2.75rem;
+  top: calc(100% + 0.5rem);
   right: 0;
   background: var(--bl-surface);
   border-radius: 0.75rem;
@@ -662,16 +683,13 @@
   min-height: 2.75rem;
 }
 
-.book-card.list-view .book-favorite-btn,
-.book-card.list-view .book-context-trigger {
-  top: 1rem;
-}
-
 .book-card.list-view .book-favorite-btn {
+  top: 1rem;
   left: 1rem;
 }
 
-.book-card.list-view .book-context-trigger {
+.book-card.list-view .book-context-menu {
+  top: 1rem;
   right: 1rem;
 }
 
@@ -733,14 +751,15 @@
     width: 2rem;
     height: 2rem;
     font-size: 1.1rem;
-    top: 0.625rem;
   }
 
   .book-favorite-btn {
+    top: 0.625rem;
     left: 0.625rem;
   }
 
-  .book-context-trigger {
+  .book-context-menu {
+    top: 0.625rem;
     right: 0.625rem;
   }
 
@@ -800,14 +819,15 @@
     width: 1.75rem;
     height: 1.75rem;
     font-size: 1rem;
-    top: 0.5rem;
   }
 
   .book-favorite-btn {
+    top: 0.5rem;
     left: 0.5rem;
   }
 
-  .book-context-trigger {
+  .book-context-menu {
+    top: 0.5rem;
     right: 0.5rem;
   }
 

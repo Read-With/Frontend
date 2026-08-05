@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
-import { getApiBaseUrl } from "../utils/common/urlUtils";
+import { toast } from "react-toastify";
+import { getApiBaseUrl, errorUtils } from "../utils/common/urlUtils";
 import { getStoredAccessToken } from "../utils/security/authTokenStorage";
 import { ensureSessionAccessToken } from "../utils/api/authApi";
+import { AuthenticatedImage } from "../components/library/BookDetailModal";
 import "./AdminPage.css";
 
 const API_BASE_URL = `${getApiBaseUrl()}/api/v2/admin`;
@@ -107,54 +109,54 @@ const LOG_LEVEL_FILTERS = [
 ];
 
 const DatabaseIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="admin-icon-sm">
     <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" />
   </svg>
 );
 
 const UploadIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="admin-icon-sm">
     <path strokeLinecap="round" strokeLinejoin="round" d="M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.233-2.33 3 3 0 013.758 3.848A3.752 3.752 0 0118 19.5H6.75z" />
   </svg>
 );
 
 const TrashIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="admin-icon-sm">
     <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
   </svg>
 );
 
 const LayoutDashboardIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="admin-icon-sm">
     <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
   </svg>
 );
 
 const BookIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="admin-icon-sm">
     <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
   </svg>
 );
 
-const ProcessingIcon = ({ className = "w-5 h-5", strokeWidth = 1.5 }) => (
+const ProcessingIcon = ({ className = "admin-icon-sm", strokeWidth = 1.5 }) => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={strokeWidth} stroke="currentColor" className={className}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
   </svg>
 );
 
 const ListBulletIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="admin-icon-sm">
     <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
   </svg>
 );
 
-const CloseIcon = ({ className = "w-5 h-5", strokeWidth = 1.5 }) => (
+const CloseIcon = ({ className = "admin-icon-sm", strokeWidth = 1.5 }) => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={strokeWidth} stroke="currentColor" className={className}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
   </svg>
 );
 
-const ChevronIcon = ({ className = "w-5 h-5", strokeWidth = 1.5 }) => (
+const ChevronIcon = ({ className = "admin-icon-sm", strokeWidth = 1.5 }) => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={strokeWidth} stroke="currentColor" className={className} aria-hidden="true">
     <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
   </svg>
@@ -205,22 +207,7 @@ const filterBooksByQuery = (list, query) => {
 
 const fileKey = (f) => `${f.name}-${f.size}-${f.lastModified}`;
 
-const INPUT_CLASS =
-  "w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm";
-
-const SEARCH_INPUT_CLASS =
-  "px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500";
-
-const REFRESH_BTN_CLASS = "text-xs font-medium text-indigo-600 hover:text-indigo-800 disabled:opacity-50";
-
-const SECTION_CARD_CLASS = "bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden";
-
-const STATUS_PILL_CLASS = "px-2 py-1 rounded-full text-xs font-semibold";
-
-const filterChipClass = (active) =>
-  `px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
-    active ? "bg-indigo-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-  }`;
+const filterChipClass = (active) => `admin-chip${active ? " is-active" : ""}`;
 
 const countCharStatuses = (list) =>
   list.reduce(
@@ -253,12 +240,10 @@ const canRetryNormalizationJob = (status) => {
 
 const statusBadgeClass = (status) => {
   const s = String(status ?? "").toUpperCase();
-  if (s === "COMPLETED") return "bg-green-100 text-green-700";
-  if (s === "GENERATING" || s === "PROCESSING" || s === "IN_PROGRESS") {
-    return "bg-blue-100 text-blue-700 animate-pulse";
-  }
-  if (s === "FAILED" || s === "ERROR") return "bg-red-100 text-red-700";
-  return "bg-gray-100 text-gray-600";
+  if (s === "COMPLETED") return "admin-pill--ok";
+  if (s === "GENERATING" || s === "PROCESSING" || s === "IN_PROGRESS") return "admin-pill--busy";
+  if (s === "FAILED" || s === "ERROR") return "admin-pill--fail";
+  return "admin-pill--pending";
 };
 
 const formatDateTime = (value) => {
@@ -269,30 +254,30 @@ const formatDateTime = (value) => {
 };
 
 const PanelMessage = ({ tone = "muted", children }) => (
-  <div className={`text-center py-12 ${tone === "error" ? "text-red-600" : "text-gray-500"}`}>{children}</div>
+  <div className={`admin-panel-msg${tone === "error" ? " is-error" : ""}`}>{children}</div>
 );
 
 const TableMessageRow = ({ colSpan, tone = "muted", children }) => (
   <tr>
-    <td colSpan={colSpan} className={`px-6 py-12 text-center ${tone === "error" ? "text-red-600" : "text-gray-500"}`}>
+    <td colSpan={colSpan} className={`admin-table-msg${tone === "error" ? " is-error" : ""}`}>
       {children}
     </td>
   </tr>
 );
 
 const SectionCardHeader = ({ icon: Icon, title, count, trailing }) => (
-  <div className="px-6 py-4 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
-    <div className="flex items-center space-x-2">
+  <div className="admin-card-header">
+    <div className="admin-card-header-title-row">
       {Icon ? <Icon /> : null}
-      <h3 className="text-lg font-semibold text-gray-800">{title}</h3>
-      {count != null && count !== "" ? <span className="text-xs text-gray-400">{count}</span> : null}
+      <h3>{title}</h3>
+      {count != null && count !== "" ? <span className="admin-card-header-count">{count}</span> : null}
     </div>
     {trailing}
   </div>
 );
 
 const RefreshButton = ({ onClick, disabled, label = "새로고침" }) => (
-  <button type="button" onClick={onClick} disabled={disabled} className={REFRESH_BTN_CLASS}>
+  <button type="button" onClick={onClick} disabled={disabled} className="admin-btn admin-btn--refresh">
     {label}
   </button>
 );
@@ -355,22 +340,17 @@ const AdminBookCard = ({ book, onSelect }) => {
   const [imageError, setImageError] = useState(false);
   const coverUrl = book.coverImgUrl;
 
+  useEffect(() => {
+    setImageError(false);
+  }, [coverUrl]);
+
   return (
-    <button
-      type="button"
-      onClick={() => onSelect(book)}
-      className="group w-full text-left bg-gray-50 rounded-xl border border-gray-200 overflow-hidden hover:shadow-md hover:border-indigo-200 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
-    >
-      <div className="aspect-[3/4] overflow-hidden bg-gray-200 relative">
+    <button type="button" onClick={() => onSelect(book)} className="admin-book-card">
+      <div className="admin-book-card-cover">
         {coverUrl && !imageError ? (
-          <img
-            src={coverUrl}
-            alt=""
-            onError={() => setImageError(true)}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-          />
+          <AuthenticatedImage src={coverUrl} alt="" onError={() => setImageError(true)} />
         ) : (
-          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200" aria-hidden="true">
+          <div className="admin-book-card-fallback" aria-hidden="true">
             <svg width="100%" height="100%" viewBox="0 0 120 180" fill="none">
               <rect x="15" y="24" width="90" height="132" rx="8" fill="#b0b8c1" />
               <rect x="27" y="42" width="66" height="96" rx="6" fill="#e8f5e8" />
@@ -379,13 +359,186 @@ const AdminBookCard = ({ book, onSelect }) => {
             </svg>
           </div>
         )}
-        <div className="absolute top-2 right-2 bg-black/50 text-white text-[10px] px-1.5 py-0.5 rounded">
-          ID: {book.id}
+        <div className="admin-book-card-id">ID: {book.id}</div>
+      </div>
+      <div className="admin-book-card-meta">
+        <h4>{book.title}</h4>
+        <p>{book.author}</p>
+      </div>
+    </button>
+  );
+};
+
+const ConfirmModal = ({ open, title, children, confirmLabel, onConfirm, onCancel, loading, danger = true }) => {
+  const onCancelStable = useStableCallback(onCancel);
+  const onConfirmStable = useStableCallback(onConfirm);
+  const panelRef = useFocusTrap({ open, onClose: onCancelStable, loading });
+
+  if (!open) return null;
+  return (
+    <div className="admin-modal-overlay" onClick={onCancelStable} role="presentation">
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="admin-confirm-title"
+        className="admin-modal-panel"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="admin-modal-header">
+          <h3 id="admin-confirm-title">{title}</h3>
+        </div>
+        <div className="admin-modal-body">{children}</div>
+        <div className="admin-modal-footer">
+          <button type="button" onClick={onCancelStable} disabled={loading} className="admin-btn admin-btn--ghost">
+            취소
+          </button>
+          <button
+            type="button"
+            onClick={onConfirmStable}
+            disabled={loading}
+            className={`admin-btn ${danger ? "admin-btn--danger" : "admin-btn--primary"}`}
+          >
+            {loading ? "처리 중..." : confirmLabel}
+          </button>
         </div>
       </div>
-      <div className="p-3">
-        <h4 className="font-semibold text-sm text-gray-800 truncate mb-1">{book.title}</h4>
-        <p className="text-xs text-gray-500 truncate">{book.author}</p>
+    </div>
+  );
+};
+
+const ResultPanel = ({ feedback, onDismiss, loading }) => {
+  if (!feedback && !loading) return null;
+  const isError = feedback?.type === "error";
+  const rows = toArray(feedback?.data);
+  const columns = rows.length > 0 ? Object.keys(rows[0]).slice(0, 6) : [];
+
+  return (
+    <div className="admin-card admin-card--result">
+      <div className="admin-card-header admin-card-header--muted">
+        <h3>실행 결과</h3>
+        {feedback && (
+          <button type="button" onClick={onDismiss} className="text-xs font-medium text-gray-500 hover:text-gray-800">
+            닫기
+          </button>
+        )}
+      </div>
+      <div className="admin-card-body">
+        {loading && (
+          <div className="admin-result-loading">
+            <svg className="admin-result-spinner" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            </svg>
+            데이터를 처리하고 있습니다...
+          </div>
+        )}
+        {feedback && (
+          <div className={`admin-result-banner ${isError ? "is-error" : "is-ok"}`}>
+            <p>{feedback.message}</p>
+            {rows.length > 0 ? (
+              <div className="admin-result-mini-table-wrap">
+                <table className="admin-result-mini-table">
+                  <thead>
+                    <tr>
+                      {columns.map((key) => (
+                        <th key={key}>{key}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.slice(0, 50).map((row, idx) => (
+                      <tr key={idx}>
+                        {columns.map((key) => (
+                          <td key={key} title={String(row[key] ?? "")}>
+                            {typeof row[key] === "object" ? JSON.stringify(row[key]) : String(row[key] ?? "")}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {rows.length > 50 && <p>외 {rows.length - 50}건...</p>}
+              </div>
+            ) : (
+              feedback.data != null && (
+                <pre className="mt-2 whitespace-pre-wrap font-mono text-xs opacity-80">
+                  {JSON.stringify(feedback.data, null, 2)}
+                </pre>
+              )
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const ImageZoomModal = ({ src, onClose }) => {
+  const onCloseStable = useStableCallback(onClose);
+  const panelRef = useFocusTrap({ open: Boolean(src), onClose: onCloseStable });
+  if (!src) return null;
+  return (
+    <div className="admin-modal-overlay admin-modal-overlay--dark" onClick={onCloseStable} role="presentation">
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="인물 이미지 확대"
+        className="admin-zoom-panel"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button type="button" className="admin-zoom-close" onClick={onCloseStable} aria-label="닫기">
+          <CloseIcon className="admin-icon-lg" strokeWidth={2} />
+        </button>
+        <AuthenticatedImage
+          src={src}
+          alt="확대된 인물 이미지"
+          className="admin-zoom-img"
+        />
+      </div>
+    </div>
+  );
+};
+
+const PayloadModal = ({ payload, onClose }) => {
+  const onCloseStable = useStableCallback(onClose);
+  const panelRef = useFocusTrap({ open: payload != null, onClose: onCloseStable });
+  if (payload == null) return null;
+
+  let formatted = String(payload);
+  try {
+    formatted = JSON.stringify(typeof payload === "string" ? JSON.parse(payload) : payload, null, 2);
+  } catch {
+    // keep raw string
+  }
+
+  return (
+    <div className="admin-modal-overlay admin-modal-overlay--dark" onClick={onCloseStable} role="presentation">
+      <div
+        ref={panelRef}
+        className="admin-modal-panel admin-modal-panel--wide"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="admin-log-payload-title"
+      >
+        <div className="admin-modal-header admin-modal-header--bar">
+          <h3 id="admin-log-payload-title">페이로드 상세 정보</h3>
+          <button type="button" onClick={onCloseStable} className="admin-modal-icon-close" aria-label="닫기">
+            <CloseIcon className="admin-icon-md" strokeWidth={2} />
+          </button>
+        </div>
+        <div className="admin-modal-body--scroll">
+          <div className="admin-payload-code">
+            <pre>{formatted}</pre>
+          </div>
+        </div>
+        <div className="admin-modal-footer admin-modal-footer--plain">
+          <button type="button" onClick={onCloseStable} className="admin-btn admin-btn--muted">
+            닫기
+          </button>
+        </div>
       </div>
     </button>
   );
@@ -631,7 +784,6 @@ const AdminPage = () => {
   const fileInputRef = useRef(null);
 
   const [feedback, setFeedback] = useState(null);
-  const [toast, setToast] = useState(null);
   const [loadingAction, setLoadingAction] = useState(null);
   const [books, setBooks] = useState([]);
   const [booksError, setBooksError] = useState(null);
@@ -733,18 +885,13 @@ const AdminPage = () => {
   );
 
   const showToast = useCallback((type, message) => {
-    setToast({ type, message });
+    if (type === "error") toast.error(message);
+    else toast.success(message);
   }, []);
 
   useEffect(() => {
     selectedBookRef.current = selectedBook;
   }, [selectedBook]);
-
-  useEffect(() => {
-    if (!toast) return undefined;
-    const t = setTimeout(() => setToast(null), 4000);
-    return () => clearTimeout(t);
-  }, [toast]);
 
   useEffect(() => {
     setLogPage(0);
@@ -819,9 +966,15 @@ const AdminPage = () => {
       if (notifyError) {
         emitFeedback("error", extractErrorMessage(result.data), result.data, showResultPanel);
       }
+      errorUtils.logWarning("AdminPage", extractErrorMessage(result.data) || "API 응답 실패", {
+        actionKey,
+        kind: "API isSuccess false",
+        code: result.data?.code ?? null,
+        notified: notifyError,
+      });
       return null;
     } catch (err) {
-      console.error("API Error:", err.response || err);
+      errorUtils.logError("AdminPage", err, { kind: "API Error", actionKey });
       const payload = err.response?.data ?? { message: err?.message ?? "예기치 않은 오류가 발생했습니다." };
       if (notifyError) {
         emitFeedback("error", extractErrorMessage(payload), payload, showResultPanel);
@@ -846,7 +999,7 @@ const AdminPage = () => {
     try {
       return await fetchBooks();
     } catch (err) {
-      console.error(err);
+      errorUtils.logError("AdminPage", err);
       setBooksError("도서 목록을 불러오지 못했습니다.");
       return [];
     }
@@ -880,7 +1033,7 @@ const AdminPage = () => {
             : null,
       });
     } catch (err) {
-      console.error(err);
+      errorUtils.logError("AdminPage", err);
       setDashboardStats((prev) => ({
         ...prev,
         loading: false,
@@ -912,7 +1065,7 @@ const AdminPage = () => {
       setCharacters(toArray(result.data.result));
       setCharactersError(null);
     } catch (err) {
-      console.error(err);
+      errorUtils.logError("AdminPage", err);
       if (selectedBookRef.current?.id === bookIdAtStart) {
         setCharactersError(err?.message || "인물 목록을 새로고침하지 못했습니다.");
       }
@@ -1000,7 +1153,7 @@ const AdminPage = () => {
             setImageGenerationStatus(null);
         }
     } catch (e) {
-        console.error(e);
+        errorUtils.logError("AdminPage", e);
         setImageGenerationStatus(null);
     }
   };
@@ -1019,7 +1172,7 @@ const AdminPage = () => {
         );
         await getImageGenerationStatus(selectedBook.id);
     } catch (e) {
-        console.error(e);
+        errorUtils.logError("AdminPage", e);
     } finally {
         setIsGeneratingReference(false);
     }
@@ -1043,7 +1196,7 @@ const AdminPage = () => {
             setImageGenerationStatus(result.data.result);
         }
     } catch (e) {
-        console.error(e);
+        errorUtils.logError("AdminPage", e);
     } finally {
         setIsSelectingReference(false);
     }
@@ -1241,9 +1394,20 @@ const AdminPage = () => {
             try {
               const result = await apiClient.post(`/characters/${char.id}/regenerate-image`);
               if (result.data?.isSuccess) ok += 1;
-              else fail += 1;
-            } catch {
+              else {
+                fail += 1;
+                errorUtils.logWarning("AdminPage", extractErrorMessage(result.data) || "일괄 재생성 개별 실패", {
+                  actionKey: "regen-failed",
+                  characterId: char.id,
+                  code: result.data?.code ?? null,
+                });
+              }
+            } catch (err) {
               fail += 1;
+              errorUtils.logError("AdminPage", err, {
+                actionKey: "regen-failed",
+                characterId: char.id,
+              });
             }
           }
           showToast(
@@ -1280,14 +1444,7 @@ const AdminPage = () => {
 
   const navButtonClass = (tab, danger = false) => {
     const active = activeTab === tab;
-    if (danger) {
-      return `w-full flex items-center space-x-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
-        active ? "bg-red-50 text-red-700" : "text-gray-600 hover:bg-red-50 hover:text-red-600"
-      }`;
-    }
-    return `w-full flex items-center space-x-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
-      active ? "bg-indigo-50 text-indigo-700" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-    }`;
+    return `admin-nav-item${danger ? " is-danger" : ""}${active ? " is-active" : ""}`;
   };
 
   const navItems = [
@@ -1317,24 +1474,19 @@ const AdminPage = () => {
 
   const renderNavContent = () => (
     <>
-      <div className="px-6 py-8 border-b border-gray-100 flex items-center justify-between gap-3">
-        <div className="flex items-center space-x-3 min-w-0">
+      <div className="admin-nav-header">
+        <div className="admin-nav-brand">
           <DatabaseIcon />
-          <h2 className="text-xl font-bold text-gray-800 tracking-tight truncate">관리자 대시보드</h2>
+          <h2 className="admin-nav-title">관리자 대시보드</h2>
         </div>
-        <button
-          type="button"
-          onClick={() => setMobileNavOpen(false)}
-          className="md:hidden p-2 -mr-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-800"
-          aria-label="메뉴 닫기"
-        >
+        <button type="button" onClick={() => setMobileNavOpen(false)} className="admin-nav-close" aria-label="메뉴 닫기">
           <CloseIcon />
         </button>
       </div>
-      <div className="flex-1 py-6 px-4 space-y-1 overflow-y-auto">
+      <div className="admin-nav-list">
         {navItems.map(({ id, label, Icon, onClick, danger }) => (
           <button key={id} type="button" onClick={onClick} className={navButtonClass(id, danger)}>
-            <Icon />
+            {createElement(Icon)}
             <span>{label}</span>
           </button>
         ))}
@@ -1344,21 +1496,17 @@ const AdminPage = () => {
 
   const renderNav = () => (
     <>
-      <nav className="w-64 flex-shrink-0 bg-white shadow-sm border-r border-gray-200 hidden md:flex md:flex-col">
-        {renderNavContent()}
-      </nav>
+      <nav className="admin-nav">{renderNavContent()}</nav>
 
       {mobileNavOpen && (
-        <div className="fixed inset-0 z-[90] md:hidden" role="dialog" aria-modal="true" aria-label="관리자 메뉴">
+        <div className="admin-nav-drawer" role="dialog" aria-modal="true" aria-label="관리자 메뉴">
           <button
             type="button"
-            className="absolute inset-0 bg-black/50"
+            className="admin-nav-drawer-scrim"
             aria-label="메뉴 닫기"
             onClick={() => setMobileNavOpen(false)}
           />
-          <nav className="absolute inset-y-0 left-0 w-72 max-w-[85vw] bg-white shadow-xl flex flex-col">
-            {renderNavContent()}
-          </nav>
+          <nav className="admin-nav-drawer-panel">{renderNavContent()}</nav>
         </div>
       )}
     </>
@@ -1383,11 +1531,7 @@ const AdminPage = () => {
             </span>
           </div>
           {canCollapse ? (
-            <button
-              type="button"
-              onClick={() => setPickerExpanded((v) => !v)}
-              className="text-xs text-indigo-600 hover:text-indigo-800 shrink-0"
-            >
+            <button type="button" onClick={() => setPickerExpanded((v) => !v)} className="admin-btn admin-btn--link">
               {pickerExpanded ? "목록 접기" : "목록 펼치기"}
             </button>
           ) : (
@@ -1396,27 +1540,23 @@ const AdminPage = () => {
         </div>
 
         {bookId && (
-          <div className="px-3 py-2 bg-indigo-50 border border-indigo-100 rounded-lg text-sm text-indigo-800 flex items-start justify-between gap-2">
+          <div className="admin-selected-book">
             <div className="min-w-0">
               {selectedParamBook ? (
                 <>
                   <p className="font-semibold truncate">{selectedParamBook.title}</p>
-                  <p className="text-xs text-indigo-700/80 truncate mt-0.5">
+                  <p className="sub truncate">
                     {selectedParamBook.author || "저자 미상"} · ID {selectedParamBook.id}
                   </p>
                 </>
               ) : (
                 <>
                   <p className="font-semibold">Book ID {bookId}</p>
-                  <p className="text-xs text-indigo-700/80 mt-0.5">목록에 없는 ID로 지정됨</p>
+                  <p className="sub">목록에 없는 ID로 지정됨</p>
                 </>
               )}
             </div>
-            <button
-              type="button"
-              onClick={clearSelectedBook}
-              className="text-xs font-semibold text-indigo-600 hover:text-indigo-900 shrink-0"
-            >
+            <button type="button" onClick={clearSelectedBook} className="admin-btn admin-btn--link admin-btn--link-strong">
               선택 해제
             </button>
           </div>
@@ -1429,7 +1569,7 @@ const AdminPage = () => {
               value={bookPickerQuery}
               onChange={(e) => setBookPickerQuery(e.target.value)}
               placeholder="제목·저자·ID 검색"
-              className="w-full px-3 py-2 text-sm border-b border-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500"
+              className="w-full px-3 py-2 text-sm border-b border-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[var(--brand-accent)]"
               aria-label="도서 검색"
             />
             <div className="max-h-72 overflow-y-auto divide-y divide-gray-100">
@@ -1444,14 +1584,14 @@ const AdminPage = () => {
                       type="button"
                       onClick={() => selectBookForParams(book)}
                       aria-pressed={selected}
-                      className={`w-full text-left px-3 py-2.5 flex items-center gap-3 hover:bg-indigo-50 focus:outline-none focus-visible:bg-indigo-50 ${
-                        selected ? "bg-indigo-50" : "bg-white"
+                      className={`w-full text-left px-3 py-2.5 flex items-center gap-3 hover:bg-[var(--brand-tint)] focus:outline-none focus-visible:bg-[var(--brand-tint)] ${
+                        selected ? "bg-[var(--brand-tint)]" : "bg-white"
                       }`}
                     >
                       <div className="min-w-0 flex-1">
                         <p
                           className={`text-sm font-medium truncate ${
-                            selected ? "text-indigo-900" : "text-gray-800"
+                            selected ? "text-[var(--brand-text)]" : "text-gray-800"
                           }`}
                         >
                           {book.title}
@@ -1463,7 +1603,7 @@ const AdminPage = () => {
                       <span
                         className={`shrink-0 font-mono text-[11px] px-1.5 py-0.5 rounded border ${
                           selected
-                            ? "bg-indigo-100 border-indigo-200 text-indigo-800"
+                            ? "bg-[var(--brand-alpha-12)] border-[var(--brand-alpha-28)] text-[var(--brand-text)]"
                             : "bg-gray-50 border-gray-200 text-gray-500"
                         }`}
                       >
@@ -1479,7 +1619,7 @@ const AdminPage = () => {
                 <button
                   type="button"
                   onClick={() => setPickerVisibleCount((n) => n + PICKER_PAGE_SIZE)}
-                  className="w-full text-xs font-medium text-indigo-600 hover:text-indigo-800 py-1"
+                  className="admin-btn admin-btn--link w-full py-1"
                 >
                   더보기 ({filteredPickerBooks.length - pickerVisibleCount}권 남음)
                 </button>
@@ -1500,7 +1640,7 @@ const AdminPage = () => {
             setManualBookIdOpen(true);
             setPickerExpanded(true);
           }}
-          className="text-xs text-gray-500 hover:text-indigo-600 underline-offset-2 hover:underline"
+          className="text-xs text-gray-500 hover:text-[var(--brand-accent)] underline-offset-2 hover:underline"
         >
           목록에 없는 도서는 ID로 직접 입력
         </button>
@@ -1525,7 +1665,7 @@ const AdminPage = () => {
           id="admin-manual-book-id"
           type="text"
           inputMode="numeric"
-          className={INPUT_CLASS}
+          className="admin-input"
           placeholder="예: 123"
           value={bookId}
           onChange={(e) => setBookId(e.target.value.trim())}
@@ -1546,7 +1686,7 @@ const AdminPage = () => {
         type="text"
         inputMode="numeric"
         pattern="[0-9]*"
-        className={INPUT_CLASS}
+        className="admin-input"
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value.replace(/[^\d]/g, ""))}
@@ -1561,7 +1701,7 @@ const AdminPage = () => {
       : "도서를 선택해 주세요";
 
   const renderParamsCard = (title, children) => (
-    <div className={`${SECTION_CARD_CLASS} admin-params-card`}>
+    <div className="admin-card admin-params-card">
       <button
         type="button"
         onClick={() => setParamsCardOpen((v) => !v)}
@@ -1653,13 +1793,13 @@ const AdminPage = () => {
             type="button"
             onClick={() => openDashboardDrilldown(stat.key)}
             disabled={dashboardStats.loading}
-            className="bg-white rounded-xl border border-gray-200 p-5 text-left hover:border-indigo-300 hover:bg-indigo-50/40 transition-colors disabled:opacity-60"
+            className="bg-white rounded-xl border border-gray-200 p-5 text-left hover:border-[var(--brand-olive)] hover:bg-[var(--brand-alpha-07)] transition-colors disabled:opacity-60"
           >
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{stat.label}</p>
             <p className="mt-2 text-3xl font-bold text-gray-900">
               {dashboardStats.loading ? "…" : (stat.value ?? "—")}
             </p>
-            <p className="mt-2 text-xs text-indigo-600 font-medium">{stat.hint}</p>
+            <p className="mt-2 text-xs text-[var(--brand-accent)] font-medium">{stat.hint}</p>
           </button>
         ))}
       </div>
@@ -1686,7 +1826,7 @@ const AdminPage = () => {
     ];
 
     return (
-      <div className={SECTION_CARD_CLASS}>
+      <div className="admin-card">
         <div className="px-6 py-6 border-b border-gray-100 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center space-x-6">
             <button
@@ -1695,7 +1835,7 @@ const AdminPage = () => {
               className="p-2 hover:bg-gray-100 rounded-full"
               aria-label="도서 목록으로"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-gray-400">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="admin-icon-md text-gray-400">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
               </svg>
             </button>
@@ -1718,11 +1858,11 @@ const AdminPage = () => {
             <div className="flex flex-col space-y-1.5 min-w-[200px] border-l border-gray-100 pl-6 ml-6">
               <div className="flex items-baseline justify-between">
                 <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">이미지 생성</span>
-                <span className="text-lg font-black text-indigo-600 tracking-tighter">{percentage}%</span>
+                <span className="text-lg font-black text-[var(--brand-accent)] tracking-tighter">{percentage}%</span>
               </div>
               <div className="w-full h-2.5 bg-gray-100 rounded-full overflow-hidden border border-gray-200/50">
                 <div
-                  className={`h-full transition-all duration-1000 ease-out ${percentage === 100 ? "bg-green-500" : "bg-indigo-500"}`}
+                  className={`h-full transition-all duration-1000 ease-out ${percentage === 100 ? "bg-green-500" : "bg-[var(--brand-accent)]"}`}
                   style={{ width: `${percentage}%` }}
                 />
               </div>
@@ -1746,7 +1886,7 @@ const AdminPage = () => {
               type="button"
               onClick={() => getBookCharacters(selectedBook)}
               disabled={isActionPrefix("chars-")}
-              className="flex items-center space-x-1 px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 text-xs font-bold disabled:opacity-50"
+              className="flex items-center space-x-1 px-3 py-1.5 bg-[var(--brand-tint)] text-[var(--brand-accent)] rounded-lg hover:bg-[var(--brand-alpha-12)] text-xs font-bold disabled:opacity-50"
             >
               <ProcessingIcon
                 className={`w-3.5 h-3.5 ${isActionPrefix("chars-") ? "animate-spin" : ""}`}
@@ -1773,7 +1913,7 @@ const AdminPage = () => {
           <button
             onClick={generateReferenceCandidates}
             disabled={isGeneratingReference}
-            className="px-5 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition"
+            className="admin-btn admin-btn--primary"
           >
             {isGeneratingReference
               ? "후보사진 생성 중..."
@@ -1791,7 +1931,7 @@ const AdminPage = () => {
                 <div className="font-semibold text-gray-600">
                   전체 상태
                 </div>
-                <div className="mt-1 text-indigo-600 font-bold">
+                <div className="mt-1 text-[var(--brand-accent)] font-bold">
                     {imageGenerationStatus.status}
                 </div>
             </div>
@@ -1832,13 +1972,13 @@ const AdminPage = () => {
                   key={candidate.id}
                   className={`rounded-lg border overflow-hidden bg-white transition cursor-pointer hover:shadow-md ${
                     candidate.id === imageGenerationStatus.selectedReferenceCandidateId
-                      ? "border-indigo-500 ring-2 ring-indigo-200"
+                      ? "border-[var(--brand-accent)] ring-2 ring-[var(--brand-alpha-28)]"
                       : "border-gray-200"
                   }`}
                 >
                   <div className="aspect-square bg-gray-100">
                     {candidate.imageUrl ? (
-                      <img
+                      <AuthenticatedImage
                         src={candidate.imageUrl}
                         alt={`slot-${candidate.slotNo}`}
                         className="w-full h-full object-cover cursor-zoom-in"
@@ -1879,7 +2019,7 @@ const AdminPage = () => {
                           ? "bg-gray-300 text-gray-600 cursor-not-allowed"
                           : candidate.status === "FAILED"
                           ? "bg-red-100 text-red-500 cursor-not-allowed"
-                          : "bg-indigo-600 text-white hover:bg-indigo-700"
+                          : "bg-[var(--brand-accent)] text-white hover:bg-[var(--brand-accent-mid)]"
                       }`}
                     >
                       {candidate.id === imageGenerationStatus.selectedReferenceCandidateId
@@ -1896,17 +2036,17 @@ const AdminPage = () => {
         )}
       </div>
     )}
-        <div className="p-0 overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+        <div className="admin-card-body--flush">
+          <table className="admin-table">
             <thead>
-              <tr className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wider">
-                <th className="px-6 py-3 font-semibold border-b">ID</th>
-                <th className="px-6 py-3 font-semibold border-b">프로필</th>
-                <th className="px-6 py-3 font-semibold border-b">이름</th>
-                <th className="px-6 py-3 font-semibold border-b">이미지 생성 상태</th>
+              <tr>
+                <th>ID</th>
+                <th>프로필</th>
+                <th>이름</th>
+                <th>이미지 생성 상태</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody>
               {filteredCharacters.length === 0 ? (
                 <TableMessageRow colSpan={4}>
                   {charactersError
@@ -1919,41 +2059,35 @@ const AdminPage = () => {
                 filteredCharacters.map((char) => {
                   const status = charStatusOf(char);
                   return (
-                    <tr key={char.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-6 py-4 text-sm font-mono text-gray-500">{char.id}</td>
-                      <td className="px-6 py-4">
+                    <tr key={char.id}>
+                      <td className="mono">{char.id}</td>
+                      <td>
                         {char.profileImage ? (
                           <button
                             type="button"
                             onClick={() => setZoomedImage(char.profileImage)}
-                            className="w-12 h-12 rounded-lg overflow-hidden bg-gray-100 border border-gray-200 cursor-zoom-in hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                            className="admin-avatar-btn"
                             aria-label={`${char.commonName || char.name} 이미지 확대`}
                           >
-                            <img
-                              src={char.profileImage}
-                              alt=""
-                              className="w-full h-full object-cover"
-                            />
+                            <AuthenticatedImage src={char.profileImage} alt="" />
                           </button>
                         ) : (
-                          <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-100 border border-gray-200 flex items-center justify-center text-gray-400">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6" aria-hidden="true">
+                          <div className="admin-avatar-empty">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="admin-icon-md" aria-hidden="true">
                               <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
                             </svg>
                           </div>
                         )}
                       </td>
-                      <td className="px-6 py-4 text-sm font-medium text-gray-800">{char.commonName || char.name}</td>
-                      <td className="px-6 py-4 text-sm">
+                      <td className="strong">{char.commonName || char.name}</td>
+                      <td>
                         <div className="flex items-center space-x-3">
-                          <span className={`${STATUS_PILL_CLASS} ${statusBadgeClass(status)}`}>
-                            {status}
-                          </span>
+                          <span className={`admin-pill ${statusBadgeClass(status)}`}>{status}</span>
                           <button
                             type="button"
                             onClick={() => handleRegenerate(char)}
                             disabled={isAction(`regen-${char.id}`) || isAction("regen-failed")}
-                            className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 uppercase tracking-tighter border border-indigo-200 px-1.5 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100 disabled:opacity-50"
+                            className="admin-btn--regen"
                           >
                             재생성
                           </button>
@@ -1974,7 +2108,7 @@ const AdminPage = () => {
     if (isViewingCharacters) return renderCharactersSection();
 
     return (
-      <div className={SECTION_CARD_CLASS}>
+      <div className="admin-card">
         <SectionCardHeader
           icon={BookIcon}
           title="도서 목록"
@@ -1986,14 +2120,14 @@ const AdminPage = () => {
                 value={bookListQuery}
                 onChange={(e) => setBookListQuery(e.target.value)}
                 placeholder="제목·저자·ID 검색"
-                className={`${SEARCH_INPUT_CLASS} w-56`}
+                className="admin-input admin-input--search admin-input--search-md"
                 aria-label="도서 검색"
               />
               <RefreshButton onClick={getBooksList} disabled={isAction("books")} />
             </div>
           }
         />
-        <div className="p-6">
+        <div className="admin-card-body">
           {booksError ? (
             <PanelMessage tone="error">{booksError}</PanelMessage>
           ) : books.length === 0 && !isAction("books") ? (
@@ -2013,24 +2147,24 @@ const AdminPage = () => {
   };
 
   const renderNormalizationSection = () => (
-    <div className={SECTION_CARD_CLASS}>
+    <div className="admin-card">
       <SectionCardHeader
         icon={ProcessingIcon}
         title="정규화 작업 현황"
         trailing={<RefreshButton onClick={getNormalizationJobs} disabled={isAction("normalization")} />}
       />
-      <div className="p-0 overflow-x-auto">
-        <table className="w-full text-left border-collapse">
+      <div className="admin-card-body--flush">
+        <table className="admin-table">
           <thead>
-            <tr className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wider">
-              <th className="px-6 py-3 font-semibold border-b">ID</th>
-              <th className="px-6 py-3 font-semibold border-b">도서명</th>
-              <th className="px-6 py-3 font-semibold border-b">상태</th>
-              <th className="px-6 py-3 font-semibold border-b">생성일시</th>
-              <th className="px-6 py-3 font-semibold border-b">관리</th>
+            <tr>
+              <th>ID</th>
+              <th>도서명</th>
+              <th>상태</th>
+              <th>생성일시</th>
+              <th>관리</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody>
             {normalizationError ? (
               <TableMessageRow colSpan={5} tone="error">
                 {normalizationError}
@@ -2039,26 +2173,20 @@ const AdminPage = () => {
               <TableMessageRow colSpan={5}>정규화 작업 내역이 없습니다.</TableMessageRow>
             ) : (
               normalizationJobs.map((job) => (
-                <tr key={job.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 text-sm font-mono text-gray-500">{job.id}</td>
-                  <td className="px-6 py-4 text-sm text-gray-800">
-                    {job.bookTitle || job.book_title || `Book ${job.bookId}`}
+                <tr key={job.id}>
+                  <td className="mono">{job.id}</td>
+                  <td>{job.bookTitle || job.book_title || `Book ${job.bookId}`}</td>
+                  <td>
+                    <span className={`admin-pill ${statusBadgeClass(job.status)}`}>{job.status}</span>
                   </td>
-                  <td className="px-6 py-4 text-sm">
-                    <span className={`${STATUS_PILL_CLASS} ${statusBadgeClass(job.status)}`}>
-                      {job.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-500">
-                    {formatDateTime(job.createdAt || job.created_at)}
-                  </td>
-                  <td className="px-6 py-4 text-sm">
+                  <td>{formatDateTime(job.createdAt || job.created_at)}</td>
+                  <td>
                     {canRetryNormalizationJob(job.status) ? (
                       <button
                         type="button"
                         onClick={() => retryNormalizationJob(job.id)}
                         disabled={isAction(`retry-${job.id}`)}
-                        className="text-indigo-600 hover:text-indigo-800 font-medium disabled:opacity-50"
+                        className="admin-btn admin-btn--link"
                       >
                         재시도
                       </button>
@@ -2076,7 +2204,7 @@ const AdminPage = () => {
   );
 
   const renderLogsSection = () => (
-    <div className={SECTION_CARD_CLASS}>
+    <div className="admin-card">
       <SectionCardHeader
         icon={ListBulletIcon}
         title="최신 작업 로그"
@@ -2101,24 +2229,24 @@ const AdminPage = () => {
           value={logQuery}
           onChange={(e) => setLogQuery(e.target.value)}
           placeholder="도서·메시지·Job ID·단계 검색"
-          className={`${SEARCH_INPUT_CLASS} w-full sm:w-64`}
+          className="admin-input admin-input--search admin-input--search-lg"
           aria-label="로그 검색"
         />
       </div>
-      <div className="p-0 overflow-x-auto">
-        <table className="w-full text-left border-collapse">
+      <div className="admin-card-body--flush">
+        <table className="admin-table">
           <thead>
-            <tr className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wider">
-              <th className="px-6 py-3 font-semibold border-b">Job ID</th>
-              <th className="px-6 py-3 font-semibold border-b">도서명</th>
-              <th className="px-6 py-3 font-semibold border-b">단계</th>
-              <th className="px-6 py-3 font-semibold border-b text-center">레벨</th>
-              <th className="px-6 py-3 font-semibold border-b">메시지</th>
-              <th className="px-6 py-3 font-semibold border-b">생성일시</th>
-              <th className="px-6 py-3 font-semibold border-b text-center">상세</th>
+            <tr>
+              <th>Job ID</th>
+              <th>도서명</th>
+              <th>단계</th>
+              <th className="text-center">레벨</th>
+              <th>메시지</th>
+              <th>생성일시</th>
+              <th className="text-center">상세</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody>
             {logsError ? (
               <TableMessageRow colSpan={7} tone="error">
                 {logsError}
@@ -2129,13 +2257,13 @@ const AdminPage = () => {
               <TableMessageRow colSpan={7}>필터 조건에 맞는 로그가 없습니다.</TableMessageRow>
             ) : (
               pagedJobLogs.map((log) => (
-                <tr key={log.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 text-sm font-medium text-indigo-600">#{log.jobId}</td>
-                  <td className="px-6 py-4 text-sm text-gray-800 max-w-[150px] truncate" title={log.bookTitle}>
+                <tr key={log.id}>
+                  <td className="font-medium text-[var(--brand-accent)]">#{log.jobId}</td>
+                  <td className="max-w-[150px] truncate" title={log.bookTitle}>
                     {log.bookTitle}
                   </td>
-                  <td className="px-6 py-4 text-xs font-bold text-gray-500">{log.step}</td>
-                  <td className="px-6 py-4 text-sm text-center">
+                  <td className="text-xs font-bold text-gray-500">{log.step}</td>
+                  <td className="text-center">
                     <span
                       className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                         log.level === "ERROR"
@@ -2148,19 +2276,19 @@ const AdminPage = () => {
                       {log.level}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-600 max-w-[300px] truncate" title={log.message}>
+                  <td className="max-w-[300px] truncate" title={log.message}>
                     {log.message}
                   </td>
-                  <td className="px-6 py-4 text-xs text-gray-400">{formatDateTime(log.createdAt)}</td>
-                  <td className="px-6 py-4 text-sm text-center">
+                  <td className="text-xs text-gray-400">{formatDateTime(log.createdAt)}</td>
+                  <td className="text-center">
                     {log.payloadJson && (
                       <button
                         type="button"
                         onClick={() => setSelectedLogPayload(log.payloadJson)}
-                        className="text-gray-400 hover:text-indigo-600"
+                        className="text-gray-400 hover:text-[var(--brand-accent)]"
                         aria-label={`로그 #${log.id} payload 보기`}
                       >
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="admin-icon-sm">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
                           <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                         </svg>
@@ -2184,7 +2312,7 @@ const AdminPage = () => {
               type="button"
               onClick={() => setLogPage((p) => Math.max(0, p - 1))}
               disabled={logPage === 0}
-              className="px-3 py-1.5 text-xs font-medium border border-gray-300 rounded-lg disabled:opacity-40 hover:bg-gray-50"
+              className="admin-btn admin-btn--page"
             >
               이전
             </button>
@@ -2195,7 +2323,7 @@ const AdminPage = () => {
               type="button"
               onClick={() => setLogPage((p) => Math.min(logPageCount - 1, p + 1))}
               disabled={logPage >= logPageCount - 1}
-              className="px-3 py-1.5 text-xs font-medium border border-gray-300 rounded-lg disabled:opacity-40 hover:bg-gray-50"
+              className="admin-btn admin-btn--page"
             >
               다음
             </button>
@@ -2206,7 +2334,7 @@ const AdminPage = () => {
   );
 
   const renderUploadSection = () => (
-    <div className={SECTION_CARD_CLASS}>
+    <div className="admin-card">
       <SectionCardHeader icon={UploadIcon} title="데이터 업로드" />
       <div className="p-6 space-y-6">
         <div>
@@ -2223,8 +2351,8 @@ const AdminPage = () => {
                   onClick={() => selectUploadType(item.endpoint)}
                   className={`px-3 py-3 rounded-lg border text-left text-sm transition-colors ${
                     active
-                      ? "border-indigo-400 bg-indigo-50 text-indigo-800"
-                      : "border-gray-200 bg-white text-gray-700 hover:border-indigo-200"
+                      ? "border-[var(--brand-accent-light)] bg-[var(--brand-tint)] text-[var(--brand-text)]"
+                      : "border-gray-200 bg-white text-gray-700 hover:border-[var(--brand-alpha-28)]"
                   }`}
                 >
                   <span className="block font-medium">{item.label}</span>
@@ -2235,12 +2363,12 @@ const AdminPage = () => {
               );
             })}
           </div>
-          <div className="mt-3 rounded-lg border border-indigo-100 bg-indigo-50/60 px-4 py-3 text-sm text-indigo-900">
+          <div className="mt-3 rounded-lg border border-[var(--brand-tint)] bg-[var(--brand-alpha-08)] px-4 py-3 text-sm text-[var(--brand-text)]">
             <p className="font-medium mb-1">
               {selectedUpload.label} · {selectedUpload.hint}
             </p>
-            <p className="text-xs text-indigo-800/80 leading-relaxed">{selectedUpload.schema}</p>
-            <p className="text-[11px] text-indigo-700/70 mt-2">타입을 바꾸면 선택한 파일 목록이 초기화됩니다.</p>
+            <p className="text-xs text-[var(--brand-text-muted)] leading-relaxed">{selectedUpload.schema}</p>
+            <p className="text-[11px] text-[color:rgba(var(--brand-rgb),0.7)] mt-2">타입을 바꾸면 선택한 파일 목록이 초기화됩니다.</p>
           </div>
         </div>
 
@@ -2269,7 +2397,7 @@ const AdminPage = () => {
               addFiles(e.dataTransfer.files);
             }}
             className={`mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-dashed rounded-xl transition-colors ${
-              dragActive ? "border-indigo-400 bg-indigo-50" : "border-gray-300 bg-gray-50 hover:bg-gray-100"
+              dragActive ? "border-[var(--brand-accent-light)] bg-[var(--brand-tint)]" : "border-gray-300 bg-gray-50 hover:bg-gray-100"
             }`}
           >
             <div className="space-y-1 text-center">
@@ -2280,7 +2408,7 @@ const AdminPage = () => {
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="relative cursor-pointer bg-white rounded-md font-medium text-indigo-600 hover:text-indigo-500 p-1"
+                  className="relative cursor-pointer bg-white rounded-md font-medium text-[var(--brand-accent)] hover:text-[var(--brand-accent-mid)] p-1"
                 >
                   파일 선택
                 </button>
@@ -2307,10 +2435,10 @@ const AdminPage = () => {
               {files.map((file, idx) => (
                 <li
                   key={`${fileKey(file)}-${idx}`}
-                  className="flex items-center justify-between text-sm bg-indigo-50 text-indigo-800 px-3 py-1.5 rounded-lg"
+                  className="flex items-center justify-between text-sm bg-[var(--brand-tint)] text-[var(--brand-text)] px-3 py-1.5 rounded-lg"
                 >
                   <span className="truncate mr-2">{file.name}</span>
-                  <button type="button" onClick={() => removeFile(idx)} className="text-xs font-bold text-indigo-600 hover:text-indigo-900">
+                  <button type="button" onClick={() => removeFile(idx)} className="admin-btn admin-btn--link admin-btn--link-strong">
                     제거
                   </button>
                 </li>
@@ -2323,7 +2451,7 @@ const AdminPage = () => {
           type="button"
           onClick={() => uploadFiles(selectedUpload.endpoint, selectedUpload.mode)}
           disabled={isAction(`upload-${selectedUpload.endpoint}`)}
-          className="w-full sm:w-auto px-5 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+          className="admin-btn admin-btn--primary w-full sm:w-auto"
         >
           {isAction(`upload-${selectedUpload.endpoint}`)
             ? "업로드 중..."
@@ -2334,14 +2462,14 @@ const AdminPage = () => {
   );
 
   const renderDeleteSection = () => (
-    <div className="bg-white rounded-xl shadow-sm border border-red-200 overflow-hidden">
+    <div className="admin-card admin-card--danger">
       <div className="px-6 py-4 bg-red-50 border-b border-red-100 flex items-center space-x-2">
         <div className="text-red-600">
           <TrashIcon />
         </div>
         <h3 className="text-lg font-semibold text-red-800">데이터 삭제</h3>
       </div>
-      <div className="p-6">
+      <div className="admin-card-body">
         <p className="text-sm text-red-600 mb-6 bg-red-50 p-3 rounded-lg border border-red-100">
           <strong>경고:</strong> 데이터베이스에서 영구적으로 삭제됩니다. 확인 모달에서 대상을 다시 검토하세요.
         </p>
@@ -2366,32 +2494,32 @@ const AdminPage = () => {
   const tabTitle = navItems.find((item) => item.id === activeTab)?.label ?? "";
 
   return (
-    <div className="flex h-screen bg-gray-100 font-sans overflow-hidden">
+    <div className="admin-page">
       {renderNav()}
 
-      <div className="flex-1 overflow-auto flex flex-col min-w-0">
-        <header className="md:hidden sticky top-0 z-40 bg-white border-b border-gray-200 px-4 py-3 flex items-center gap-3">
+      <div className="admin-main">
+        <header className="admin-mobile-header">
           <button
             type="button"
             onClick={() => setMobileNavOpen(true)}
-            className="p-2 -ml-1 rounded-lg text-gray-600 hover:bg-gray-100"
+            className="admin-mobile-menu-btn"
             aria-label="메뉴 열기"
             aria-expanded={mobileNavOpen}
           >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="admin-icon-md">
               <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
             </svg>
           </button>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-bold text-gray-900 truncate">{tabTitle}</p>
-            <p className="text-[11px] text-gray-500 truncate">관리자 대시보드</p>
+          <div className="admin-mobile-header-copy">
+            <p className="admin-mobile-header-title">{tabTitle}</p>
+            <p className="admin-mobile-header-sub">관리자 대시보드</p>
           </div>
         </header>
 
-        <div className="p-4 sm:p-8 max-w-7xl mx-auto space-y-6 w-full">
-          <div className="mb-4 md:mb-8 hidden md:block">
-            <h1 className="text-2xl font-bold text-gray-900">{tabTitle}</h1>
-            <p className="text-sm text-gray-500 mt-1">시스템 데이터를 관리하고 제어합니다.</p>
+        <div className="admin-content">
+          <div className="admin-page-heading">
+            <h1>{tabTitle}</h1>
+            <p>시스템 데이터를 관리하고 제어합니다.</p>
           </div>
 
           {activeTab === "upload" && renderUploadParams()}
@@ -2408,8 +2536,6 @@ const AdminPage = () => {
         </div>
       </div>
 
-      <Toast toast={toast} onClose={() => setToast(null)} />
-
       <ConfirmModal
         open={Boolean(deleteTarget)}
         title="삭제 확인"
@@ -2422,7 +2548,7 @@ const AdminPage = () => {
         <p>
           <strong>{deleteTarget?.label}</strong> 작업을 실행합니다. 이 작업은 되돌릴 수 없습니다.
         </p>
-        <ul className="bg-red-50 border border-red-100 rounded-lg px-3 py-2 space-y-1 text-red-800">
+        <ul className="admin-confirm-danger-list">
           <li>대상: {deleteTarget?.desc}</li>
           <li>
             Book ID: <strong>{bookId || "—"}</strong>

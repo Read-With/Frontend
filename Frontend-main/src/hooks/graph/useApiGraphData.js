@@ -31,6 +31,7 @@ export function useApiGraphData(serverBookId, currentChapter) {
     error: manifestLoadError,
   } = useManifestLoaded(serverBookId);
   const [apiBookGraphData, setApiBookGraphData] = useState(null);
+  const [loadedGraphKey, setLoadedGraphKey] = useState(null);
   const [userCurrentChapter, setUserCurrentChapter] = useState(null);
   const [isGraphLoading, setIsGraphLoading] = useState(false);
   const { handleError } = useErrorHandler('API Graph Data');
@@ -75,17 +76,12 @@ export function useApiGraphData(serverBookId, currentChapter) {
 
     if (bookChanged) {
       setApiBookGraphData(null);
+      setLoadedGraphKey(null);
       setUserCurrentChapter(null);
       loadedGraphKeyRef.current = null;
       return;
     }
-
-    if (!serverBookId) return;
-
-    if (!hasMacroSessionCache(serverBookId, currentChapter)) {
-      setApiBookGraphData(null);
-    }
-  }, [serverBookId, currentChapter]);
+  }, [serverBookId]);
 
   const loadMacroGraphData = useCallback(async () => {
     const chapter = toPositiveInt(currentChapter);
@@ -111,7 +107,6 @@ export function useApiGraphData(serverBookId, currentChapter) {
     const fail = (error, message, metadata) => {
       if (isStale(requestId)) return;
       loadedGraphKeyRef.current = null;
-      setApiBookGraphData(null);
       setApiError(handleError(error, message, { metadata }));
     };
 
@@ -134,6 +129,7 @@ export function useApiGraphData(serverBookId, currentChapter) {
           setApiError(null);
           setApiBookGraphData(enrichGraphPayload(data, targetBookId));
           loadedGraphKeyRef.current = graphKey;
+          setLoadedGraphKey(graphKey);
           if (data.userCurrentChapter !== undefined) {
             setUserCurrentChapter(data.userCurrentChapter);
           }
@@ -187,6 +183,7 @@ export function useApiGraphData(serverBookId, currentChapter) {
     },
     graph: {
       data: apiBookGraphData,
+      loadedKey: loadedGraphKey,
       maxChapter: apiMaxChapter,
       userCurrentChapter,
       isLoading: isGraphLoading,

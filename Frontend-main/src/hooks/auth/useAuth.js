@@ -18,7 +18,7 @@ import {
   isTokenValid,
   ensureSessionAccessToken,
 } from '../../utils/api/authApi';
-import { getPostLoginHomeUrl, isOAuthCallbackRoute } from '../../utils/common/urlUtils';
+import { getPostLoginHomeUrl, isOAuthCallbackRoute, errorUtils } from '../../utils/common/urlUtils';
 import {
   getStoredAccessToken,
   setStoredAccessToken,
@@ -57,7 +57,9 @@ function AuthProvider({ children }) {
           await refreshToken();
         }
       } catch (error) {
-        console.warn('토큰 자동 갱신 실패:', error);
+        errorUtils.logWarning('useAuth', '토큰 자동 갱신 실패', {
+          message: error?.message,
+        });
       }
     };
 

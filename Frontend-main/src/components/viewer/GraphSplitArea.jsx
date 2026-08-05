@@ -1,91 +1,47 @@
-import { useMemo, useRef, memo, useCallback, useEffect, useState } from 'react';
+import { lazy, Suspense, useMemo, useRef, memo, useCallback, useEffect, useState, useId } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { AlertCircle, Inbox, Loader2 } from 'lucide-react';
+import { AlertCircle, Inbox, Loader2, Maximize, Minimize } from 'lucide-react';
 import CytoscapeGraphUnified from '../graph/CytoscapeGraphUnified';
 import UnifiedNodeInfo from '../graph/UnifiedNodeInfo';
-import UnifiedEdgeTooltip from '../graph/UnifiedEdgeTooltip';
 import { useGraphElementPipeline } from '../../hooks/graph/useGraphViewState';
-import { getEdgeStyle, createGraphStylesheet, graphStyles } from '../../utils/styles/graphStyles';
+import { getEdgeStyle, createGraphStylesheet } from '../../utils/styles/graphStyles';
 import { centerSelectionOnElementId } from '../../utils/graph/graphCy';
 import {
-  shouldIgnoreViewerOutsideClick,
+  GraphA11yStatus,
+  shouldIgnoreGraphOutsideClick,
+  useGraphCanvasKeyboard,
   useGraphTooltipSelection,
+  useGraphTopbarToolsReserve,
 } from '../../hooks/graph/useGraphCy';
 import { resolveEventOrdinalForDisplay } from '../../utils/viewer/viewerSession';
-import { resolveGraphCallContext } from '../../utils/viewer/viewerGraph';
-import { hasGraphPanelLocationHint, resolveChapterIndex, toPositiveNumberOrNull, resolvePositiveBookId } from '../../utils/common/valueUtils';
 import {
-  eventUtils,
-  formatChapterOrderAndName,
-  stripRedundantBookTitlePrefix,
-  resolveChapterTitleMeta,
-} from '../../utils/viewer/viewerCore';
+  resolveGraphCallContext,
+  normalizeGraphApiError,
+  getViewerGraphLoadingNotice,
+  resolveViewerSplitChapterMeta,
+} from '../../utils/viewer/viewerGraph';
+import { hasGraphPanelLocationHint, toPositiveNumberOrNull, resolvePositiveBookId } from '../../utils/common/valueUtils';
+import { eventUtils, formatChapterOrdinalLabel } from '../../utils/viewer/viewerCore';
 import { userGraphPath } from '../../utils/common/urlUtils';
-import { buildGraphViewportRefitKey } from '../../utils/graph/graphCore.js';
 import '../graph/RelationGraph.css';
-import { GraphFloatingControls } from '../graph/GraphControls';
-import { getChapterData, getManifestFromCache } from '../../utils/common/cache/manifestCache';
+import {
+  GraphFloatingControls,
+  GraphChapterEventMeta,
+  GraphNoticePanel,
+} from '../graph/GraphControls';
 
-const iconShellClass = {
-  loading: 'bg-[var(--rg-brand-tint)] text-[var(--rg-brand)]',
-  empty: 'bg-slate-100 text-slate-500',
-  error: 'bg-red-50 text-red-600',
+const UnifiedEdgeTooltip = lazy(() => import('../graph/UnifiedEdgeTooltip'));
+
+const FULLSCREEN_TOGGLE = {
+  enter: {
+    label: '그래프 확대 — 같은 읽기 그래프를 키움',
+    title: '그래프 확대 (챕터 탐색은 「전체 관계도」)',
+  },
+  exit: {
+    label: '분할로 — 본문과 함께 보기',
+    title: '분할로 (본문+그래프)',
+  },
 };
-
-const primaryBtnClass =
-  'rounded-lg bg-[var(--rg-brand)] px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[var(--rg-brand-dark)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--rg-brand)] focus-visible:ring-offset-2';
-
-const secondaryBtnClass =
-  'rounded-lg border border-[var(--rg-border)] bg-white px-5 py-2.5 text-sm font-medium text-[var(--rg-brand)] transition-colors hover:bg-[var(--rg-brand-tint-soft)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--rg-brand)] focus-visible:ring-offset-2';
-
-function ChapterEventInfo({
-  bookId,
-  progressTopBar,
-  currentEvent,
-  prevValidEvent,
-  resolvedServerChapter,
-  chapterDisplayLabel,
-  chapterTitleTooltip,
-}) {
-  const eventNum = resolveEventOrdinalForDisplay({
-    currentEvent,
-    prevValidEvent,
-    currentChapter: resolvedServerChapter,
-    progressTopBar: progressTopBar ?? { eventNum: null },
-    fallback: 0,
-  });
-
-  // currentEvent가 있으면 진행 메타 대기 없이 바로 표시
-  if (eventNum > 0) {
-    return (
-      <div className="graph-topbar-meta">
-        <span
-          className="graph-topbar-meta-chapter"
-          title={chapterTitleTooltip || chapterDisplayLabel}
-        >
-          {chapterDisplayLabel}
-        </span>
-        <span className="graph-topbar-meta-event">Event {eventNum}</span>
-      </div>
-    );
-  }
-
-  if (bookId && progressTopBar === undefined) {
-    return <span className="graph-topbar-meta-event">계산중…</span>;
-  }
-
-  return (
-    <div className="graph-topbar-meta">
-      <span
-        className="graph-topbar-meta-chapter"
-        title={chapterTitleTooltip || chapterDisplayLabel}
-      >
-        {chapterDisplayLabel}
-      </span>
-      <span className="graph-topbar-meta-event">Event ?</span>
-    </div>
-  );
-}
 
 const GraphSplitTopBar = memo(function GraphSplitTopBar({
   graphState,
@@ -109,116 +65,41 @@ const GraphSplitTopBar = memo(function GraphSplitTopBar({
 
   const bookId = useMemo(() => toPositiveNumberOrNull(book?.id), [book?.id]);
 
-  const stripBookTitle = useMemo(() => {
-    const fromBook = String(book?.title ?? '').trim();
-    if (fromBook) return fromBook;
-    const m = bookId != null ? getManifestFromCache(bookId) : null;
-    return String(m?.book?.title ?? m?.title ?? '').trim();
-  }, [book?.title, bookId]);
+  const chapterMeta = useMemo(
+    () => resolveViewerSplitChapterMeta(bookId, currentChapter),
+    [bookId, currentChapter],
+  );
 
-  const chapterMeta = useMemo(() => {
-    const rawChapter = Number(currentChapter);
-    const hasValidChapter = Number.isFinite(rawChapter) && rawChapter >= 1;
-    const displayChapter = hasValidChapter ? rawChapter : null;
-
-    if (bookId == null) {
-      return {
-        resolvedServerChapter: displayChapter,
-        chapterResolved: false,
-        chapterDisplayLabel: displayChapter
-          ? formatChapterOrderAndName(displayChapter, '')
-          : '챕터 ?',
-        chapterTitleTooltip: undefined,
-      };
-    }
-
-    const byCurrent = getChapterData(bookId, currentChapter);
-    const resolvedFromData = byCurrent ? resolveChapterIndex(byCurrent) : null;
-    // manifest에 없으면 fallback 1로 API/표시를 속이지 않음
-    const resolvedServerChapter = resolvedFromData ?? displayChapter;
-    const chapterResolved = resolvedFromData != null || (hasValidChapter && Boolean(byCurrent));
-    const ch =
-      byCurrent && (resolvedFromData == null || resolvedFromData === rawChapter)
-        ? byCurrent
-        : resolvedServerChapter != null
-          ? getChapterData(bookId, resolvedServerChapter)
-          : null;
-
-    if (resolvedServerChapter == null) {
-      return {
-        resolvedServerChapter: null,
-        chapterResolved: false,
-        chapterDisplayLabel: '챕터 ?',
-        chapterTitleTooltip: undefined,
-      };
-    }
-
-    const meta = resolveChapterTitleMeta(ch, stripBookTitle, resolvedServerChapter);
-    const displayName =
-      meta.status === 'ok'
-        ? stripRedundantBookTitlePrefix(meta.raw, stripBookTitle) || meta.display
-        : meta.status === 'collapsed'
-          ? meta.display
-          : '';
-
-    return {
-      resolvedServerChapter,
-      chapterResolved,
-      chapterDisplayLabel: formatChapterOrderAndName(resolvedServerChapter, displayName),
-      chapterTitleTooltip: meta.raw || meta.tooltip || undefined,
-    };
-  }, [bookId, currentChapter, stripBookTitle]);
-
-  const fullscreenLabel = graphFullScreen
-    ? '분할 화면으로 전환'
-    : '그래프 전체화면으로 전환';
+  const fullscreenCopy = graphFullScreen ? FULLSCREEN_TOGGLE.exit : FULLSCREEN_TOGGLE.enter;
 
   const topbarRef = useRef(null);
   const toolsRef = useRef(null);
-
-  // 오른쪽 도구 실제 너비만큼 중앙 메타 max-width 확보 → 절대 겹침 방지
-  useEffect(() => {
-    const topbar = topbarRef.current;
-    const tools = toolsRef.current;
-    if (!topbar || !tools) return undefined;
-
-    const applyReserve = () => {
-      const width = Math.ceil(tools.getBoundingClientRect().width);
-      topbar.style.setProperty(
-        '--graph-split-tools-reserve',
-        `${Math.max(width, 1)}px`,
-      );
-    };
-
-    applyReserve();
-    const ro = new ResizeObserver(applyReserve);
-    ro.observe(tools);
-    return () => ro.disconnect();
-  }, []);
+  useGraphTopbarToolsReserve(topbarRef, toolsRef);
 
   return (
     <div className="graph-split-topbar" ref={topbarRef}>
       <button
         type="button"
         className="graph-fullscreen-btn"
-        aria-label={fullscreenLabel}
-        title={fullscreenLabel}
+        aria-label={fullscreenCopy.label}
+        title={fullscreenCopy.title}
         onClick={() => setGraphFullScreen(!graphFullScreen)}
       >
-        <span className="material-symbols-outlined" aria-hidden>
-          {graphFullScreen ? 'close_fullscreen' : 'fullscreen'}
-        </span>
+        {graphFullScreen ? (
+          <Minimize size={18} aria-hidden />
+        ) : (
+          <Maximize size={18} aria-hidden />
+        )}
       </button>
 
       <div className="graph-split-topbar-center">
-        <ChapterEventInfo
+        <GraphChapterEventMeta
           bookId={bookId}
           progressTopBar={progressTopBar}
           currentEvent={currentEvent}
           prevValidEvent={prevValidEvent}
           resolvedServerChapter={chapterMeta.resolvedServerChapter}
           chapterDisplayLabel={chapterMeta.chapterDisplayLabel}
-          chapterTitleTooltip={chapterMeta.chapterTitleTooltip}
         />
       </div>
 
@@ -237,81 +118,11 @@ const GraphSplitTopBar = memo(function GraphSplitTopBar({
   );
 });
 
-function GraphNoticePanel({ variant, title, description, icon, actions }) {
-  const shell = iconShellClass[variant] ?? iconShellClass.loading;
-
-  if (variant === 'loading') {
-    return (
-      <div className="graph-panel-status graph-panel-status--loading" role="status" aria-live="polite">
-        <div className={`graph-panel-status-icon ${shell}`} aria-hidden>
-          {icon}
-        </div>
-        <div className="graph-panel-status-copy">
-          <p className="graph-panel-status-title">{title}</p>
-          {description ? <p className="graph-panel-status-desc">{description}</p> : null}
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div
-      className={`graph-panel-status graph-panel-status--${variant}`}
-      role={variant === 'error' ? 'alert' : undefined}
-    >
-      <div className={`graph-panel-status-icon ${shell}`} aria-hidden>
-        {icon}
-      </div>
-      <div className="graph-panel-status-copy">
-        <h3 className="graph-panel-status-title">{title}</h3>
-        {description ? <p className="graph-panel-status-desc">{description}</p> : null}
-      </div>
-      {actions ? <div className="graph-panel-status-actions">{actions}</div> : null}
-    </div>
-  );
-}
-
-function normalizeGraphApiError(raw) {
-  if (!raw) return null;
-  if (typeof raw === 'string') {
-    return {
-      message: '그래프 데이터를 불러올 수 없습니다',
-      details: raw,
-      retry: null,
-    };
-  }
-  return raw;
-}
-
-function getLoadingNotice(isGraphRefreshing, isLocationDetermined, transitionType) {
-  if (isGraphRefreshing) {
-    return {
-      title: '이벤트 반영 중',
-      description: '현재 위치의 이벤트를 확정한 뒤 해당 그래프만 불러옵니다.',
-    };
-  }
-  if (!isLocationDetermined) {
-    return {
-      title: '위치 정보를 확인하는 중',
-      description: '현재 읽고 있는 위치를 파악하고 있습니다. 잠시만 기다려 주세요.',
-    };
-  }
-  if (transitionType === 'chapter') {
-    return {
-      title: '챕터 전환 중',
-      description: '새 챕터의 이벤트를 계산한 뒤 맞는 그래프만 표시합니다.',
-    };
-  }
-  return {
-    title: '그래프 정보를 불러오는 중',
-    description: '인물 관계 데이터를 불러오고 있습니다.',
-  };
-}
-
 /** 뷰어 분할 패널용 그래프 + 플로팅 툴팁 */
 const GraphContainer = memo(function GraphContainer({
   currentEvent,
   currentChapter,
+  chapterDisplayLabel = null,
   edgeLabelVisible = true,
   filename,
   elements = [],
@@ -325,6 +136,7 @@ const GraphContainer = memo(function GraphContainer({
   isSearchActive = false,
   filteredElements = [],
   fitNodeIds = [],
+  filterStage = 0,
   bookId = null,
   cyRef: externalCyRef = null,
   onCyReady = null,
@@ -341,14 +153,33 @@ const GraphContainer = memo(function GraphContainer({
   const cyRef = externalCyRef ?? localCyRef;
   const selectedElementRef = useRef(null);
   const graphSelectNodeRef = useRef(null);
-  const viewportRefitKey = useMemo(
-    () => buildGraphViewportRefitKey(currentChapter, eventNum),
-    [currentChapter, eventNum]
-  );
+  const graphSelectElementRef = useRef(null);
+  const tooltipBoundsRef = useRef(null);
+  const canvasAreaRef = useRef(null);
+  const a11yStatusId = useId();
+  const chapterLabel = chapterDisplayLabel || formatChapterOrdinalLabel(currentChapter);
+  const a11yElements = isSearchActive && Array.isArray(filteredElements)
+    ? filteredElements
+    : elements;
 
   const dismissTooltip = useCallback(() => {
     onClearTooltip?.();
   }, [onClearTooltip]);
+
+  const closeTooltipAndRestoreFocus = useCallback(() => {
+    onClearTooltip?.();
+    requestAnimationFrame(() => {
+      canvasAreaRef.current?.focus({ preventScroll: true });
+    });
+  }, [onClearTooltip]);
+
+  const { onKeyDown: handleCanvasKeyDown, liveAnnouncement, ariaLabel } = useGraphCanvasKeyboard({
+    cyRef,
+    graphClearRef,
+    selectElementRef: graphSelectElementRef,
+    activeTooltip,
+    onClearTooltip: dismissTooltip,
+  });
 
   const centerSelection = useCallback((elementId) => {
     const cy = cyRef.current;
@@ -360,7 +191,7 @@ const GraphContainer = memo(function GraphContainer({
       reserveRight: 48,
       padding: 24,
     });
-  }, []);
+  }, [cyRef]);
 
   const handleSelectRelatedNode = useCallback((idOrName) => {
     return graphSelectNodeRef.current?.(idOrName) ?? false;
@@ -373,7 +204,7 @@ const GraphContainer = memo(function GraphContainer({
     focusDelayMs: 50,
     tooltipOpen: !!activeTooltip,
     onDismiss: dismissTooltip,
-    shouldIgnoreClick: shouldIgnoreViewerOutsideClick,
+    shouldIgnoreClick: (event) => shouldIgnoreGraphOutsideClick(event, 'viewer'),
     attachDelayMs: 50,
   });
 
@@ -383,9 +214,9 @@ const GraphContainer = memo(function GraphContainer({
   );
 
   return (
-    <div style={graphStyles.container}>
+    <div className="graph-shell" ref={tooltipBoundsRef}>
       <div
-        style={graphStyles.tooltipContainer}
+        className="graph-tooltip-layer"
         onClick={(e) => e.stopPropagation()}
       >
         {activeTooltip?.type === 'node' && (
@@ -395,7 +226,7 @@ const GraphContainer = memo(function GraphContainer({
             data={activeTooltip}
             x={activeTooltip.x}
             y={activeTooltip.y}
-            onClose={dismissTooltip}
+            onClose={closeTooltipAndRestoreFocus}
             currentChapter={currentChapter}
             eventNum={eventNum}
             filename={filename}
@@ -404,26 +235,50 @@ const GraphContainer = memo(function GraphContainer({
             prevValidEvent={prevValidEvent}
             onSelectRelatedNode={handleSelectRelatedNode}
             showPovSummary={false}
+            tooltipBoundsRef={tooltipBoundsRef}
           />
         )}
         {activeTooltip?.type === 'edge' && (
-          <UnifiedEdgeTooltip
-            key={`edge-tooltip-${activeTooltip.id}`}
-            data={activeTooltip.data}
-            x={activeTooltip.x}
-            y={activeTooltip.y}
-            onClose={dismissTooltip}
-            variant="viewer"
-            currentChapter={currentChapter}
-            eventNum={eventNum}
-            bookId={bookId}
-            sourceEndpoint={activeTooltip.sourceEndpoint}
-            targetEndpoint={activeTooltip.targetEndpoint}
-          />
+          <Suspense fallback={<div role="status" aria-live="polite">관계 정보를 불러오는 중…</div>}>
+            <UnifiedEdgeTooltip
+              key={`edge-tooltip-${activeTooltip.id}`}
+              data={activeTooltip.data}
+              x={activeTooltip.x}
+              y={activeTooltip.y}
+              onClose={closeTooltipAndRestoreFocus}
+              variant="viewer"
+              currentChapter={currentChapter}
+              eventNum={eventNum}
+              bookId={bookId}
+              sourceEndpoint={activeTooltip.sourceEndpoint}
+              targetEndpoint={activeTooltip.targetEndpoint}
+              tooltipBoundsRef={tooltipBoundsRef}
+            />
+          </Suspense>
         )}
       </div>
 
-      <div className="graph-canvas-area">
+      <div
+        ref={canvasAreaRef}
+        className="graph-canvas-area"
+        role="region"
+        tabIndex={0}
+        aria-label={ariaLabel}
+        aria-describedby={a11yStatusId}
+        onKeyDown={handleCanvasKeyDown}
+      >
+        <GraphA11yStatus
+          id={a11yStatusId}
+          chapterLabel={chapterLabel}
+          eventNum={eventNum}
+          elements={a11yElements}
+          filterStage={filterStage}
+          isSearchActive={isSearchActive}
+          searchTerm={searchTerm}
+          activeTooltip={activeTooltip}
+          isLoading={isEventTransition}
+          liveAnnouncement={liveAnnouncement}
+        />
         <CytoscapeGraphUnified
           elements={elements}
           stylesheet={stylesheet}
@@ -432,17 +287,16 @@ const GraphContainer = memo(function GraphContainer({
           searchTerm={searchTerm}
           isSearchActive={isSearchActive}
           filteredElements={filteredElements}
-          currentChapter={currentChapter}
-          viewportRefitKey={viewportRefitKey}
-          skipViewportRefit={isEventTransition}
           onShowNodeTooltip={onShowNodeTooltip}
           onShowEdgeTooltip={onShowEdgeTooltip}
           onClearTooltip={onClearTooltip}
           selectedElementRef={selectedElementRef}
           graphClearRef={graphClearRef}
           graphSelectNodeRef={graphSelectNodeRef}
+          graphSelectElementRef={graphSelectElementRef}
           showZoomControls={showZoomControls}
           onCyReady={onCyReady}
+          viewportFitKey={currentChapter}
         />
       </div>
     </div>
@@ -571,19 +425,6 @@ const GraphSplitArea = memo(function GraphSplitArea({
   const graphChapterForCanvas = canShowGraph ? currentChapter : mountedChapter;
   const graphPrevValidForCanvas = canShowGraph ? prevValidEvent : mountedPrevValidEvent;
 
-  const fillOverlayStyle = (background, zIndex) =>
-    hasElements
-      ? {
-          position: 'absolute',
-          inset: 0,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background,
-          zIndex,
-        }
-      : { flex: 1, minHeight: 0, display: 'flex' };
-
   const resolvedApiError = normalizeGraphApiError(apiError);
 
   const shouldShowLoading =
@@ -593,7 +434,7 @@ const GraphSplitArea = memo(function GraphSplitArea({
 
   const showRefreshOverlay = canShowGraph && isGraphRefreshing;
 
-  const loadingNotice = getLoadingNotice(
+  const loadingNotice = getViewerGraphLoadingNotice(
     isGraphRefreshing || !isDataReady || !hasResolvedEvent || !graphMatchesTarget,
     isLocationDetermined,
     transitionState.type
@@ -610,8 +451,15 @@ const GraphSplitArea = memo(function GraphSplitArea({
     });
   }, [book, bookKey, currentChapter, navigate, routeBookId, routeFilename]);
 
+  const fillOverlayClass = [
+    'graph-fill-overlay',
+    hasElements ? null : 'graph-fill-overlay--bare',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
   return (
-    <div style={{ ...graphStyles.graphPageContainer, height: '100%' }}>
+    <div className="graph-page-shell graph-page-shell--fill">
       <GraphSplitTopBar
         graphState={graphState}
         graphActions={graphActions}
@@ -620,44 +468,35 @@ const GraphSplitArea = memo(function GraphSplitArea({
         searchActions={topBarSearchActions}
       />
 
-      <div style={{ ...graphStyles.graphPageInner, minWidth: 0, position: 'relative' }}>
+      <div className="graph-page-inner">
         {isDataLoadCompleteAndEmpty ? (
           <GraphNoticePanel
             variant="empty"
             title="아직 이벤트가 없습니다"
             description="이 챕터에는 표시할 그래프 데이터가 없습니다. 본문을 더 읽거나 그래프를 닫을 수 있습니다."
-            icon={<Inbox className="h-6 w-6" strokeWidth={1.75} aria-hidden />}
+            icon={<Inbox size={24} strokeWidth={1.75} aria-hidden />}
             actions={
-              <div className="flex flex-wrap items-center justify-center gap-2">
+              <>
                 {onToggleGraph ? (
-                  <button type="button" className={secondaryBtnClass} onClick={onToggleGraph}>
+                  <button type="button" className="graph-panel-btn graph-panel-btn--secondary" onClick={onToggleGraph}>
                     그래프 닫기
                   </button>
                 ) : null}
-                <button type="button" className={primaryBtnClass} onClick={openRelationGraphPage}>
-                  인물 관계도 보기
+                <button type="button" className="graph-panel-btn graph-panel-btn--primary" onClick={openRelationGraphPage}>
+                  전체 관계도 열기
                 </button>
-              </div>
+              </>
             }
           />
         ) : (
           <>
-            {/* elements가 있으면 remount 없이 hidden으로 유지 */}
+            {/* 기존 elements를 유지한 채 Cytoscape id diff로 추가·삭제만 반영 */}
             {hasElements ? (
-              <div
-                className="graph-canvas-area"
-                style={{
-                  flex: 1,
-                  minHeight: 0,
-                  minWidth: 0,
-                  visibility: canShowGraph ? 'visible' : 'hidden',
-                  pointerEvents: canShowGraph ? 'auto' : 'none',
-                }}
-                aria-hidden={!canShowGraph}
-              >
+              <div className="graph-canvas-area">
                 <GraphContainer
                   currentEvent={graphEventForCanvas}
                   currentChapter={graphChapterForCanvas}
+                  chapterDisplayLabel={formatChapterOrdinalLabel(graphChapterForCanvas)}
                   edgeLabelVisible={edgeLabelVisible}
                   filename={routeBookId ?? bookKey ?? ''}
                   elements={finalElements}
@@ -665,6 +504,7 @@ const GraphSplitArea = memo(function GraphSplitArea({
                   isSearchActive={isSearchActive}
                   filteredElements={filteredElements}
                   fitNodeIds={fitNodeIds}
+                  filterStage={filterStage}
                   prevValidEvent={graphPrevValidForCanvas ?? null}
                   activeTooltip={activeTooltip}
                   onClearTooltip={onClearTooltip}
@@ -677,13 +517,13 @@ const GraphSplitArea = memo(function GraphSplitArea({
                 />
                 {showRefreshOverlay ? (
                   <div
-                    className="absolute inset-0 z-20 flex items-center justify-center bg-[var(--rg-surface-slate)]/80"
+                    className="graph-refresh-overlay"
                     role="status"
                     aria-live="polite"
                     aria-label="그래프 전환 중"
                   >
-                    <div className="flex items-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-medium text-[var(--rg-text)] shadow-sm border border-[var(--rg-border-soft)]">
-                      <Loader2 className="h-4 w-4 animate-spin text-[var(--rg-brand)]" strokeWidth={2} aria-hidden />
+                    <div className="graph-refresh-chip">
+                      <Loader2 size={16} className="graph-spin" strokeWidth={2} aria-hidden />
                       <span>이벤트 반영 중</span>
                     </div>
                   </div>
@@ -692,26 +532,26 @@ const GraphSplitArea = memo(function GraphSplitArea({
             ) : null}
 
             {shouldShowLoading ? (
-              <div style={fillOverlayStyle('rgba(255,255,255,0.72)', 2)}>
+              <div className={fillOverlayClass}>
                 <GraphNoticePanel
                   variant="loading"
                   title={loadingNotice.title}
                   description={loadingNotice.description}
-                  icon={<Loader2 className="h-5 w-5 animate-spin" strokeWidth={2} aria-hidden />}
+                  icon={<Loader2 size={20} className="graph-spin" strokeWidth={2} aria-hidden />}
                 />
               </div>
             ) : null}
 
             {resolvedApiError ? (
-              <div style={fillOverlayStyle('rgba(255,255,255,0.88)', 3)}>
+              <div className={`${fillOverlayClass} graph-fill-overlay--error`}>
                 <GraphNoticePanel
                   variant="error"
                   title={resolvedApiError.message || '문제가 발생했습니다'}
                   description={resolvedApiError.details || '잠시 후 다시 시도해 주세요.'}
-                  icon={<AlertCircle className="h-6 w-6" strokeWidth={2} aria-hidden />}
+                  icon={<AlertCircle size={24} strokeWidth={2} aria-hidden />}
                   actions={
                     resolvedApiError.retry ? (
-                      <button type="button" className={primaryBtnClass} onClick={resolvedApiError.retry}>
+                      <button type="button" className="graph-panel-btn graph-panel-btn--primary" onClick={resolvedApiError.retry}>
                         다시 시도
                       </button>
                     ) : null

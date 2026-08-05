@@ -1,66 +1,21 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, memo, Suspense, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
-import CytoscapeGraphUnified, { GraphZoomControls } from './CytoscapeGraphUnified';
+import CytoscapeGraphUnified from './CytoscapeGraphUnified';
 import UnifiedNodeInfo from './UnifiedNodeInfo';
-import UnifiedEdgeTooltip from './UnifiedEdgeTooltip';
-import { GraphFloatingControls } from './GraphControls';
-import { graphStyles } from '../../utils/styles/graphStyles.js';
-import { COLORS, ANIMATION_VALUES } from '../../utils/styles/styles.js';
-import { GRAPH_LAYOUT_CONSTANTS, resolveChapterSidebarWidth, buildGraphViewportRefitKey } from '../../utils/graph/graphCore.js';
+import { GraphFloatingControls, GraphTopBarMeta } from './GraphControls';
+import {
+  GRAPH_LAYOUT_CONSTANTS,
+  resolveChapterSidebarWidth,
+} from '../../utils/graph/graphCore.js';
+import { formatChapterOrdinalLabel } from '../../utils/viewer/viewerCore';
+import { GraphA11yStatus, useGraphCanvasKeyboard, useGraphTopbarToolsReserve } from '../../hooks/graph/useGraphCy.js';
+
+const UnifiedEdgeTooltip = lazy(() => import('./UnifiedEdgeTooltip'));
 
 const {
   TOOLTIP_SIDEBAR_WIDTH: SIDEBAR_WIDTH,
   ANIMATION_MS: ANIMATION_DURATION,
 } = GRAPH_LAYOUT_CONSTANTS;
-
-const sidebarBaseStyle = {
-  position: 'fixed',
-  top: 0,
-  width: `${SIDEBAR_WIDTH}px`,
-  height: '100vh',
-  background: COLORS.white,
-  borderRadius: '0px',
-  zIndex: 99999,
-  overflow: 'hidden',
-  transition: `right ${ANIMATION_DURATION}ms ${ANIMATION_VALUES.EASE_OUT}`,
-};
-
-const loadingOverlayStyle = {
-  position: 'absolute',
-  inset: 0,
-  background: 'rgba(255, 255, 255, 0.75)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  zIndex: 10,
-  fontSize: '16px',
-  fontWeight: 600,
-  color: COLORS.primary,
-  letterSpacing: '0.02em',
-};
-
-const canvasShellStyle = {
-  position: 'fixed',
-  top: 0,
-  right: 0,
-  bottom: 0,
-  overflow: 'hidden',
-  display: 'flex',
-  flexDirection: 'column',
-  transition: `left ${ANIMATION_VALUES.DURATION.SLOW} ${ANIMATION_VALUES.EASE_OUT}`,
-};
-
-const pageContainerStyle = {
-  ...graphStyles.graphPageContainer,
-  height: '100%',
-};
-
-const pageInnerStyle = graphStyles.graphPageInner;
-
-const canvasAreaStyle = {
-  flex: 1,
-  minHeight: 0,
-};
 
 function clearTimeoutRef(timeoutRef) {
   if (timeoutRef.current) {
@@ -70,7 +25,7 @@ function clearTimeoutRef(timeoutRef) {
 }
 
 function GraphLoadingOverlay() {
-  return <div style={loadingOverlayStyle}>그래프 업데이트 중...</div>;
+  return <div className="graph-canvas-loading" role="status">그래프 업데이트 중...</div>;
 }
 
 function GraphSidebar({
@@ -92,14 +47,15 @@ function GraphSidebar({
   bookId = null,
   onSelectRelatedNode = null,
   chapterRailWidth = null,
+  onRequestFocusCanvas = null,
 }) {
   const [isClosing, setIsClosing] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
   const previousActiveTooltipRef = useRef(null);
   const animationTimeoutRef = useRef(null);
+  const restoreCanvasFocusRef = useRef(false);
 
   const sidebarStyle = useMemo(() => ({
-    ...sidebarBaseStyle,
     right: isClosing || !isVisible ? `-${SIDEBAR_WIDTH}px` : '0px',
   }), [isClosing, isVisible]);
 
@@ -108,7 +64,11 @@ function GraphSidebar({
     setIsClosing(false);
     setIsVisible(false);
     animationTimeoutRef.current = null;
-  }, [onClose]);
+    if (restoreCanvasFocusRef.current) {
+      restoreCanvasFocusRef.current = false;
+      onRequestFocusCanvas?.();
+    }
+  }, [onClose, onRequestFocusCanvas]);
 
   const runCloseAnimation = useCallback(() => {
     clearTimeoutRef(animationTimeoutRef);
@@ -117,6 +77,7 @@ function GraphSidebar({
   }, [finishClose]);
 
   const handleClose = useCallback(() => {
+    restoreCanvasFocusRef.current = true;
     onClearGraph?.();
     onStartClosing?.();
     runCloseAnimation();
@@ -151,15 +112,18 @@ function GraphSidebar({
     return null;
   }
 
+  const sharedTooltipProps = {
+    onClose: handleClose,
+    currentChapter,
+    eventNum,
+  };
+
   let tooltipContent = null;
   if (activeTooltip?.type === 'node') {
     tooltipContent = (
       <UnifiedNodeInfo
         displayMode="sidebar"
         data={activeTooltip}
-        onClose={handleClose}
-        currentChapter={currentChapter}
-        eventNum={eventNum}
         elements={elements}
         filename={filename}
         povSummaries={povSummaries}
@@ -170,20 +134,21 @@ function GraphSidebar({
         apiBookGraphData={apiBookGraphData}
         onSelectRelatedNode={onSelectRelatedNode}
         chapterRailWidth={chapterRailWidth}
+        {...sharedTooltipProps}
       />
     );
   } else if (activeTooltip) {
     tooltipContent = (
-      <UnifiedEdgeTooltip
-        data={activeTooltip.data}
-        onClose={handleClose}
-        currentChapter={currentChapter}
-        eventNum={eventNum}
-        variant="graphPage"
-        bookId={bookId}
-        sourceEndpoint={activeTooltip.sourceEndpoint}
-        targetEndpoint={activeTooltip.targetEndpoint}
-      />
+      <Suspense fallback={<div role="status" aria-live="polite">관계 정보를 불러오는 중…</div>}>
+        <UnifiedEdgeTooltip
+          data={activeTooltip.data}
+          variant="graphPage"
+          bookId={bookId}
+          sourceEndpoint={activeTooltip.sourceEndpoint}
+          targetEndpoint={activeTooltip.targetEndpoint}
+          {...sharedTooltipProps}
+        />
+      </Suspense>
     );
   }
 
@@ -240,81 +205,76 @@ function GraphCanvas({
     selectedElementRef,
   } = tooltipHandlers;
 
-  const [chromeCy, setChromeCy] = useState(null);
   const topbarRef = useRef(null);
   const toolsRef = useRef(null);
+  const canvasAreaRef = useRef(null);
+  const selectElementRef = useRef(null);
+  const a11yStatusId = useId();
   const showSidebar = !!(activeTooltip || isSidebarClosing);
   const usePageChrome = !!(pageChromeStart || floatingControls);
 
   const chapterRailWidth = sidebarLayoutWidth != null
     ? sidebarLayoutWidth
     : resolveChapterSidebarWidth(isSidebarOpen);
-  const chapterLabel = chapterDisplayLabel || `챕터 ${currentChapter}`;
-  const metaEventLabel = Number.isFinite(Number(eventNum)) && Number(eventNum) > 0
-    ? `Event ${eventNum}`
-    : 'Event ?';
+  const chapterLabel = chapterDisplayLabel || formatChapterOrdinalLabel(currentChapter);
+  const a11yElements = isSearchActive && Array.isArray(filteredElements)
+    ? filteredElements
+    : renderElements;
+  const filterStage = floatingControls?.filterStage ?? 0;
 
-  useEffect(() => {
-    if (!usePageChrome) return undefined;
-    const topbar = topbarRef.current;
-    const tools = toolsRef.current;
-    if (!topbar || !tools) return undefined;
+  const { onKeyDown: handleCanvasKeyDown, liveAnnouncement, ariaLabel } = useGraphCanvasKeyboard({
+    cyRef,
+    graphClearRef,
+    selectElementRef,
+    activeTooltip,
+    onClearTooltip,
+  });
 
-    const applyReserve = () => {
-      const width = Math.ceil(tools.getBoundingClientRect().width);
-      topbar.style.setProperty(
-        '--graph-split-tools-reserve',
-        `${Math.max(width, 1)}px`,
-      );
-    };
+  const focusCanvas = useCallback(() => {
+    requestAnimationFrame(() => {
+      canvasAreaRef.current?.focus({ preventScroll: true });
+    });
+  }, []);
 
-    applyReserve();
-    const ro = new ResizeObserver(applyReserve);
-    ro.observe(tools);
-    return () => ro.disconnect();
-  }, [usePageChrome]);
+  useGraphTopbarToolsReserve(topbarRef, toolsRef, usePageChrome);
 
   return (
     <div
-      style={{
-        ...canvasShellStyle,
-        left: `${chapterRailWidth}px`,
-      }}
+      className="graph-canvas-shell"
+      style={{ left: `${chapterRailWidth}px` }}
     >
-      <div style={pageContainerStyle}>
+      <div className="graph-page-shell graph-page-shell--fill">
         {usePageChrome ? (
-          <div className="graph-page-topbar" ref={topbarRef}>
-            <div className="graph-page-topbar-center">
-              <div className="graph-topbar-meta">
-                <span
-                  className="graph-topbar-meta-chapter"
-                  title={chapterTitleTooltip || chapterLabel}
-                >
-                  {chapterLabel}
-                </span>
-                <span className="graph-topbar-meta-event">{metaEventLabel}</span>
+          <>
+            <div className="graph-page-topbar" ref={topbarRef}>
+              <div className="graph-page-topbar-center">
+                <GraphTopBarMeta
+                  chapterLabel={chapterLabel}
+                  chapterTitle={chapterTitleTooltip}
+                />
+              </div>
+              <div className="graph-page-topbar-tools" ref={toolsRef}>
+                {floatingControls ? (
+                  <GraphFloatingControls
+                    searchState={floatingControls.searchState}
+                    searchActions={floatingControls.searchActions}
+                    edgeLabelVisible={floatingControls.edgeLabelVisible}
+                    onToggleEdgeLabel={floatingControls.onToggleEdgeLabel}
+                    filterStage={floatingControls.filterStage}
+                    onFilterChange={floatingControls.onFilterChange}
+                    showLegend
+                  />
+                ) : null}
+                {floatingControls && pageChromeStart ? (
+                  <span className="graph-split-topbar-sep" aria-hidden />
+                ) : null}
+                {pageChromeStart}
               </div>
             </div>
-            <div className="graph-page-topbar-tools" ref={toolsRef}>
-              {floatingControls ? (
-                <GraphFloatingControls
-                  searchState={floatingControls.searchState}
-                  searchActions={floatingControls.searchActions}
-                  edgeLabelVisible={floatingControls.edgeLabelVisible}
-                  onToggleEdgeLabel={floatingControls.onToggleEdgeLabel}
-                  filterStage={floatingControls.filterStage}
-                  onFilterChange={floatingControls.onFilterChange}
-                  showLegend
-                />
-              ) : null}
-              <span className="graph-split-topbar-sep" aria-hidden />
-              <GraphZoomControls cy={chromeCy} className="graph-zoom-controls is-embedded" />
-              {pageChromeStart}
-            </div>
-          </div>
+          </>
         ) : null}
 
-        <div style={pageInnerStyle}>
+        <div className="graph-page-inner">
           {showSidebar && (
             <GraphSidebar
               activeTooltip={activeTooltip}
@@ -335,16 +295,32 @@ function GraphCanvas({
               bookId={bookId}
               onSelectRelatedNode={onSelectRelatedNode}
               chapterRailWidth={chapterRailWidth}
+              onRequestFocusCanvas={focusCanvas}
             />
           )}
 
           <div
+            ref={canvasAreaRef}
             className="graph-canvas-area"
             onClick={onCanvasClick}
-            role="application"
-            aria-label="관계 그래프 캔버스"
-            style={canvasAreaStyle}
+            onKeyDown={handleCanvasKeyDown}
+            role="region"
+            tabIndex={0}
+            aria-label={ariaLabel}
+            aria-describedby={a11yStatusId}
           >
+            <GraphA11yStatus
+              id={a11yStatusId}
+              chapterLabel={chapterLabel}
+              eventNum={eventNum}
+              elements={a11yElements}
+              filterStage={filterStage}
+              isSearchActive={isSearchActive}
+              searchTerm={searchTerm}
+              activeTooltip={activeTooltip}
+              isLoading={isLoading}
+              liveAnnouncement={liveAnnouncement}
+            />
             {isLoading && hasShownGraphOnce && <GraphLoadingOverlay />}
 
             <CytoscapeGraphUnified
@@ -361,11 +337,10 @@ function GraphCanvas({
               selectedElementRef={selectedElementRef}
               graphClearRef={graphClearRef}
               graphSelectNodeRef={graphSelectNodeRef}
+              graphSelectElementRef={selectElementRef}
               isDataRefreshing={isLoading}
-              currentChapter={currentChapter}
-              viewportRefitKey={buildGraphViewportRefitKey(currentChapter, eventNum)}
-              showZoomControls={!usePageChrome}
-              onCyReady={usePageChrome ? setChromeCy : null}
+              showZoomControls
+              viewportFitKey={currentChapter}
             />
           </div>
         </div>

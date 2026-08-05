@@ -19,7 +19,7 @@ import {
   resolveProgressLocator,
   locatorsEqual,
 } from '../common/valueUtils';
-import { sanitizeAssetUrl, getApiBaseUrl } from '../common/urlUtils';
+import { sanitizeAssetUrl, getApiBaseUrl, errorUtils } from '../common/urlUtils';
 import {
   normalizeStartEndLocatorsForServer,
   withNormalizedProgressLocators,
@@ -99,16 +99,27 @@ const buildBooksQueryString = (params = {}) => {
 
 export const getBooks = async (params = {}) => {
   const queryString = buildBooksQueryString(params);
-  const data = await authenticatedRequest(`/v2/books${queryString ? `?${queryString}` : ''}`, {
-    softFailStatuses: SOFT_FAIL_403_404,
-  });
+  let data;
+  try {
+    data = await authenticatedRequest(`/v2/books${queryString ? `?${queryString}` : ''}`, {
+      softFailStatuses: SOFT_FAIL_403_404,
+    });
+  } catch (error) {
+    errorUtils.logError('getBooks', error, { query: queryString || null });
+    throw error;
+  }
   const softEmpty = mapSoftFailResponse(data, {
     mode: 'empty',
     emptyResult: [],
     forbiddenMessage: '책 목록에 접근할 권한이 없습니다.',
     notFoundMessage: '책 목록을 찾을 수 없습니다.',
   });
-  if (softEmpty) return softEmpty;
+  if (softEmpty) {
+    errorUtils.logWarning('getBooks', softEmpty.message || '책 목록 soft-fail', {
+      code: softEmpty.code,
+    });
+    return softEmpty;
+  }
   if (data?.isSuccess && Array.isArray(data.result)) {
     data.result = data.result.map(normalizeV2Book);
   }
@@ -155,9 +166,13 @@ export const uploadBook = async (file, metadata = {}) => {
     method: 'POST',
     body: formData,
   });
-  if (data?.isSuccess && data.result) {
-    data.result = normalizeV2Book(data.result);
+  if (!data?.isSuccess || !data.result) {
+    const error = new Error(data?.message || 'EPUB 업로드 실패');
+    error.code = data?.code ?? null;
+    error.status = data?.status ?? null;
+    throw error;
   }
+  data.result = normalizeV2Book(data.result);
   return data;
 };
 
@@ -166,7 +181,7 @@ export const toggleBookFavorite = async (bookId, favorite) => {
     const method = favorite ? 'POST' : 'DELETE';
     return await authenticatedRequest(`/v2/favorites/${bookId}`, { method });
   } catch (error) {
-    console.error('도서 즐겨찾기 토글 실패:', error);
+    errorUtils.logError('toggleBookFavorite', error, { bookId, favorite });
     throw error;
   }
 };
@@ -224,7 +239,7 @@ export const getChapterPovSummaries = async (bookId, chapterIdx) => {
     `/v2/books/${normalizedBookId}/chapters/${normalizedChapterIdx}/pov-summaries`,
     { softFailStatuses: SOFT_FAIL_403_404 }
   ).catch((error) => {
-    console.error('챕터 시점 요약 조회 실패:', error);
+    errorUtils.logError('getChapterPovSummaries', error);
     throw error;
   });
 
@@ -266,13 +281,19 @@ const getBookmarks = async (bookId, sort = 'time_desc') => {
       forbiddenMessage: '북마크에 접근할 권한이 없습니다.',
       notFoundMessage: '북마크를 찾을 수 없습니다.',
     });
-    if (softEmpty) return softEmpty;
+    if (softEmpty) {
+      errorUtils.logWarning('getBookmarks', softEmpty.message || '북마크 목록 soft-fail', {
+        bookId: normalizedBookId,
+        code: softEmpty.code,
+      });
+      return softEmpty;
+    }
     if (data?.isSuccess && Array.isArray(data.result)) {
       data.result = data.result.map(normalizeBookmarkDto);
     }
     return data;
   } catch (error) {
-    console.error('북마크 목록 조회 실패:', error);
+    errorUtils.logError('getBookmarks', error);
     throw error;
   }
 };
@@ -329,7 +350,7 @@ export const createBookmark = async (bookmarkData) => {
     }
     return data;
   } catch (error) {
-    console.error('북마크 생성 실패:', error);
+    errorUtils.logError('createBookmark', error);
     throw error;
   }
 };
@@ -352,7 +373,7 @@ export const updateBookmark = async (bookmarkId, updateData) => {
     }
     return data;
   } catch (error) {
-    console.error('북마크 수정 실패:', error);
+    errorUtils.logError('updateBookmark', error);
     throw error;
   }
 };
@@ -366,7 +387,7 @@ export const deleteBookmark = async (bookmarkId) => {
       method: 'DELETE',
     });
   } catch (error) {
-    console.error('북마크 삭제 실패:', error);
+    errorUtils.logError('deleteBookmark', error);
     throw error;
   }
 };
@@ -379,7 +400,7 @@ const PROGRESS_NOT_FOUND = makeSilentError('NOT_FOUND', '진도 정보를 찾을
 const handleProgressApiError = (error, logContext) => {
   if (isForbiddenError(error)) return PROGRESS_FORBIDDEN;
   if (isNotFoundError(error)) return PROGRESS_NOT_FOUND;
-  if (logContext) console.error(logContext, error);
+  if (logContext) errorUtils.logError(logContext, error);
   throw error;
 };
 
@@ -437,7 +458,7 @@ export const saveProgress = async (progressData) => {
     );
   } catch (error) {
     if (isForbiddenError(error)) return PROGRESS_FORBIDDEN;
-    console.error('독서 진도 저장 실패:', error);
+    errorUtils.logError('saveProgress', error);
     throw error;
   }
 };
@@ -588,7 +609,7 @@ export const getBookManifest = async (bookId, { forceRefresh = false } = {}) => 
         '도서를 찾을 수 없거나 아직 노출 가능한 상태가 아닙니다.'
       );
     }
-    console.error('Manifest 조회 실패:', error);
+    errorUtils.logError('getBookManifest', error);
     throw error;
   }
 };

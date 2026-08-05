@@ -14,6 +14,7 @@ import {
   resolveOAuthHttpError,
   normalizeOAuthFetchError,
   getOAuthErrorTip,
+  errorUtils,
 } from '../../utils/common/urlUtils';
 import './OAuthCallback.css';
 
@@ -124,6 +125,12 @@ function OAuthCallbackShell({ variant = '', role, ariaLive, ariaBusy, children }
   );
 }
 
+function tagOAuthError(error, tags = {}) {
+  const err = error instanceof Error ? error : new Error(String(error ?? 'OAuth 오류'));
+  Object.assign(err, tags);
+  return err;
+}
+
 async function exchangeGoogleAuthCode(code) {
   const existing = oauthExchangeByCode.get(code);
   if (existing) return existing;
@@ -131,6 +138,7 @@ async function exchangeGoogleAuthCode(code) {
   const run = (async () => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 30000);
+    const redirectUri = getGoogleOAuthRedirectUri();
 
     try {
       const response = await fetch(`${getApiBaseUrl()}/api/auth/google`, {
@@ -139,29 +147,37 @@ async function exchangeGoogleAuthCode(code) {
           'Content-Type': 'application/json',
           Accept: 'application/json',
         },
-        body: JSON.stringify({
-          code,
-          redirectUri: getGoogleOAuthRedirectUri(),
-        }),
+        body: JSON.stringify({ code, redirectUri }),
         credentials: 'include',
         signal: controller.signal,
       });
 
       if (!response.ok) {
-        await resolveOAuthHttpError(response);
+        const status = response.status;
+        try {
+          await resolveOAuthHttpError(response);
+        } catch (httpErr) {
+          throw tagOAuthError(httpErr, { phase: 'http_error', status, redirectUri });
+        }
       }
 
       const data = await response.json();
       resolveOAuthApiBodyError(data);
 
       if (!data.result?.user) {
-        throw new Error('사용자 데이터를 받지 못했습니다.');
+        throw tagOAuthError('사용자 데이터를 받지 못했습니다.', {
+          phase: 'invalid_payload',
+          redirectUri,
+        });
       }
 
       const userData = data.result.user;
       const userValidation = validateUserData(userData);
       if (!userValidation.isValid) {
-        throw new Error(userValidation.error);
+        throw tagOAuthError(userValidation.error, {
+          phase: 'invalid_user',
+          redirectUri,
+        });
       }
 
       return {
@@ -177,17 +193,24 @@ async function exchangeGoogleAuthCode(code) {
         refreshExpiresIn: data.result.refreshExpiresIn || 604800,
       };
     } catch (err) {
+      if (err?.phase) throw err;
       if (err?.name === 'AbortError') {
-        throw new Error(
+        throw tagOAuthError(
           '백엔드 서버 응답이 지연되고 있습니다. 잠시 후 홈에서 다시 로그인해 주세요.',
+          { phase: 'timeout', redirectUri },
         );
       }
       if (typeof err?.message === 'string' && err.message.includes('Failed to fetch')) {
-        throw new Error(
+        throw tagOAuthError(
           '백엔드 서버에 연결할 수 없습니다. 백엔드 서버가 실행 중인지 확인해주세요.',
+          { phase: 'network', redirectUri, cause: err.message },
         );
       }
-      throw err;
+      throw tagOAuthError(err, {
+        phase: err?.phase || 'exchange',
+        redirectUri,
+        status: err?.status ?? null,
+      });
     } finally {
       clearTimeout(timeoutId);
     }
@@ -232,7 +255,18 @@ const OAuthCallback = () => {
   useEffect(() => {
     let cancelled = false;
 
-    const finishError = (message) => {
+    const finishError = (message, { error = null, level = 'error', reason = null } = {}) => {
+      const detail = error || new Error(message);
+      const meta = {
+        reason,
+        phase: detail.phase ?? null,
+        status: detail.status ?? null,
+        redirectUri: detail.redirectUri ?? null,
+        uiMessage: message,
+      };
+      if (level === 'warn') errorUtils.logWarning('OAuthCallback', message, meta);
+      else errorUtils.logError('OAuthCallback', detail, meta);
+
       clearOAuthAttemptArtifacts();
       if (!cancelled) {
         setError(message);
@@ -246,12 +280,15 @@ const OAuthCallback = () => {
       const oauthState = searchParams.get('state');
 
       if (!code && !oauthErrorParam) {
-        finishError('유효한 로그인 정보가 없습니다.');
+        finishError('유효한 로그인 정보가 없습니다.', { level: 'warn', reason: 'missing_code' });
         return;
       }
 
       if (oauthErrorParam && !code) {
-        finishError(resolveOAuthUrlError(oauthErrorParam));
+        finishError(resolveOAuthUrlError(oauthErrorParam), {
+          level: 'warn',
+          reason: `provider_error:${oauthErrorParam}`,
+        });
         return;
       }
 
@@ -259,40 +296,47 @@ const OAuthCallback = () => {
       if (!stateCheck.isValid) {
         finishError(
           stateCheck.error || 'OAuth state 검증에 실패했습니다. 다시 로그인해주세요.',
+          { reason: 'invalid_state' },
         );
         return;
       }
 
       const joiningExisting = oauthExchangeByCode.has(code);
-
       if (!joiningExisting) {
         try {
           if (localStorage.getItem(PROCESSED_CODE_KEY) === code) {
-            finishError('이미 처리된 로그인 요청입니다.');
+            finishError('이미 처리된 로그인 요청입니다.', {
+              level: 'warn',
+              reason: 'duplicate_code',
+            });
             return;
           }
           localStorage.setItem(PROCESSED_CODE_KEY, code);
-        } catch {
-          /* ignore */
+        } catch (storageError) {
+          errorUtils.logWarning('OAuthCallback', 'processed code 저장 실패', {
+            reason: 'storage_write_failed',
+            message: storageError?.message,
+          });
         }
       }
 
       try {
         stripOAuthCallbackParams();
-
         const frontendUserData = await exchangeGoogleAuthCode(code);
         if (cancelled) return;
-
         login(frontendUserData);
         clearOAuthAttemptArtifacts();
         navigate('/mypage', { replace: true });
       } catch (err) {
-        finishError(normalizeOAuthFetchError(err));
+        finishError(normalizeOAuthFetchError(err), {
+          error: err,
+          reason: 'code_exchange_failed',
+        });
       }
     };
 
     handleOAuthCallback().catch((err) => {
-      finishError(`초기화 실패: ${err.message}`);
+      finishError(`초기화 실패: ${err.message}`, { error: err, reason: 'init_failed' });
     });
 
     return () => {

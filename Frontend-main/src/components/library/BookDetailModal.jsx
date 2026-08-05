@@ -25,6 +25,7 @@ import {
   fetchAuthenticatedAssetBlobUrl,
   isProtectedPublicAsset,
   sanitizeAssetUrl,
+  errorUtils,
 } from '../../utils/common/urlUtils';
 import { toast } from 'react-toastify';
 import './BookDetailModal.css';
@@ -35,15 +36,21 @@ async function resolveDisplaySrc(src) {
   if (!isProtectedPublicAsset(sanitized)) {
     return { displaySrc: sanitized, failed: false };
   }
-  const blobUrl = await fetchAuthenticatedAssetBlobUrl(sanitized);
-  if (blobUrl) return { displaySrc: blobUrl, failed: false };
-  return { displaySrc: null, failed: true };
+  try {
+    const blobUrl = await fetchAuthenticatedAssetBlobUrl(sanitized);
+    return blobUrl
+      ? { displaySrc: blobUrl, failed: false }
+      : { displaySrc: null, failed: true };
+  } catch {
+    return { displaySrc: null, failed: true };
+  }
 }
 
 export function AuthenticatedImage({
   src,
   alt = '',
   className,
+  fallback = null,
   onError,
   onLoad,
   ...rest
@@ -56,13 +63,10 @@ export function AuthenticatedImage({
     setFailed(false);
     setDisplaySrc(null);
 
-    resolveDisplaySrc(src).then(({ displaySrc: nextSrc, failed: nextFailed }) => {
+    void resolveDisplaySrc(src).then(({ displaySrc: nextSrc, failed: nextFailed }) => {
       if (cancelled) return;
-      if (nextFailed) {
-        setFailed(true);
-        return;
-      }
-      setDisplaySrc(nextSrc);
+      setFailed(nextFailed);
+      if (!nextFailed) setDisplaySrc(nextSrc);
     });
 
     return () => {
@@ -71,19 +75,18 @@ export function AuthenticatedImage({
   }, [src]);
 
   useEffect(() => {
-    if (failed && onError) onError();
+    if (failed) onError?.();
   }, [failed, onError]);
 
-  if (failed || !displaySrc) {
-    return null;
-  }
+  if (failed) return fallback;
+  if (!displaySrc) return null;
 
   return (
     <img
       src={displaySrc}
       alt={alt}
       className={className}
-      onError={onError}
+      onError={() => setFailed(true)}
       onLoad={onLoad}
       {...rest}
     />
@@ -94,6 +97,7 @@ AuthenticatedImage.propTypes = {
   src: PropTypes.string,
   alt: PropTypes.string,
   className: PropTypes.string,
+  fallback: PropTypes.node,
   onError: PropTypes.func,
   onLoad: PropTypes.func,
 };
@@ -175,6 +179,15 @@ function CollapsiblePanelHeader({
 }
 
 function CharacterRow({ character, isMain = false }) {
+  const avatarFallback = (
+    <span
+      className="book-detail-character-avatar book-detail-character-avatar--placeholder"
+      aria-hidden
+    >
+      {(character.name || '?').slice(0, 1)}
+    </span>
+  );
+
   return (
     <li
       className={
@@ -189,14 +202,10 @@ function CharacterRow({ character, isMain = false }) {
             className="book-detail-character-avatar"
             src={character.profileImage}
             alt=""
+            fallback={avatarFallback}
           />
         ) : (
-          <span
-            className="book-detail-character-avatar book-detail-character-avatar--placeholder"
-            aria-hidden
-          >
-            {(character.name || '?').slice(0, 1)}
-          </span>
+          avatarFallback
         )}
         <span className="character-name" title={character.name || undefined}>
           {character.name}
@@ -223,7 +232,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
   const [charactersPanelOpen, setCharactersPanelOpen] = useState(true);
   const [chaptersPanelOpen, setChaptersPanelOpen] = useState(true);
   const [bookDeleteConfirm, setBookDeleteConfirm] = useState(false);
-  const [progressCacheTick, setProgressCacheTick] = useState(0);
+  const [, setProgressCacheTick] = useState(0);
   const closeButtonRef = useRef(null);
   const lastFocusRef = useRef(null);
 
@@ -234,15 +243,9 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
 
   const serverBookId = resolveServerBookId(book);
 
-  const progressLocator = useMemo(() => {
-    const cached = serverBookId != null ? getProgressFromCache(serverBookId) : null;
-    return resolveProgressLocator(cached || progressInfo);
-  }, [serverBookId, progressInfo, progressCacheTick]);
-
-  const readPercent = useMemo(
-    () => resolveLibraryReadingProgressPercent(book),
-    [book, progressCacheTick]
-  );
+  const cachedProgress = serverBookId != null ? getProgressFromCache(serverBookId) : null;
+  const progressLocator = resolveProgressLocator(cachedProgress || progressInfo);
+  const readPercent = resolveLibraryReadingProgressPercent(book);
 
   const libraryRelativeUpdated = book?.updatedAt
     ? formatLibraryRelativeDate(book.updatedAt)
@@ -265,7 +268,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
     } catch (err) {
       const msg = err?.message ?? '';
       if (!msg.includes('404') && !msg.includes('찾을 수 없습니다')) {
-        console.error('Progress 정보를 불러오는데 실패했습니다:', err);
+        errorUtils.logError('BookDetailModal', err, { action: 'loadProgress' });
       }
       setProgressInfo(null);
     }
@@ -287,12 +290,12 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
       if (manifestData && manifestData.isSuccess && manifestData.result) {
         setBookDetails(mergeBookWithManifest(book, manifestData));
       } else {
-        console.warn('API 응답이 성공하지 않았습니다:', manifestData);
+        errorUtils.logWarning('BookDetailModal', 'manifest 응답 실패', { code: manifestData?.code, message: manifestData?.message });
         setBookDetails(book);
         setError('책의 상세 정보를 불러올 수 없습니다. 기본 정보만 표시됩니다.');
       }
     } catch (err) {
-      console.error('책 정보를 불러오는데 실패했습니다:', err);
+      errorUtils.logError('BookDetailModal', err, { action: 'loadManifest' });
       const errorMessage = err?.message || '책 정보를 불러오는데 실패했습니다.';
       setError(errorMessage);
       setBookDetails(book);
@@ -302,7 +305,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
   }, [book, serverBookId]);
 
   useEffect(() => {
-    if (isOpen && book) {
+    if (isOpen) {
       fetchBookDetails();
       fetchProgressInfo();
     }
@@ -320,7 +323,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
   }, [isOpen, serverBookId]);
 
   useEffect(() => {
-    if (isOpen && book) {
+    if (isOpen) {
       setShowMoreCharacters(false);
     }
   }, [isOpen, book?.id]);
@@ -411,7 +414,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
       if (context?.previousProgress) {
         setProgressInfo(context.previousProgress);
       }
-      console.error('독서 진도 삭제 실패:', err);
+      errorUtils.logError('BookDetailModal', err, { action: 'deleteProgress' });
       toast.error('독서 진도 삭제에 실패했습니다');
     },
   });
@@ -451,7 +454,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
         toast.error('삭제 기능을 사용할 수 없습니다');
       }
     } catch (err) {
-      console.error('책 삭제 실패:', err);
+      errorUtils.logError('BookDetailModal', err, { action: 'deleteBook' });
       toast.error('책 삭제에 실패했습니다');
     }
   }, [book, onDelete, onClose]);
@@ -845,4 +848,3 @@ BookDetailModal.propTypes = {
 BookDetailModal.displayName = 'BookDetailModal';
 
 export default BookDetailModal;
-

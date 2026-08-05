@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useId } from 'react';
+import { Check, Eye, Type, X } from 'lucide-react';
 import {
   defaultSettings,
   normalizeSettings,
@@ -125,22 +126,19 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, settings }) => {
             onClick={onClose}
             aria-label="설정 닫기"
           >
-            <span className="material-symbols-outlined" aria-hidden="true">
-              close
-            </span>
+            <X size={20} aria-hidden />
           </button>
         </div>
 
         <div className="viewer-settings-section">
           <h3 className="viewer-settings-section-title">
-            <span className="material-symbols-outlined" aria-hidden="true">
-              visibility
-            </span>
-            화면 모드
+            <Eye size={18} aria-hidden />
+            보기 방식
           </h3>
-          <div className="viewer-settings-mode-list" role="radiogroup" aria-label="화면 모드">
+          <div className="viewer-settings-mode-list" role="radiogroup" aria-label="보기 방식">
             {VIEWER_MODE_OPTIONS.map((opt) => {
               const sel = draft.showGraph === opt.showGraph;
+              const OptIcon = opt.Icon;
               return (
                 <button
                   key={String(opt.showGraph)}
@@ -150,14 +148,8 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, settings }) => {
                   className={`viewer-settings-mode-btn${sel ? ' is-selected' : ''}`}
                   onClick={() => handleChange('showGraph', opt.showGraph)}
                 >
-                  {sel && (
-                    <span className="material-symbols-outlined" aria-hidden="true">
-                      check
-                    </span>
-                  )}
-                  <span className="material-symbols-outlined" aria-hidden="true">
-                    {opt.icon}
-                  </span>
+                  {sel && <Check size={18} aria-hidden />}
+                  <OptIcon size={18} aria-hidden />
                   {opt.label}
                 </button>
               );
@@ -167,9 +159,7 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, settings }) => {
 
         <div className="viewer-settings-section">
           <h3 className="viewer-settings-section-title" id="viewer-settings-font-size">
-            <span className="material-symbols-outlined" aria-hidden="true">
-              format_size
-            </span>
+            <Type size={18} aria-hidden />
             글꼴 크기
           </h3>
           <div className="viewer-settings-step-row">

@@ -5,7 +5,7 @@ import {
   getChapterData,
   getLastManifestEventInChapter,
 } from '../common/cache/manifestCache';
-import { toNumberOrNull, toTrimmedStringOrNull, asArray } from '../common/valueUtils';
+import { toNumberOrNull, toTrimmedStringOrNull, asArray, errorUtils } from '../common/valueUtils';
 import {
   authenticatedRequest,
   SOFT_FAIL_403_404,
@@ -49,6 +49,7 @@ const handleApiError = (error, context) => {
   };
   const statusCode = error.status || 'unknown';
   const statusMessage = statusMessages[statusCode] || 'API 요청 중 오류가 발생했습니다';
+  errorUtils.logError('graphApi', error, { context, status: statusCode });
   throw new Error(
     `${context}: ${statusMessage} (${statusCode}) - ${error.message || '알 수 없는 오류'}`
   );

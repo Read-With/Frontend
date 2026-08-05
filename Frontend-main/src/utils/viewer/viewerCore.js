@@ -564,6 +564,13 @@ export function formatChapterOrderAndName(orderOneBased, chapterTitle) {
   return `${fallback} · ${name}`;
 }
 
+/** 단순 챕터 번호 라벨 (`Chapter 3` / `Chapter ?`) */
+export function formatChapterOrdinalLabel(chapter, { unknown = '?' } = {}) {
+  const n = Number(chapter);
+  if (Number.isFinite(n) && n >= 1) return `Chapter ${Math.trunc(n)}`;
+  return `Chapter ${unknown}`;
+}
+
 /** 책 제목 prefix만 제거 (뷰어 상단 등). 남는 글자 없으면 원문 유지 */
 export function stripRedundantBookTitlePrefix(chapterTitle, bookTitle) {
   const ch = collapseWhitespace(String(chapterTitle ?? '')).normalize('NFC');

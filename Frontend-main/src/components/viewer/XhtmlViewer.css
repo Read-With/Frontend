@@ -1,0 +1,65 @@
+/* XHTML 본문 뷰어 셸·상태 — 설정값(폰트/패딩)은 JSX 주입 스타일 유지 */
+
+.xhtml-viewer {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #ffffff;
+  touch-action: pan-y;
+}
+
+.xhtml-viewer:focus {
+  outline: none;
+}
+
+.xhtml-viewer:focus-visible {
+  outline: 0.125rem solid var(--brand-accent);
+  outline-offset: -0.125rem;
+}
+
+.xhtml-viewer-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: #4b5563;
+  font-size: 0.9375rem;
+  font-weight: 500;
+}
+
+.xhtml-viewer-status--error {
+  color: #dc2626;
+}
+
+.xhtml-viewer-suppress {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  color: #4b5563;
+  font-size: 0.9375rem;
+  font-weight: 500;
+}
+
+.xhtml-viewer-content {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+.xhtml-viewer-ruler {
+  position: absolute;
+  visibility: hidden;
+  pointer-events: none;
+  left: 0;
+  top: 0;
+  width: 100%;
+}

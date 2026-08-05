@@ -1,6 +1,16 @@
-/** Cytoscape 런타임: tap·선택·layout·instance·tooltip dismiss */
+/** Cytoscape 런타임: tap·선택·layout·instance·tooltip dismiss + 캔버스 a11y */
 
-import { useCallback, useMemo, useEffect, useRef } from 'react';
+import {
+  createElement,
+  Fragment,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import PropTypes from 'prop-types';
 import {
   applySelectionHighlight,
   buildTapShowArgs,
@@ -8,6 +18,8 @@ import {
   clearHighlightClassesOn,
   ensureElementsInBounds,
   fitGraphToNodes,
+  fitGraphViewportInContainer,
+  handleGraphCanvasHotkeys,
   isGraphDragEndEvent,
   isGraphContainerSizeReady,
   isSidebarElement,
@@ -17,8 +29,18 @@ import {
   runPresetLayout,
   runCoseBilkentLayout,
 } from '../../utils/graph/graphCy';
-import { detectAndResolveOverlap, OVERLAP_RESOLVE } from '../../utils/graph/graphModel';
-import { GRAPH_ZOOM } from '../../utils/graph/graphCore.js';
+import {
+  detectAndResolveOverlap,
+  hasOverlappingNodes,
+  collectNeighborhoodNodeIds,
+  OVERLAP_RESOLVE,
+  OVERLAP_PROFILES,
+} from '../../utils/graph/graphModel';
+import {
+  GRAPH_ZOOM,
+  GRAPH_CHARACTER_FILTER_STAGE_OPTIONS,
+} from '../../utils/graph/graphCore.js';
+import { errorUtils } from '../../utils/common/urlUtils';
 import { useLatestRef } from '../common/hooksShared';
 
 function toCyId(value) {
@@ -62,21 +84,17 @@ export function useGraphInteractions({
     if (selectedElementRef) selectedElementRef.current = null;
   }, [selectedElementRef]);
 
-  const resetAllStyles = useCallback(() => {
-    if (!cyRef?.current) return;
-    clearHighlightClassesOn(cyRef.current);
+  /** 하이라이트 + 선택 ref 해제 (툴팁·fit은 호출부 옵션) */
+  const clearHighlightAndSelection = useCallback(() => {
+    if (cyRef?.current) clearHighlightClassesOn(cyRef.current);
     onAfterResetRef.current?.();
-  }, [cyRef, onAfterResetRef]);
-
-  const clearHighlightAndSelectionRef = useCallback(() => {
-    resetAllStyles();
     clearSelectionRefs();
-  }, [resetAllStyles, clearSelectionRefs]);
+  }, [cyRef, onAfterResetRef, clearSelectionRefs]);
 
   const dismissSelection = useCallback(() => {
-    clearHighlightAndSelectionRef();
+    clearHighlightAndSelection();
     onClearTooltipRef.current?.();
-  }, [clearHighlightAndSelectionRef, onClearTooltipRef]);
+  }, [clearHighlightAndSelection, onClearTooltipRef]);
 
   const reapplySelectionHighlight = useCallback(() => {
     const cy = cyRef?.current;
@@ -92,7 +110,11 @@ export function useGraphInteractions({
     if (!cy) return false;
     try {
       applySelectionHighlight(cy, element);
-    } catch {
+    } catch (err) {
+      errorUtils.logDebug('useGraphCy', '선택 하이라이트 실패', {
+        message: err?.message,
+        kind,
+      });
       return false;
     }
     if (selectedElementRef) {
@@ -116,8 +138,11 @@ export function useGraphInteractions({
     if (!selectElement(kind, element)) return false;
     try {
       showElementTooltip(kind, element, evt);
-    } catch {
-      /* focus는 유지, 툴팁만 실패 */
+    } catch (err) {
+      errorUtils.logDebug('useGraphCy', '툴팁 표시 실패', {
+        message: err?.message,
+        kind,
+      });
     }
     return true;
   }, [selectElement, showElementTooltip]);
@@ -149,13 +174,13 @@ export function useGraphInteractions({
 
   /**
    * @param {{ fitViewport?: boolean }} [options]
-   * fitViewport 기본 true — 챕터/이벤트 전환 등에서는 false
+   * 사용자 배율 보존이 기본이며, 명시적으로 요청한 경우에만 viewport를 fit한다.
    */
   const clearSelection = useCallback((options = {}) => {
-    const fitViewport = options?.fitViewport !== false;
-    clearHighlightAndSelectionRef();
+    const fitViewport = options?.fitViewport === true;
+    clearHighlightAndSelection();
     if (fitViewport) fitGraphToNodes(cyRef?.current, { duration: GRAPH_ZOOM.FIT_DURATION_MS });
-  }, [cyRef, clearHighlightAndSelectionRef]);
+  }, [cyRef, clearHighlightAndSelection]);
 
   const selectNodeByIdOrName = useCallback((idOrName) => {
     const cy = cyRef?.current;
@@ -179,6 +204,15 @@ export function useGraphInteractions({
     return selectAndShowTooltip('node', element, null);
   }, [cyRef, selectAndShowTooltip]);
 
+  const selectElementById = useCallback((kind, id) => {
+    if (kind === 'node') return selectNodeByIdOrName(id);
+    const cy = cyRef?.current;
+    if (!cy || id == null || id === '') return false;
+    const element = cy.getElementById(toCyId(id));
+    if (!element?.length || !element.isEdge?.()) return false;
+    return selectAndShowTooltip('edge', element, null);
+  }, [cyRef, selectNodeByIdOrName, selectAndShowTooltip]);
+
   return {
     tapNodeHandler,
     tapEdgeHandler,
@@ -186,6 +220,7 @@ export function useGraphInteractions({
     clearSelection,
     reapplySelectionHighlight,
     selectNodeByIdOrName,
+    selectElementById,
   };
 }
 
@@ -205,9 +240,8 @@ export function useCyInstance(cyRef, isReady = true) {
 /**
  * elementsUpdateRef 소비 후 분기:
  * 1) hasChanges          → layout(incremental preset | cose) → styles → rAF(complete: bounds/overlap/fit/junction)
- * 2) pendingViewportFit  → 챕터·이벤트 전환 후 elements가 바뀌면 fit (추가 없는 교체·삭제만 포함)
- * 3) dataChanged only    → sizes refresh
- * 4) stylesheet|initial  → sizes refresh; initial이면 complete(fit+junction 포함)
+ * 2) dataChanged only    → sizes refresh
+ * 3) stylesheet|initial  → sizes refresh; initial이면 complete(fit+junction 포함)
  */
 export function useGraphLayout({
   cy,
@@ -220,8 +254,9 @@ export function useGraphLayout({
   isInitialLoad,
   setIsInitialLoad,
   containerRef,
-  pendingViewportFitRef = null,
-  elementsApplyGen = 0,
+  pendingInitialFitRef = null,
+  canApplyPendingViewportFit = null,
+  clearPendingViewportFitBlock = null,
 }) {
   const prevStylesheetRef = useRef(stylesheet);
 
@@ -234,22 +269,56 @@ export function useGraphLayout({
       } = options;
       if (!cyInstance) return;
 
-      if (!skipEnsureBounds && isGraphContainerSizeReady(containerRef.current)) {
-        ensureElementsInBounds(cyInstance, containerRef.current);
-      }
+      const runBounds = () => {
+        if (!skipEnsureBounds && isGraphContainerSizeReady(containerRef.current)) {
+          ensureElementsInBounds(cyInstance, containerRef.current);
+        }
+      };
+
+      runBounds();
       if (!skipOverlap) {
+        const profile = shouldFitOnInitialLoad
+          ? OVERLAP_PROFILES.INITIAL
+          : OVERLAP_PROFILES.INCREMENTAL;
         detectAndResolveOverlap(cyInstance, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE, {
           ...(movableIds ? { movableIds } : {}),
-          maxIterations: OVERLAP_RESOLVE.MAX_ITERATIONS,
-          padding: OVERLAP_RESOLVE.PADDING,
+          ...profile,
         });
+        // 밀어내기 후 화면 밖 노드 재제약 → 경계에서 생긴 겹침 경량 재해결
+        runBounds();
+        if (!skipEnsureBounds && isGraphContainerSizeReady(containerRef.current)) {
+          detectAndResolveOverlap(cyInstance, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE, {
+            ...(movableIds ? { movableIds } : {}),
+            ...OVERLAP_PROFILES.RESIZE,
+          });
+        }
+        // 최초 로딩: bounds/resize 후에도 본체 겹침이 남으면 제거
+        if (
+          shouldFitOnInitialLoad &&
+          hasOverlappingNodes(cyInstance, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE, {
+            ...OVERLAP_PROFILES.APPEAR,
+          })
+        ) {
+          detectAndResolveOverlap(cyInstance, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE, {
+            ...OVERLAP_PROFILES.APPEAR,
+          });
+          runBounds();
+        }
       }
       if (shouldFitOnInitialLoad) {
-        fitGraphToNodes(cyInstance, { duration: GRAPH_ZOOM.FIT_DURATION_MS });
+        // 컨테이너 미준비 시 pending 유지 → resize에서 재시도
+        if (pendingInitialFitRef) pendingInitialFitRef.current = true;
+        if (
+          (typeof canApplyPendingViewportFit !== 'function' || canApplyPendingViewportFit()) &&
+          fitGraphViewportInContainer(cyInstance, containerRef.current)
+        ) {
+          if (pendingInitialFitRef) pendingInitialFitRef.current = false;
+          clearPendingViewportFitBlock?.();
+        }
       }
       syncReciprocalPairJunctionOffsets(cyInstance);
     },
-    [containerRef],
+    [containerRef, pendingInitialFitRef, canApplyPendingViewportFit, clearPendingViewportFitBlock],
   );
 
   useEffect(() => {
@@ -262,6 +331,7 @@ export function useGraphLayout({
       hasChanges = false,
       dataChangedIds = [],
       incrementalLayoutScope = false,
+      needsLocalReorder = false,
     } = elementsUpdateRef.current || {};
 
     elementsUpdateRef.current = {
@@ -270,22 +340,19 @@ export function useGraphLayout({
       hasChanges: false,
       dataChangedIds: [],
       incrementalLayoutScope: false,
+      needsLocalReorder: false,
     };
 
     const stylesheetChanged = prevStylesheetRef.current !== stylesheet;
     prevStylesheetRef.current = stylesheet;
 
-    const pendingFit = pendingViewportFitRef?.current ?? null;
-    const pendingFitReady = Boolean(
-      pendingFit &&
-        pendingFit.applyGenWhenArmed !== undefined &&
-        pendingFit.applyGenWhenArmed !== elementsApplyGen,
-    );
-    const shouldFitViewport = Boolean(isInitialLoad || pendingFitReady);
-
-    const clearPendingFit = () => {
-      if (pendingViewportFitRef) pendingViewportFitRef.current = null;
-    };
+    const pendingFit = pendingInitialFitRef?.current === true;
+    const pendingFitAllowed =
+      !pendingFit ||
+      typeof canApplyPendingViewportFit !== 'function' ||
+      canApplyPendingViewportFit();
+    const shouldFitViewport =
+      Boolean(isInitialLoad) || (pendingFit && pendingFitAllowed);
 
     const edgesOnlyIncremental =
       hasChanges && nodesToAdd.length === 0 && edgesToAdd.length > 0;
@@ -302,8 +369,10 @@ export function useGraphLayout({
       } else if (lightUpdate) {
         try {
           cy.style().update();
-        } catch {
-          /* ignore */
+        } catch (err) {
+          errorUtils.logDebug('useGraphCy', 'style update 실패', {
+            message: err?.message,
+          });
         }
       }
       if (stylesheet && (forceSizes || stylesheetChanged)) {
@@ -312,7 +381,6 @@ export function useGraphLayout({
     };
 
     const finishInitialLoad = () => {
-      clearPendingFit();
       if (isInitialLoad) setIsInitialLoad(false);
     };
 
@@ -321,6 +389,60 @@ export function useGraphLayout({
         incrementalLayoutScope &&
         addedNodeIds.length > 0 &&
         !shouldFitViewport;
+
+      const resolveOverlapCascade = (seedIds, forceExpand = false) => {
+        const appearOpts = { ...OVERLAP_PROFILES.APPEAR };
+        const incrementalOpts = { ...OVERLAP_PROFILES.INCREMENTAL };
+
+        const stillAppearsOverlapping = (movableIds) =>
+          hasOverlappingNodes(cy, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE, {
+            movableIds,
+            ...appearOpts,
+          });
+
+        const resolveAppear = (movableIds) => {
+          detectAndResolveOverlap(cy, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE, {
+            ...appearOpts,
+            movableIds,
+          });
+          return stillAppearsOverlapping(movableIds);
+        };
+
+        const resolveIncremental = (movableIds) => {
+          detectAndResolveOverlap(cy, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE, {
+            ...incrementalOpts,
+            movableIds,
+          });
+          return hasOverlappingNodes(cy, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE, {
+            movableIds,
+            ...incrementalOpts,
+          });
+        };
+
+        // 1) 신규 등장 노드끼리: tolerance 0으로 본체 겹침 제거
+        if (seedIds.length >= 2) {
+          let remain = resolveAppear(seedIds);
+          for (let i = 0; remain && i < 2; i += 1) {
+            remain = resolveAppear(seedIds);
+          }
+        }
+
+        // 2) 기존과의 겹침: 신규만 → 필요 시 1·2-hop
+        if (!forceExpand && seedIds.length > 0 && !resolveIncremental(seedIds)) return;
+
+        const hop1 = [...collectNeighborhoodNodeIds(cy, seedIds, 1)];
+        if (!resolveIncremental(hop1)) return;
+
+        const hop2 = [...collectNeighborhoodNodeIds(cy, seedIds, 2)];
+        resolveIncremental(hop2);
+
+        // 신규끼리 잔여가 있으면 마지막으로 한 번 더 분리 (이웃 이동 후 재겹침 방지)
+        if (seedIds.length >= 2 && stillAppearsOverlapping(seedIds)) {
+          resolveAppear(seedIds);
+        }
+        // 중간 갱신에서는 사용자가 기억한 전체 배치를 보존한다.
+        // 잔여 경미 겹침 때문에 전체 그래프 또는 cose로 확대하지 않는다.
+      };
 
       if (edgesOnlyIncremental) {
         if (stylesheet) applyNodeSizes(cy);
@@ -337,27 +459,28 @@ export function useGraphLayout({
       }
 
       requestAnimationFrame(() => {
-        handleLayoutComplete(cy, shouldFitViewport, {
-          skipOverlap: edgesOnlyIncremental,
-          movableIds: useIncrementalPreset ? addedNodeIds : null,
-          skipEnsureBounds: !shouldFitViewport && (edgesOnlyIncremental || useIncrementalPreset),
-        });
-        finishInitialLoad();
-      });
-    } else if (pendingFitReady) {
-      refreshStyles({ forceSizes: true });
-      requestAnimationFrame(() => {
-        handleLayoutComplete(cy, true);
+        if (useIncrementalPreset) {
+          resolveOverlapCascade(addedNodeIds, needsLocalReorder);
+          handleLayoutComplete(cy, shouldFitViewport, {
+            skipOverlap: true,
+            skipEnsureBounds: !shouldFitViewport,
+          });
+        } else {
+          handleLayoutComplete(cy, shouldFitViewport, {
+            skipOverlap: edgesOnlyIncremental,
+            movableIds: null,
+            skipEnsureBounds: !shouldFitViewport && edgesOnlyIncremental,
+          });
+        }
         finishInitialLoad();
       });
     } else if (hasDataOnlyVisualChange) {
-      refreshStyles({ forceSizes: true });
-      // pending fit 대기 중이면 isInitialLoad/pending 유지
-      if (!pendingFit) finishInitialLoad();
+      // 이미지 blob resolve 등 data-only 변경: background-image 반영을 위해 style update
+      refreshStyles({ forceSizes: true, lightUpdate: true });
+      finishInitialLoad();
     } else if (stylesheetChanged || isInitialLoad) {
       refreshStyles({ forceSizes: true });
-      // 챕터 전환 직후(pending fit, elements 미갱신): fit·완료를 미룸
-      if (isInitialLoad && !pendingFit) {
+      if (isInitialLoad) {
         handleLayoutComplete(cy, true);
         finishInitialLoad();
       }
@@ -374,8 +497,9 @@ export function useGraphLayout({
     handleLayoutComplete,
     isInitialLoad,
     setIsInitialLoad,
-    pendingViewportFitRef,
-    elementsApplyGen,
+    elementsUpdateRef,
+    pendingInitialFitRef,
+    canApplyPendingViewportFit,
   ]);
 }
 
@@ -403,12 +527,12 @@ function shouldIgnoreOutsideClick(event, { ignoreSidebar = false, extraSelectors
   return shouldIgnoreCanvasOrDragEnd(event);
 }
 
-export function shouldIgnoreGraphPageOutsideClick(event) {
+/** @param {'page' | 'viewer'} surface */
+export function shouldIgnoreGraphOutsideClick(event, surface = 'page') {
+  if (surface === 'viewer') {
+    return shouldIgnoreOutsideClick(event, { extraSelectors: VIEWER_OUTSIDE_IGNORE_SELECTORS });
+  }
   return shouldIgnoreOutsideClick(event, { ignoreSidebar: true });
-}
-
-export function shouldIgnoreViewerOutsideClick(event) {
-  return shouldIgnoreOutsideClick(event, { extraSelectors: VIEWER_OUTSIDE_IGNORE_SELECTORS });
 }
 
 function useGraphOutsideDismiss({
@@ -454,6 +578,29 @@ function useGraphOutsideDismiss({
       }
     };
   }, [enabled, shouldIgnoreRef, onDismissRef, attachDelayMs, blockDragEndEvents]);
+}
+
+/** 상단바 오른쪽 도구 너비 → CSS 변수 (--graph-split-tools-reserve) */
+export function useGraphTopbarToolsReserve(topbarRef, toolsRef, enabled = true) {
+  useEffect(() => {
+    if (!enabled) return undefined;
+    const topbar = topbarRef?.current;
+    const tools = toolsRef?.current;
+    if (!topbar || !tools) return undefined;
+
+    const applyReserve = () => {
+      const width = Math.ceil(tools.getBoundingClientRect().width);
+      topbar.style.setProperty(
+        '--graph-split-tools-reserve',
+        `${Math.max(width, 1)}px`,
+      );
+    };
+
+    applyReserve();
+    const ro = new ResizeObserver(applyReserve);
+    ro.observe(tools);
+    return () => ro.disconnect();
+  }, [enabled, topbarRef, toolsRef]);
 }
 
 export function useGraphTooltipSelection({
@@ -507,3 +654,232 @@ export function useGraphTooltipSelection({
 
   return { onShowNodeTooltip, onShowEdgeTooltip };
 }
+
+export const GRAPH_CANVAS_ARIA_LABEL =
+  '관계 그래프. 화살표로 인물 이동, Enter로 상세, 선택 후 좌우로 관계, 더하기 빼기 영으로 확대 축소 맞춤, Escape로 해제';
+
+/**
+ * 그래프 캔버스 region 키보드·live 안내.
+ * selectElementRef.current(kind, id) → boolean
+ */
+export function useGraphCanvasKeyboard({
+  cyRef,
+  graphClearRef = null,
+  selectElementRef,
+  activeTooltip = null,
+  onClearTooltip = null,
+}) {
+  const keyboardFocusRef = useRef(null);
+  const [liveAnnouncement, setLiveAnnouncement] = useState('');
+
+  const clearGraphSelection = useCallback(() => {
+    if (typeof graphClearRef?.current === 'function') {
+      graphClearRef.current();
+      return;
+    }
+    onClearTooltip?.();
+  }, [graphClearRef, onClearTooltip]);
+
+  const onKeyDown = useCallback(
+    (event) => {
+      handleGraphCanvasHotkeys(event, {
+        cy: cyRef?.current,
+        onClearSelection: clearGraphSelection,
+        keyboardFocusRef,
+        onSelectById: (kind, id) => selectElementRef?.current?.(kind, id) ?? false,
+        onAnnounce: setLiveAnnouncement,
+        selectedKind: activeTooltip?.type || null,
+        selectedId: activeTooltip?.id ?? null,
+      });
+    },
+    [cyRef, clearGraphSelection, selectElementRef, activeTooltip],
+  );
+
+  return {
+    onKeyDown,
+    liveAnnouncement,
+    ariaLabel: GRAPH_CANVAS_ARIA_LABEL,
+  };
+}
+
+function countGraphElements(elements) {
+  let nodeCount = 0;
+  let edgeCount = 0;
+  if (!Array.isArray(elements)) return { nodeCount, edgeCount };
+
+  for (const el of elements) {
+    const group = el?.group;
+    const hasEdgeEnds = el?.data?.source != null && el?.data?.target != null;
+    if (group === 'edges' || (!group && hasEdgeEnds)) {
+      edgeCount += 1;
+    } else {
+      nodeCount += 1;
+    }
+  }
+  return { nodeCount, edgeCount };
+}
+
+function resolveFilterStageLabel(filterStage) {
+  return (
+    GRAPH_CHARACTER_FILTER_STAGE_OPTIONS.find((o) => o.value === filterStage)?.label
+    ?? '전체'
+  );
+}
+
+function describeGraphSelection(activeTooltip) {
+  if (!activeTooltip) return '';
+
+  if (activeTooltip.type === 'node') {
+    const name =
+      activeTooltip.common_name
+      || activeTooltip.name
+      || activeTooltip.label
+      || activeTooltip.data?.common_name
+      || activeTooltip.data?.name
+      || activeTooltip.data?.label
+      || '이름 없음';
+    return `인물 ${name} 상세가 열렸습니다.`;
+  }
+
+  if (activeTooltip.type === 'edge') {
+    const src =
+      activeTooltip.sourceEndpoint?.label
+      || activeTooltip.sourceEndpoint?.common_name
+      || '인물';
+    const tgt =
+      activeTooltip.targetEndpoint?.label
+      || activeTooltip.targetEndpoint?.common_name
+      || '인물';
+    return `${src}와 ${tgt}의 관계 상세가 열렸습니다.`;
+  }
+
+  return '';
+}
+
+function buildGraphA11ySummary({
+  chapterLabel,
+  eventNum,
+  nodeCount = 0,
+  edgeCount = 0,
+  filterLabel,
+  isSearchActive = false,
+  searchTerm = '',
+  selectionText = '',
+  isLoading = false,
+}) {
+  const parts = [];
+
+  if (isLoading) {
+    parts.push('그래프를 불러오는 중입니다.');
+  }
+
+  const chapter = chapterLabel || '챕터';
+  const eventLabel =
+    Number.isFinite(Number(eventNum)) && Number(eventNum) > 0
+      ? `이벤트 ${Number(eventNum)}`
+      : '이벤트 미확정';
+  parts.push(`${chapter}, ${eventLabel}.`);
+  parts.push(`인물 ${nodeCount}명, 관계 ${edgeCount}개.`);
+
+  if (filterLabel) {
+    parts.push(`표시 범위 ${filterLabel}.`);
+  }
+
+  const term = typeof searchTerm === 'string' ? searchTerm.trim() : '';
+  if (isSearchActive && term) {
+    parts.push(
+      nodeCount === 0
+        ? `"${term}" 검색 결과가 없습니다.`
+        : `"${term}" 검색이 적용되었습니다.`,
+    );
+  }
+
+  if (selectionText) {
+    parts.push(selectionText);
+  } else {
+    parts.push('화살표·Enter로 탐색. Escape로 해제.');
+  }
+
+  return parts.join(' ');
+}
+
+/**
+ * 그래프 캔버스용 스크린리더 요약 (시각적으로 숨김, aria-live)
+ * 부모 region에 aria-describedby={statusId} 연결
+ */
+export function GraphA11yStatus({
+  id: idProp = null,
+  chapterLabel,
+  eventNum,
+  elements = [],
+  filterStage = 0,
+  isSearchActive = false,
+  searchTerm = '',
+  activeTooltip = null,
+  isLoading = false,
+  liveAnnouncement = '',
+}) {
+  const generatedId = useId();
+  const statusId = idProp || generatedId;
+
+  const summary = useMemo(() => {
+    const { nodeCount, edgeCount } = countGraphElements(elements);
+    return buildGraphA11ySummary({
+      chapterLabel,
+      eventNum,
+      nodeCount,
+      edgeCount,
+      filterLabel: resolveFilterStageLabel(filterStage),
+      isSearchActive,
+      searchTerm,
+      selectionText: describeGraphSelection(activeTooltip),
+      isLoading,
+    });
+  }, [
+    chapterLabel,
+    eventNum,
+    elements,
+    filterStage,
+    isSearchActive,
+    searchTerm,
+    activeTooltip,
+    isLoading,
+  ]);
+
+  return createElement(
+    Fragment,
+    null,
+    createElement(
+      'p',
+      {
+        id: statusId,
+        className: 'sr-only',
+        'aria-live': 'polite',
+        'aria-atomic': 'true',
+      },
+      summary,
+    ),
+    createElement(
+      'p',
+      {
+        className: 'sr-only',
+        'aria-live': 'polite',
+        'aria-atomic': 'true',
+      },
+      liveAnnouncement,
+    ),
+  );
+}
+
+GraphA11yStatus.propTypes = {
+  id: PropTypes.string,
+  chapterLabel: PropTypes.string,
+  eventNum: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+  elements: PropTypes.array,
+  filterStage: PropTypes.number,
+  isSearchActive: PropTypes.bool,
+  searchTerm: PropTypes.string,
+  activeTooltip: PropTypes.object,
+  isLoading: PropTypes.bool,
+  liveAnnouncement: PropTypes.string,
+};

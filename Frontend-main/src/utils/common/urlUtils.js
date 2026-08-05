@@ -1,6 +1,6 @@
 /** 환경 URL·OAuth·공개 자산·에러 로깅·뷰어/그래프 경로 */
 
-import { clearAuthData } from '../security/authTokenStorage';
+import { AUTH_CLEARED_EVENT, clearAuthData } from '../security/authTokenStorage';
 import { createAndStoreGoogleOAuthState, secureLog } from '../security/oauthSecurity';
 import { trimTrailingSlash, toOneBasedChapterIndexOrNull } from './valueUtils';
 
@@ -19,9 +19,27 @@ const CDN_PUBLIC_HOST = (() => {
 })();
 
 const envString = (key) => {
-  const value = import.meta.env[key];
+  const value = import.meta.env?.[key];
   return typeof value === 'string' && value.trim() ? value.trim() : '';
 };
+
+const toUrlOrigin = (candidate) => {
+  if (!candidate) return null;
+  try {
+    return new URL(candidate).origin;
+  } catch {
+    return null;
+  }
+};
+
+const TRUSTED_PUBLIC_ASSET_ORIGINS = new Set([
+  DEFAULT_API_BASE_URL,
+  DEFAULT_CDN_BASE_URL,
+  DEFAULT_DEV_PROXY_TARGET,
+  envString('VITE_API_BASE_URL'),
+  envString('VITE_CDN_BASE_URL'),
+  envString('VITE_DEV_PROXY_TARGET'),
+].map(toUrlOrigin).filter(Boolean));
 
 export const getApiBaseUrl = () => {
   if (import.meta.env.DEV) {
@@ -184,7 +202,15 @@ export function isProtectedPublicAsset(url) {
   const s = String(url).trim();
   if (!s) return false;
   if (s.startsWith('/public/')) return true;
-  return /readwith\.cloud\/public\//i.test(s);
+
+  try {
+    const parsed = new URL(s.startsWith('//') ? `https:${s}` : s);
+    if (!parsed.pathname.startsWith('/public/')) return false;
+
+    return TRUSTED_PUBLIC_ASSET_ORIGINS.has(parsed.origin);
+  } catch {
+    return false;
+  }
 }
 
 function rewriteLegacyAssetUrl(url) {
@@ -537,6 +563,7 @@ export function userGraphPath(bookId) {
 const blobUrlCache = new Map();
 const inFlightRequests = new Map();
 const failedFetchUrls = new Map();
+let blobCacheGeneration = 0;
 /** 최종 실패 후 짧은 쿨다운만 (데이터는 존재한다고 가정 — 일시적 fetch 실패 대비) */
 const FAILED_FETCH_TTL_MS = 5_000;
 const ASSET_FETCH_MAX_ATTEMPTS = 3;
@@ -544,6 +571,19 @@ const ASSET_FETCH_RETRY_BASE_MS = 400;
 export const GRAPH_IMAGE_DEFERRED_RETRY_MS = 1_500;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+export function clearAuthenticatedAssetBlobCache() {
+  blobCacheGeneration += 1;
+  for (const blobUrl of blobUrlCache.values()) {
+    URL.revokeObjectURL(blobUrl);
+  }
+  blobUrlCache.clear();
+  failedFetchUrls.clear();
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener(AUTH_CLEARED_EVENT, clearAuthenticatedAssetBlobCache);
+}
 
 const isFailedRecently = (fetchUrl) => {
   const failedAt = failedFetchUrls.get(fetchUrl);
@@ -619,6 +659,7 @@ const fetchProtectedBlobUrl = async (sourceUrl, { force = false } = {}) => {
   }
 
   const request = (async () => {
+    const requestGeneration = blobCacheGeneration;
     try {
       const { authenticatedFetch } = await import('../api/authApi');
 
@@ -628,6 +669,10 @@ const fetchProtectedBlobUrl = async (sourceUrl, { force = false } = {}) => {
           if (res.ok) {
             const blob = await res.blob();
             const blobUrl = URL.createObjectURL(blob);
+            if (requestGeneration !== blobCacheGeneration) {
+              URL.revokeObjectURL(blobUrl);
+              return null;
+            }
             blobUrlCache.set(fetchUrl, blobUrl);
             clearFetchFailed(fetchUrl);
             return blobUrl;
@@ -709,84 +754,5 @@ export async function resolveGraphElementsProfileImages(elements, options = {}) 
   return Promise.all(elements.map((el) => resolveOneGraphProfileImage(el, { force })));
 }
 
-/* ─── 공통 에러 로깅·handleError 래퍼 (from errorUtils) ─── */
-
-const getErrorDetails = (error) => {
-  return {
-    message: error?.message || error?.toString() || '알 수 없는 오류',
-    status: error?.status || error?.statusCode || null,
-    code: error?.code || null,
-    stack: error?.stack || null,
-    name: error?.name || 'Error',
-  };
-};
-
-export const errorUtils = {
-  logError: (context, error, additionalData = {}) => {
-    const errorDetails = getErrorDetails(error);
-    console.error(`❌ [${context}] 에러 발생:`, {
-      ...errorDetails,
-      ...additionalData,
-      timestamp: new Date().toISOString(),
-    });
-  },
-
-  logWarning: (context, message, additionalData = {}) => {
-    console.warn(`⚠️ [${context}] 경고:`, {
-      message,
-      ...additionalData,
-      timestamp: new Date().toISOString(),
-    });
-  },
-
-  logInfo: (context, message, additionalData = {}) => {
-    if (import.meta.env.DEV) {
-      console.info(`ℹ️ [${context}] 정보:`, {
-        message,
-        ...additionalData,
-        timestamp: new Date().toISOString(),
-      });
-    }
-  },
-
-  handleError: (context, error, fallbackValue = null, additionalData = {}) => {
-    errorUtils.logError(context, error, additionalData);
-    return fallbackValue;
-  },
-
-  isNetworkError: (error) => {
-    return (
-      error?.message?.includes('Failed to fetch') ||
-      error?.message?.includes('NetworkError') ||
-      error?.name === 'TypeError' ||
-      error?.code === 'NETWORK_ERROR'
-    );
-  },
-
-  getUserFriendlyMessage: (error) => {
-    const status = error?.status || error?.statusCode;
-    const statusMessages = {
-      400: '잘못된 요청입니다',
-      401: '인증이 필요합니다. 다시 로그인해주세요',
-      403: '접근 권한이 없습니다',
-      404: '요청한 데이터를 찾을 수 없습니다',
-      500: '서버 오류가 발생했습니다',
-      502: '서버 연결 오류가 발생했습니다',
-      503: '서비스를 일시적으로 사용할 수 없습니다',
-    };
-
-    if (status && statusMessages[status]) {
-      return statusMessages[status];
-    }
-
-    if (errorUtils.isNetworkError(error)) {
-      return '네트워크 연결을 확인해주세요';
-    }
-
-    if (error?.message && !error.message.includes('Error:')) {
-      return error.message;
-    }
-
-    return '오류가 발생했습니다. 잠시 후 다시 시도해주세요';
-  },
-};
+/* ─── 공통 에러 로깅 (valueUtils — 순환 참조 방지) ─── */
+export { errorUtils } from './valueUtils';

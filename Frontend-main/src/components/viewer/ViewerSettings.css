@@ -2,12 +2,12 @@
 
 .viewer-settings-overlay {
   --vs-surface: #fff;
-  --vs-accent: #5c6f5c;
-  --vs-accent-dark: #4a5a4a;
-  --vs-accent-hover: #f0fdf4;
+  --vs-accent: var(--brand-accent);
+  --vs-accent-dark: var(--brand-accent-mid);
+  --vs-accent-hover: var(--brand-tint-soft);
   --vs-radius: 0.75rem;
   --vs-radius-sm: 0.5rem;
-  --vs-focus: rgba(92, 111, 92, 0.45);
+  --vs-focus: var(--brand-focus);
   --vs-overlay: rgba(0, 0, 0, 0.5);
   --vs-shadow: 0 0.25rem 1.25rem rgba(0, 0, 0, 0.15);
 
