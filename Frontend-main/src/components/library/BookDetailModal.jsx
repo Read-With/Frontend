@@ -5,6 +5,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { getBookManifest, getBookProgress, deleteBookProgress } from '../../utils/api/booksApi';
 import { resolveProgressLocator } from '../../utils/common/valueUtils';
 import { BOOKS_QUERY_KEY } from '../../hooks/books/bookHooks';
+import { useAsyncRequestGuard, useModalFocusTrap, useLatestRef } from '../../hooks/common/hooksShared';
 import { getProgressFromCache, PROGRESS_CACHE_UPDATED_EVENT,} from '../../utils/common/cache/progressCache';
 import {
   resolveLibraryReadingProgressPercent,
@@ -230,7 +231,9 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
   const [progressDeleteConfirm, setProgressDeleteConfirm] = useState(false);
   const [, setProgressCacheTick] = useState(0);
   const closeButtonRef = useRef(null);
-  const lastFocusRef = useRef(null);
+  const dialogRef = useRef(null);
+  const { nextRequestId: nextDetailsRequestId, isStale: isDetailsRequestStale } = useAsyncRequestGuard();
+  const { nextRequestId: nextProgressRequestId, isStale: isProgressRequestStale } = useAsyncRequestGuard();
 
   const characterLists = useMemo(
     () => dedupeAndSortCharacters(bookDetails?.characters),
@@ -254,21 +257,25 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
       return;
     }
 
+    const requestId = nextProgressRequestId();
+
     try {
       const response = await getBookProgress(serverBookId);
+      if (isProgressRequestStale(requestId)) return;
       if (response.isSuccess && response.result) {
         setProgressInfo(response.result);
       } else {
         setProgressInfo(null);
       }
     } catch (err) {
+      if (isProgressRequestStale(requestId)) return;
       const msg = err?.message ?? '';
       if (!msg.includes('404') && !msg.includes('찾을 수 없습니다')) {
         errorUtils.logError('BookDetailModal', err, { action: 'loadProgress' });
       }
       setProgressInfo(null);
     }
-  }, [serverBookId]);
+  }, [serverBookId, nextProgressRequestId, isProgressRequestStale]);
 
   const fetchBookDetails = useCallback(async () => {
     if (!serverBookId) {
@@ -276,13 +283,15 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
       return;
     }
 
+    const requestId = nextDetailsRequestId();
     setLoading(true);
     setError(null);
     setBookDetails(book);
 
     try {
       const manifestData = await getBookManifest(serverBookId);
-      
+      if (isDetailsRequestStale(requestId)) return;
+
       if (manifestData && manifestData.isSuccess && manifestData.result) {
         setBookDetails(mergeBookWithManifest(book, manifestData));
       } else {
@@ -291,14 +300,15 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
         setError('책의 상세 정보를 불러올 수 없습니다. 기본 정보만 표시됩니다.');
       }
     } catch (err) {
+      if (isDetailsRequestStale(requestId)) return;
       errorUtils.logError('BookDetailModal', err, { action: 'loadManifest' });
       const errorMessage = err?.message || '책 정보를 불러오는데 실패했습니다.';
       setError(errorMessage);
       setBookDetails(book);
     } finally {
-      setLoading(false);
+      if (!isDetailsRequestStale(requestId)) setLoading(false);
     }
-  }, [book, serverBookId]);
+  }, [book, serverBookId, nextDetailsRequestId, isDetailsRequestStale]);
 
   useEffect(() => {
     if (isOpen) {
@@ -344,26 +354,12 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
     }
   }, [bookDetails?.id, bookDetails?.chapters?.length]);
 
-  useEffect(() => {
-    if (!isOpen) {
-      return undefined;
-    }
-    lastFocusRef.current = document.activeElement;
-    const id = window.requestAnimationFrame(() => {
-      closeButtonRef.current?.focus();
-    });
-    return () => {
-      window.cancelAnimationFrame(id);
-      const prev = lastFocusRef.current;
-      if (prev instanceof HTMLElement && typeof prev.focus === 'function') {
-        try {
-          prev.focus();
-        } catch {
-          /* ignore */
-        }
-      }
-    };
-  }, [isOpen]);
+  // 중첩된 ConfirmDialog(삭제 확인)가 열려있는 동안은 Tab 트랩만 양보 — "이전 포커스" 캡처는
+  // isOpen 기준으로 유지해 중첩 다이얼로그가 열고 닫힐 때마다 포커스가 두 번 튀지 않게 함
+  useModalFocusTrap(isOpen, dialogRef, undefined, {
+    initialFocusRef: closeButtonRef,
+    suspended: bookDeleteConfirm || progressDeleteConfirm,
+  });
 
   const getBookIdentifier = useCallback(() => {
     const id = book?.id ?? resolveServerBookId(book);
@@ -454,22 +450,26 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
     setShowMoreCharacters((v) => !v);
   }, []);
 
+  const nestedConfirmStateRef = useLatestRef({ bookDeleteConfirm, progressDeleteConfirm });
+
   useEffect(() => {
     if (!isOpen) return undefined;
     return attachLibraryModalChrome({
       onEscape: () => {
-        if (bookDeleteConfirm) {
+        const { bookDeleteConfirm: isBookConfirm, progressDeleteConfirm: isProgressConfirm } =
+          nestedConfirmStateRef.current;
+        if (isBookConfirm) {
           setBookDeleteConfirm(false);
           return;
         }
-        if (progressDeleteConfirm) {
+        if (isProgressConfirm) {
           setProgressDeleteConfirm(false);
           return;
         }
         onClose();
       },
     });
-  }, [isOpen, onClose, bookDeleteConfirm, progressDeleteConfirm]);
+  }, [isOpen, onClose, nestedConfirmStateRef]);
 
   if (!isOpen) return null;
 
@@ -562,37 +562,14 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
           <span className="book-detail-reader-compact-placeholder">—</span>
         ) : null}
         {progressInfo && (
-          progressDeleteConfirm ? (
-            <span className="book-detail-reader-progress-confirm">
-              <span className="book-detail-reader-progress-confirm-text">
-                진도를 삭제할까요?
-              </span>
-              <button
-                type="button"
-                className="book-detail-reader-clear-progress"
-                onClick={() => setProgressDeleteConfirm(false)}
-              >
-                취소
-              </button>
-              <button
-                type="button"
-                className="book-detail-reader-clear-progress book-detail-reader-clear-progress--danger"
-                onClick={handleConfirmDeleteProgress}
-                aria-label="독서 진도 삭제 확인"
-              >
-                삭제
-              </button>
-            </span>
-          ) : (
-            <button
-              type="button"
-              className="book-detail-reader-clear-progress"
-              onClick={() => setProgressDeleteConfirm(true)}
-              aria-label="독서 진도 삭제"
-            >
-              진도 삭제
-            </button>
-          )
+          <button
+            type="button"
+            className="book-detail-reader-clear-progress"
+            onClick={() => setProgressDeleteConfirm(true)}
+            aria-label="독서 진도 삭제"
+          >
+            진도 삭제
+          </button>
         )}
       </div>
     </div>
@@ -624,12 +601,14 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
   return (
     <>
       <div
+        ref={dialogRef}
         className="book-detail-modal"
         onClick={onClose}
         role="dialog"
         aria-modal="true"
         aria-labelledby="book-detail-title"
         aria-describedby="book-detail-modal-desc"
+        tabIndex={-1}
       >
         <p id="book-detail-modal-desc" className="book-detail-modal-desc">
           책 표지와 제목, 독서 진도, 등장 인물과 목차를 확인할 수 있습니다.</p>
@@ -828,6 +807,16 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
         onConfirm={handleConfirmDeleteBook}
         title="책 삭제"
         message="서재에서 이 책을 삭제할까요? 이 작업은 되돌릴 수 없습니다."
+        confirmLabel="삭제"
+        manageChrome={false}
+      />
+
+      <ConfirmDialog
+        isOpen={progressDeleteConfirm}
+        onClose={() => setProgressDeleteConfirm(false)}
+        onConfirm={handleConfirmDeleteProgress}
+        title="진도 삭제"
+        message="독서 진도를 삭제할까요?"
         confirmLabel="삭제"
         manageChrome={false}
       />

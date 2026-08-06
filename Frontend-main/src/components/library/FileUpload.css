@@ -2,7 +2,7 @@
 
 .file-upload-content,
 .epub-dropzone {
-  --fu-page: #fefcf8;
+  --fu-page: var(--brand-page);
   --fu-surface: #fff;
   --fu-surface-disabled: #f3f4f0;
   --fu-muted: #9aa396;
@@ -17,7 +17,7 @@
   --fu-dash: var(--brand-olive);
   --fu-radius: 0.75rem;
   --fu-radius-lg: 1.25rem;
-  --fu-border: 0.0625rem solid rgba(0, 0, 0, 0.06);
+  --fu-border: var(--brand-border-hairline);
   --fu-focus: var(--brand-focus);
   --fu-gradient-icon: linear-gradient(135deg, var(--fu-accent), var(--fu-accent-light));
 }
@@ -71,8 +71,8 @@
 .epub-dropzone:hover,
 .epub-dropzone.is-active {
   border-color: var(--fu-text);
-  background: rgba(62, 79, 47, 0.04);
-  box-shadow: 0 0.5rem 1.5rem rgba(62, 79, 47, 0.1);
+  background: var(--brand-alpha-04);
+  box-shadow: 0 0.5rem 1.5rem var(--brand-alpha-10);
 }
 
 .epub-dropzone:focus-visible {

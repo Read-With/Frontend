@@ -83,10 +83,12 @@
   color: var(--rg-brand);
 }
 
-.tooltip-close-btn--offset {
-  top: 1.125rem !important;
-  right: 1.125rem !important;
-  font-size: 1.375rem !important;
+.graph-node-tooltip .tooltip-close-btn.tooltip-close-btn--offset,
+.edge-tooltip-container .tooltip-close-btn.tooltip-close-btn--offset,
+.graph-sidebar-panel .tooltip-close-btn.tooltip-close-btn--offset {
+  top: 1.125rem;
+  right: 1.125rem;
+  font-size: 1.375rem;
 }
 
 /* ============================================================
@@ -234,7 +236,7 @@
 }
 
 .edge-tooltip-tab:hover {
-  color: #4b5563;
+  color: var(--rg-text-slate);
 }
 
 .edge-tooltip-tab.active {
@@ -344,30 +346,30 @@
   border-radius: var(--rg-radius-sm);
   font-size: 0.75rem;
   font-weight: 500;
-  background: #eef1f6;
-  color: #42506b;
+  background: var(--rg-tag-surface);
+  color: var(--rg-tag-text);
   display: inline-block;
   line-height: 1.2;
   border: 1px solid transparent;
-  --tag-color: #6b7c93;
+  --tag-color: var(--rg-tag-accent-default);
 }
 
 .relation-tag--prior {
-  background: color-mix(in srgb, var(--tag-color) 14%, #eef1f6);
-  color: #5b6578;
-  border-color: color-mix(in srgb, var(--tag-color) 32%, #d5dae3);
+  background: color-mix(in srgb, var(--tag-color) 14%, var(--rg-tag-surface));
+  color: var(--rg-tag-text-prior);
+  border-color: color-mix(in srgb, var(--tag-color) 32%, var(--rg-tag-border-prior));
 }
 
 .relation-tag--added {
   background: color-mix(in srgb, var(--tag-color) 22%, white);
-  color: color-mix(in srgb, var(--tag-color) 72%, #111827);
+  color: color-mix(in srgb, var(--tag-color) 72%, var(--rg-text-near-black));
   border-color: var(--tag-color);
   font-weight: 600;
 }
 
 .relation-tag--changed {
   background: color-mix(in srgb, var(--tag-color) 34%, white);
-  color: color-mix(in srgb, var(--tag-color) 78%, #111827);
+  color: color-mix(in srgb, var(--tag-color) 78%, var(--rg-text-near-black));
   border-color: var(--tag-color);
   box-shadow: inset 3px 0 0 var(--tag-color);
   font-weight: 600;
@@ -378,7 +380,7 @@
   margin: 0;
   font-size: 0.8125rem;
   line-height: 1.6;
-  color: #4b5563;
+  color: var(--rg-text-slate);
   white-space: pre-wrap;
 }
 
@@ -452,7 +454,7 @@
 }
 
 .quote-box {
-  background-color: #f5f5f5;
+  background-color: var(--rg-surface-quote);
   border-left-width: 0.25rem;
   border-left-style: solid;
   padding: 0.625rem 0.75rem;
@@ -507,7 +509,7 @@
   width: 3rem;
   height: 3rem;
   border-radius: 50%;
-  background: #e6e8f0;
+  background: var(--rg-surface-avatar-placeholder);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -524,7 +526,7 @@
   height: 100%;
   margin: 0;
   border-radius: 50%;
-  background: #f4f4f4;
+  background: var(--rg-surface-avatar-img);
   overflow: hidden;
 }
 

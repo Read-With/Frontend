@@ -54,12 +54,12 @@ const emptyGraphBannerStyle = {
   top: '50%',
   left: '50%',
   transform: 'translate(-50%, -50%)',
-  zIndex: 10003,
-  background: 'rgba(255,255,255,0.96)',
+  zIndex: GRAPH_LAYOUT_CONSTANTS.Z_INDEX_TOOLTIP,
+  background: COLORS.surfaceGlass,
   border: `1px solid ${COLORS.border}`,
   borderRadius: 10,
   padding: '8px 12px',
-  color: '#374151',
+  color: COLORS.textGray,
   fontSize: 12,
   fontWeight: 600,
 };
@@ -363,6 +363,50 @@ function RelationGraphWrapper() {
     [edgeLabelVisible],
   );
 
+  const sidebarControlProp = useMemo(() => ({
+    isSidebarClosing,
+    onCloseSidebar: closeSidebar,
+    onStartClosing: startClosing,
+    onClearGraph: clearGraphSelection,
+  }), [isSidebarClosing, closeSidebar, startClosing, clearGraphSelection]);
+
+  const searchStateProp = useMemo(() => ({
+    isSearchActive: searchState.isSearchActive,
+    filteredElements: searchState.filteredElements,
+    searchTerm: searchState.searchTerm,
+    fitNodeIds: searchState.fitNodeIds,
+  }), [searchState]);
+
+  const floatingControlsProp = useMemo(() => ({
+    searchState,
+    searchActions: floatingSearchActions,
+    edgeLabelVisible,
+    onToggleEdgeLabel: toggleEdgeLabel,
+    filterStage,
+    onFilterChange: setFilterStage,
+  }), [searchState, floatingSearchActions, edgeLabelVisible, toggleEdgeLabel, filterStage, setFilterStage]);
+
+  const cytoscapeConfigProp = useMemo(() => ({ stylesheet }), [stylesheet]);
+
+  const tooltipHandlersProp = useMemo(() => ({
+    onShowNodeTooltip,
+    onShowEdgeTooltip,
+    onClearTooltip,
+    selectedElementRef,
+  }), [onShowNodeTooltip, onShowEdgeTooltip, onClearTooltip, selectedElementRef]);
+
+  const pageChromeStartProp = useMemo(() => (
+    <button
+      type="button"
+      className="graph-page-back"
+      onClick={handleBackToViewer}
+      aria-label="뷰어로 돌아가기"
+    >
+      <ArrowLeft size={16} aria-hidden />
+      돌아가기
+    </button>
+  ), [handleBackToViewer]);
+
   const handleChapterSelect = useCallback((chapter) => {
     if (chapter === currentChapter) return;
 
@@ -509,44 +553,12 @@ function RelationGraphWrapper() {
         currentChapter={currentChapter}
         chapterDisplayLabel={chapterMeta.chapterDisplayLabel}
         chapterTitleTooltip={chapterMeta.chapterTitleTooltip}
-        sidebarControl={{
-          isSidebarClosing,
-          onCloseSidebar: closeSidebar,
-          onStartClosing: startClosing,
-          onClearGraph: clearGraphSelection,
-        }}
-        searchState={{
-          isSearchActive: searchState.isSearchActive,
-          filteredElements: searchState.filteredElements,
-          searchTerm: searchState.searchTerm,
-          fitNodeIds: searchState.fitNodeIds,
-        }}
-        pageChromeStart={(
-          <button
-            type="button"
-            className="graph-page-back"
-            onClick={handleBackToViewer}
-            aria-label="뷰어로 돌아가기"
-          >
-            <ArrowLeft size={16} aria-hidden />
-            돌아가기
-          </button>
-        )}
-        floatingControls={{
-          searchState,
-          searchActions: floatingSearchActions,
-          edgeLabelVisible,
-          onToggleEdgeLabel: toggleEdgeLabel,
-          filterStage,
-          onFilterChange: setFilterStage,
-        }}
-        cytoscapeConfig={{ stylesheet }}
-        tooltipHandlers={{
-          onShowNodeTooltip,
-          onShowEdgeTooltip,
-          onClearTooltip,
-          selectedElementRef,
-        }}
+        sidebarControl={sidebarControlProp}
+        searchState={searchStateProp}
+        pageChromeStart={pageChromeStartProp}
+        floatingControls={floatingControlsProp}
+        cytoscapeConfig={cytoscapeConfigProp}
+        tooltipHandlers={tooltipHandlersProp}
         graphClearRef={graphClearRef}
         graphSelectNodeRef={graphSelectNodeRef}
         onSelectRelatedNode={handleSelectRelatedNode}

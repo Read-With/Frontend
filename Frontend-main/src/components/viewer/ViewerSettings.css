@@ -8,7 +8,7 @@
   --vs-radius: 0.75rem;
   --vs-radius-sm: 0.5rem;
   --vs-focus: var(--brand-focus);
-  --vs-overlay: rgba(0, 0, 0, 0.5);
+  --vs-overlay: var(--brand-overlay);
   --vs-shadow: 0 0.25rem 1.25rem rgba(0, 0, 0, 0.15);
 
   position: fixed;

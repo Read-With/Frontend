@@ -1,12 +1,12 @@
 /* BookLibrary — 서재 카드·삭제 확인 (BookDetailModal 톤과 맞춤) */
 
 .book-card {
-  --bl-page: #fefcf8;
+  --bl-page: var(--brand-page);
   --bl-page-top: #f4f6f3;
   --bl-surface: #fff;
   --bl-surface-muted: #f8f9fb;
   --bl-surface-muted-hover: #e8ebef;
-  --bl-border: 0.0625rem solid rgba(0, 0, 0, 0.06);
+  --bl-border: var(--brand-border-hairline);
   --bl-border-soft: #f0f4fa;
   --bl-accent: var(--brand-accent);
   --bl-accent-light: var(--brand-accent-light);
@@ -23,8 +23,8 @@
   --bl-track: #e8ebe6;
   --bl-track-end: #d8ddd6;
   --bl-favorite: #ff6b6b;
-  --bl-danger: #dc2626;
-  --bl-danger-dark: #991b1b;
+  --bl-danger: var(--brand-danger);
+  --bl-danger-dark: var(--brand-danger-dark);
   --bl-danger-bg: #fee2e2;
   --bl-radius: 1rem;
   --bl-radius-md: 0.625rem;
@@ -36,7 +36,7 @@
   --bl-gradient-primary: linear-gradient(135deg, var(--bl-accent), var(--bl-accent-light));
   --bl-gradient-primary-hover: linear-gradient(135deg, var(--bl-accent-deep), var(--bl-accent-mid));
   --bl-focus: var(--brand-focus);
-  --bl-focus-danger: rgba(220, 38, 38, 0.45);
+  --bl-focus-danger: var(--brand-danger-focus);
 }
 
 /* ==================== 카드 ==================== */

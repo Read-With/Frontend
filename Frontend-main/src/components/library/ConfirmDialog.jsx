@@ -1,7 +1,8 @@
-import { useEffect, useId } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import PropTypes from 'prop-types';
 import { X } from 'lucide-react';
 import { attachLibraryModalChrome } from '../../utils/library/libraryUtils';
+import { useModalFocusTrap } from '../../hooks/common/hooksShared';
 import './ConfirmDialog.css';
 
 /** 서재 카드 컨텍스트 메뉴, 책 상세 모달 등에서 공용으로 쓰는 삭제/확인 다이얼로그 */
@@ -16,11 +17,16 @@ const ConfirmDialog = ({
   manageChrome = true,
 }) => {
   const titleId = useId();
+  const dialogRef = useRef(null);
+  const cancelBtnRef = useRef(null);
 
   useEffect(() => {
     if (!isOpen || !manageChrome) return undefined;
     return attachLibraryModalChrome({ onClose });
   }, [isOpen, manageChrome, onClose]);
+
+  // Escape는 manageChrome일 때 attachLibraryModalChrome이, 아닐 때는 상위 모달(예: BookDetailModal)이 처리 — 여기선 포커스 관리만 담당
+  useModalFocusTrap(isOpen, dialogRef, undefined, { initialFocusRef: cancelBtnRef });
 
   if (!isOpen) return null;
 
@@ -28,11 +34,16 @@ const ConfirmDialog = ({
     <div
       className="delete-confirm-modal-overlay"
       onClick={onClose}
-      role="dialog"
+      role="alertdialog"
       aria-modal="true"
       aria-labelledby={titleId}
     >
-      <div className="delete-confirm-modal" onClick={(e) => e.stopPropagation()}>
+      <div
+        ref={dialogRef}
+        className="delete-confirm-modal"
+        tabIndex={-1}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="delete-confirm-header">
           <h3 id={titleId}>{title}</h3>
           <button
@@ -49,6 +60,7 @@ const ConfirmDialog = ({
         </div>
         <div className="delete-confirm-actions">
           <button
+            ref={cancelBtnRef}
             className="delete-confirm-cancel"
             onClick={onClose}
             type="button"
@@ -59,7 +71,6 @@ const ConfirmDialog = ({
             className="delete-confirm-delete"
             onClick={onConfirm}
             type="button"
-            autoFocus
           >
             {confirmLabel}
           </button>

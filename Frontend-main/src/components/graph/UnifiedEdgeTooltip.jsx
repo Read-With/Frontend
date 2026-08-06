@@ -4,7 +4,7 @@ import {ResponsiveContainer, LineChart, CartesianGrid, ReferenceLine, Tooltip as
 import { useParams } from "react-router-dom";
 import { useTooltipPosition, useClickOutside, useCanvasAvoidPoint } from "../../hooks/ui/tooltipHooks";
 import { useRelationData } from "../../hooks/graph/useApiGraphData";
-import { getPositivityDisplay, clearStyleCache, clampPositivity, getRelationColor } from "../../utils/styles/graphStyles";
+import { getPositivityDisplay, clampPositivity, getRelationColor } from "../../utils/styles/graphStyles";
 import { COLORS, ANIMATION_VALUES, mergeRefs } from "../../utils/styles/styles";
 import { toFiniteNumber, toPositiveNumberOrNull } from "../../utils/common/valueUtils";
 import { buildRelationTagDisplayItems } from "../../utils/graph/graphCore";
@@ -149,12 +149,6 @@ function UnifiedEdgeTooltip({
     relationTagItems.length > 0 ||
     edgePositivity != null ||
     (typeof data?.explanation === 'string' && data.explanation.trim().length > 0);
-
-  useEffect(() => {
-    return () => {
-      clearStyleCache();
-    };
-  }, []);
 
   const effectiveEventColumns = useMemo(() => {
     if (!isViewer) return Number.POSITIVE_INFINITY;
@@ -638,6 +632,7 @@ export default memo(UnifiedEdgeTooltip, (prevProps, nextProps) => {
     prevProps.variant === nextProps.variant &&
     prevProps.bookId === nextProps.bookId &&
     prevProps.sourceEndpoint === nextProps.sourceEndpoint &&
-    prevProps.targetEndpoint === nextProps.targetEndpoint
+    prevProps.targetEndpoint === nextProps.targetEndpoint &&
+    prevProps.tooltipBoundsRef === nextProps.tooltipBoundsRef
   );
 });

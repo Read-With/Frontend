@@ -350,8 +350,11 @@ function RelationAnalysisModalImpl({
   }, [radarChartData]);
 
   const activeIndex = radarChartData.findIndex((item) => item.name === activeName);
-  switchTargetsRef.current = radarChartData;
-  activeNameRef.current = activeName;
+
+  useEffect(() => {
+    switchTargetsRef.current = radarChartData;
+    activeNameRef.current = activeName;
+  }, [radarChartData, activeName]);
 
   useEffect(() => {
     setActiveName(radarChartData[0]?.name ?? null);

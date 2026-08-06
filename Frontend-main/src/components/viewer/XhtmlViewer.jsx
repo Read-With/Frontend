@@ -8,7 +8,6 @@ import {
   useCallback,
   useMemo,
 } from 'react';
-import { flushSync } from 'react-dom';
 import PropTypes from 'prop-types';
 import { errorUtils } from '../../utils/common/urlUtils';
 import {
@@ -114,7 +113,10 @@ const XhtmlViewer = forwardRef(
       : currentPageIndex;
     const currentPage = safePageIndex + 1;
 
-    const currentSnap = getSnappedOffsetAndHeight(safePageIndex, pageHeight || 1);
+    const currentSnap = useMemo(
+      () => getSnappedOffsetAndHeight(safePageIndex, pageHeight || 1),
+      [getSnappedOffsetAndHeight, safePageIndex, pageHeight, lineBoundsVersion]
+    );
 
     const contentHtml = useMemo(() => (xhtmlContent ? { __html: xhtmlContent.bodyHTML } : { __html: '' }), [xhtmlContent]);
     const viewportStyle = useMemo(
@@ -319,12 +321,10 @@ const XhtmlViewer = forwardRef(
 
     const goPageByDelta = useCallback((delta) => {
       if (!delta) return;
-      flushSync(() => {
-        setCurrentPageIndex((i) => {
-          const next = i + delta;
-          if (next < 0 || next >= totalPages) return i;
-          return next;
-        });
+      setCurrentPageIndex((i) => {
+        const next = i + delta;
+        if (next < 0 || next >= totalPages) return i;
+        return next;
       });
     }, [totalPages]);
 
@@ -508,7 +508,9 @@ const XhtmlViewer = forwardRef(
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
       >
-        {styleCss ? <style>{styleCss}</style> : null}
+        {styleCss ? (
+          <style>{`@scope (.xhtml-viewer-content) {\n${styleCss}\n}`}</style>
+        ) : null}
         <style>{`
           .xhtml-viewer-content {
             padding: ${contentPadding.padding}px;

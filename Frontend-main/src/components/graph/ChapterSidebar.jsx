@@ -63,6 +63,14 @@ export default function ChapterSidebar({
     [isNarrow, onChapterSelect, onCloseSidebar]
   );
 
+  const onListFocus = useCallback(() => {
+    setFocusIndex((i) => {
+      if (i >= 0) return i;
+      const selectedIdx = chapterItems.findIndex((it) => it.chapter === currentChapter);
+      return selectedIdx >= 0 ? selectedIdx : 0;
+    });
+  }, [chapterItems, currentChapter]);
+
   const onListKeyDown = useCallback(
     (event) => {
       if (!chapterItems.length) return;
@@ -176,6 +184,12 @@ export default function ChapterSidebar({
           aria-label="챕터 목록"
           tabIndex={0}
           onKeyDown={onListKeyDown}
+          onFocus={onListFocus}
+          aria-activedescendant={
+            focusIndex >= 0 && chapterItems[focusIndex]
+              ? `chapter-sidebar-option-${chapterItems[focusIndex].chapter}`
+              : undefined
+          }
         >
           {chapterItems.map((item, index) => {
             const selected = item.chapter === currentChapter;
@@ -191,10 +205,12 @@ export default function ChapterSidebar({
             return (
               <button
                 key={item.chapter}
+                id={`chapter-sidebar-option-${item.chapter}`}
                 type="button"
                 role="option"
                 data-focus-index={index}
                 ref={selected ? selectedRef : undefined}
+                tabIndex={-1}
                 className={joinClasses(
                   'graph-chapter-rail-item',
                   selected ? 'is-selected' : '',

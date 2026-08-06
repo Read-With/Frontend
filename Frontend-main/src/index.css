@@ -45,6 +45,18 @@
   --brand-focus: var(--brand-alpha-45);
   --brand-focus-ring: var(--brand-alpha-28);
 
+  --brand-danger: #dc2626;
+  --brand-danger-rgb: 220, 38, 38;
+  --brand-danger-focus: rgba(var(--brand-danger-rgb), 0.45);
+  --brand-danger-dark: #991b1b;
+  --brand-danger-bg: #fef2f2;
+
+  --brand-overlay-rgb: 26, 32, 26;
+  --brand-overlay: rgba(var(--brand-overlay-rgb), 0.45);
+
+  --brand-page: #fefcf8;
+  --brand-border-hairline: 0.0625rem solid rgba(0, 0, 0, 0.06);
+
   --toast-z: 10050;
   --toast-width: min(26.25rem, calc(100vw - 2rem));
   --toast-radius: 0.75rem;

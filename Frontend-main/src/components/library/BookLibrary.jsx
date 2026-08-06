@@ -1,16 +1,19 @@
-import { useState, useEffect, useCallback, memo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react';
 import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'react-toastify';
 import { Heart, BookOpen, Network, MoreVertical, Info, Clock, Trash2 } from 'lucide-react';
 import BookDetailModal, { AuthenticatedImage } from './BookDetailModal';
 import ConfirmDialog from './ConfirmDialog';
 import './BookLibrary.css';
 import { USER_VIEWER_PREFIX, USER_GRAPH_PREFIX, errorUtils } from '../../utils/common/urlUtils';
+import { resolveServerBookId } from '../../utils/viewer/viewerCore';
 import {
   formatLibraryRelativeDate,
   makeOpeningTargetKey,
   getOpeningMode,
 } from '../../utils/library/libraryUtils';
+import { useMountedRef, useLatestRef } from '../../hooks/common/hooksShared';
 
 const COVER_PLACEHOLDER_SVG = (
   <svg width="100%" height="100%" viewBox="0 0 120 180" fill="none">
@@ -21,13 +24,16 @@ const COVER_PLACEHOLDER_SVG = (
   </svg>
 );
 
-const getNumericBookId = (book) => {
-  const bookId = Number(book?.id);
-  return Number.isFinite(bookId) && bookId > 0 ? bookId : null;
-};
+const BOOK_DISPLAY_COMPARE_KEYS = ['id', 'title', 'author', 'coverImgUrl', 'isFavorite', 'progress', 'updatedAt'];
+
+function isSameBookContent(a, b) {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return BOOK_DISPLAY_COMPARE_KEYS.every((key) => a[key] === b[key]);
+}
 
 async function prewarmGraphBookCache(book, options = {}) {
-  const bookId = getNumericBookId(book);
+  const bookId = resolveServerBookId(book);
   if (!bookId) return null;
 
   try {
@@ -91,8 +97,10 @@ const BookCard = memo(({ book, onToggleFavorite, onOpenBook, onBookDetailClick, 
     setOptimisticFavorite(next);
     try {
       await onToggleFavorite(book.id, next);
-    } catch {
+    } catch (error) {
       setOptimisticFavorite(null);
+      errorUtils.logError('BookLibrary', error, { action: 'toggleFavorite', bookId: book.id });
+      toast.error('즐겨찾기 변경에 실패했습니다');
     }
   };
 
@@ -106,6 +114,26 @@ const BookCard = memo(({ book, onToggleFavorite, onOpenBook, onBookDetailClick, 
       onBookDetailClick(book);
     }
   };
+
+  const contextMenuRef = useRef(null);
+
+  useEffect(() => {
+    if (!showContextMenu) return undefined;
+    const handlePointerDown = (e) => {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target)) {
+        setShowContextMenu(false);
+      }
+    };
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') setShowContextMenu(false);
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showContextMenu]);
 
   const handleContextMenu = (e) => {
     e.stopPropagation();
@@ -162,8 +190,8 @@ const BookCard = memo(({ book, onToggleFavorite, onOpenBook, onBookDetailClick, 
       >
         <Heart
           size={20}
-          fill={displayFavorite ? '#ff6b6b' : 'none'}
-          stroke={displayFavorite ? '#ff6b6b' : '#999'}
+          fill={displayFavorite ? 'var(--bl-favorite)' : 'none'}
+          stroke={displayFavorite ? 'var(--bl-favorite)' : 'var(--bl-text-faint)'}
           strokeWidth={2}
           aria-hidden
         />
@@ -239,7 +267,7 @@ const BookCard = memo(({ book, onToggleFavorite, onOpenBook, onBookDetailClick, 
         </button>
       </div>
 
-      <div className="book-context-menu">
+      <div className="book-context-menu" ref={contextMenuRef}>
         <button
           type="button"
           className="book-context-trigger"
@@ -308,21 +336,31 @@ const BookLibrary = memo(({ books, onToggleFavorite, onBookDelete, viewMode = 'g
   const [deleteTargetBook, setDeleteTargetBook] = useState(null);
   const [openingTarget, setOpeningTarget] = useState(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const mountedRef = useMountedRef();
+  const openingTargetRef = useLatestRef(openingTarget);
 
   useEffect(() => {
     if (!selectedBook?.id) return;
     const next = books.find((b) => String(b.id) === String(selectedBook.id));
-    if (next && next !== selectedBook) {
+    if (next && !isSameBookContent(next, selectedBook)) {
       setSelectedBook(next);
     }
   }, [books, selectedBook]);
+
+  const numericBookIdsKey = useMemo(() => {
+    if (!Array.isArray(books)) return '';
+    return books
+      .map((book) => resolveServerBookId(book))
+      .filter((id) => Number.isFinite(id))
+      .join(',');
+  }, [books]);
 
   useEffect(() => {
     if (!Array.isArray(books) || books.length === 0) {
       return undefined;
     }
 
-    const numericBooks = books.filter((book) => Number.isFinite(Number(book?.id)));
+    const numericBooks = books.filter((book) => Number.isFinite(resolveServerBookId(book)));
     if (numericBooks.length === 0) {
       return undefined;
     }
@@ -350,22 +388,25 @@ const BookLibrary = memo(({ books, onToggleFavorite, onBookDelete, viewMode = 'g
     return () => {
       abortController.abort();
     };
-  }, [books]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [numericBookIdsKey]);
 
   const handleOpenBook = useCallback(
     async (book, graphMode) => {
-      const bookId = getNumericBookId(book);
+      const bookId = resolveServerBookId(book);
       const targetKey = makeOpeningTargetKey(bookId, graphMode);
-      if (targetKey && openingTarget === targetKey) return;
+      if (targetKey && openingTargetRef.current === targetKey) return;
 
       setOpeningTarget(targetKey);
       try {
         await openBookFromLibrary(navigate, book, graphMode);
       } finally {
-        setOpeningTarget(null);
+        if (mountedRef.current) {
+          setOpeningTarget((current) => (current === targetKey ? null : current));
+        }
       }
     },
-    [navigate, openingTarget]
+    [navigate, openingTargetRef, mountedRef]
   );
 
   const handleBookDetailClick = useCallback((book) => {

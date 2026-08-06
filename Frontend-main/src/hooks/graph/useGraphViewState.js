@@ -9,25 +9,9 @@ import {
 } from '../../utils/graph/graphCy.js';
 import { filterMainCharacters } from '../../utils/graph/graphModel';
 import { sortElementsByDataId } from '../../utils/graph/graphCore';
-import { useLatestRef } from '../common/hooksShared';
+import { useLatestRef, useIsNarrowViewport } from '../common/hooksShared';
 
-const NARROW_VIEWPORT_MQ = '(max-width: 767px)';
-
-export function useIsNarrowViewport() {
-  const [isNarrow, setIsNarrow] = useState(() =>
-    typeof window !== 'undefined' ? window.matchMedia(NARROW_VIEWPORT_MQ).matches : false
-  );
-
-  useEffect(() => {
-    const mq = window.matchMedia(NARROW_VIEWPORT_MQ);
-    const onChange = () => setIsNarrow(mq.matches);
-    onChange();
-    mq.addEventListener('change', onChange);
-    return () => mq.removeEventListener('change', onChange);
-  }, []);
-
-  return isNarrow;
-}
+export { useIsNarrowViewport };
 
 /** edgeLabel / filterStage — graph 페이지·viewer 공유 */
 export function useGraphDisplayToggles() {
@@ -281,8 +265,8 @@ export function useGraphSearch(elements, currentChapterData = null) {
     [handleSearchSubmit, clearSearch, closeSuggestions, onGenerateSuggestions, handleKeyDown],
   );
 
-  return {
-    searchState: {
+  const searchState = useMemo(
+    () => ({
       searchTerm,
       isSearchActive,
       filteredElements,
@@ -290,7 +274,9 @@ export function useGraphSearch(elements, currentChapterData = null) {
       suggestions,
       showSuggestions,
       selectedIndex,
-    },
-    searchActions,
-  };
+    }),
+    [searchTerm, isSearchActive, filteredElements, fitNodeIds, suggestions, showSuggestions, selectedIndex],
+  );
+
+  return { searchState, searchActions };
 }

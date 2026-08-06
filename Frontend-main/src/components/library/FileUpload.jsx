@@ -13,6 +13,7 @@ import {
 } from '../../utils/library/libraryUtils';
 import { normalizeTitle, normalizeAuthor } from '../../utils/common/valueUtils';
 import { findCanonicalBook } from '../../hooks/books/bookHooks';
+import { useModalFocusTrap, useAsyncRequestGuard, useMountedRef } from '../../hooks/common/hooksShared';
 import './LibraryModalChrome.css';
 import './FileUpload.css';
 
@@ -26,12 +27,11 @@ const METADATA_FIELDS = [
 ];
 
 function withMetadataTimeout(promise, ms = METADATA_EXTRACT_TIMEOUT_MS) {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Metadata extraction timeout')), ms)
-    ),
-  ]);
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error('Metadata extraction timeout')), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timeoutId));
 }
 
 const FileUpload = ({ onUploadSuccess, onClose }) => {
@@ -43,6 +43,9 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
   const [uploading, setUploading] = useState(false);
   const inputRef = useRef(null);
   const uploadingRef = useRef(false);
+  const dialogRef = useRef(null);
+  const mountedRef = useMountedRef();
+  const { nextRequestId, isStale } = useAsyncRequestGuard();
 
   useEffect(() => {
     return attachLibraryModalChrome({
@@ -51,7 +54,9 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
     });
   }, [onClose]);
 
-  const extractEpubMetadata = async (file) => {
+  useModalFocusTrap(true, dialogRef, undefined);
+
+  const extractEpubMetadata = async (file, extractionId) => {
     try {
       setExtractingMetadata(true);
       return await withMetadataTimeout(extractEpubFileMetadata(file));
@@ -66,7 +71,9 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
         language: 'ko',
       };
     } finally {
-      setExtractingMetadata(false);
+      if (mountedRef.current && !isStale(extractionId)) {
+        setExtractingMetadata(false);
+      }
     }
   };
 
@@ -78,9 +85,11 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
       toast.error(v.error);
       return;
     }
+    const extractionId = nextRequestId();
     setSelectedFile(file);
     setStep('metadata');
-    const extracted = await extractEpubMetadata(file);
+    const extracted = await extractEpubMetadata(file, extractionId);
+    if (!mountedRef.current || isStale(extractionId)) return;
     setMetadata((prev) => ({ ...prev, ...extracted }));
   };
 
@@ -138,7 +147,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
       toast.error(`업로드 처리 중 오류가 발생했습니다: ${error.message}`);
     } finally {
       uploadingRef.current = false;
-      setUploading(false);
+      if (mountedRef.current) setUploading(false);
     }
   };
 
@@ -147,6 +156,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
     setStep('select');
     setSelectedFile(null);
     setMetadata(EMPTY_METADATA);
+    if (inputRef.current) inputRef.current.value = '';
   };
 
   const setDrag = (active) => (e) => {
@@ -177,6 +187,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
 
   const handleFileInputChange = (e) => {
     if (e.target.files?.length) handleFiles(e.target.files);
+    e.target.value = '';
   };
 
   const updateMetadataField = (key) => (e) => {
@@ -184,17 +195,21 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
   };
 
   const canSubmit =
-    Boolean(metadata.title && metadata.author) && !extractingMetadata && !uploading;
+    Boolean(normalizeTitle(metadata.title || '') && normalizeAuthor(metadata.author || '')) &&
+    !extractingMetadata &&
+    !uploading;
   const extractingPlaceholder = extractingMetadata ? '메타데이터 추출 중...' : undefined;
 
   return (
     <div
+      ref={dialogRef}
       className="book-detail-modal"
       onClick={handleOverlayClick}
       role="dialog"
       aria-modal="true"
       aria-labelledby="file-upload-title"
       aria-describedby="file-upload-desc"
+      tabIndex={-1}
     >
       <p id="file-upload-desc" className="book-detail-modal-desc">
         EPUB 파일을 선택하고 제목·저자를 확인한 뒤 업로드합니다.

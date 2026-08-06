@@ -359,6 +359,8 @@ export const GRAPH_LAYOUT_CONSTANTS = {
   FOCUS_PAN_MS: 480,
   /** 사이드바가 어느 정도 열린 뒤 팬 */
   FOCUS_PAN_DELAY_MS: 380,
+  /** 노드/엣지 툴팁 및 관련 오버레이 공통 z-index */
+  Z_INDEX_TOOLTIP: 99999,
 };
 
 /** Cytoscape 뷰포트 줌 (휠·버튼·초기 fit 공통) */

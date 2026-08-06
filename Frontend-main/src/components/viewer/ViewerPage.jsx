@@ -4,6 +4,7 @@ import ViewerLayout from './ViewerLayout';
 import XhtmlViewer from './XhtmlViewer';
 import ViewerSettings from './ViewerSettings';
 import { useViewerPage } from '../../hooks/viewer/useViewerPage';
+import { useModalFocusTrap, useLatestRef } from '../../hooks/common/hooksShared';
 import { useTooltipState } from '../../hooks/ui/tooltipHooks';
 import { anchorToLocators, resolveChapterIndex } from '../../utils/common/valueUtils';
 import {
@@ -24,14 +25,24 @@ function BookmarkDeleteConfirm({
   onCancel,
   onConfirm,
 }) {
+  const dialogRef = useRef(null);
+  const busyRef = useLatestRef(busy);
+  const onCancelRef = useLatestRef(onCancel);
+  // busy/onCancel을 ref로 안정화 — useModalFocusTrap의 onClose 참조가 busy 토글마다 바뀌면
+  // effect가 재실행되며 (버튼이 disabled된) 다이얼로그로 포커스가 불필요하게 튐
+  const handleClose = useCallback(() => {
+    if (!busyRef.current) onCancelRef.current?.();
+  }, [busyRef, onCancelRef]);
+
+  useModalFocusTrap(open, dialogRef, handleClose);
+
   useEffect(() => {
     if (!open) return undefined;
-    const onKey = (e) => {
-      if (e.key === 'Escape') onCancel();
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = 'unset';
     };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [open, onCancel]);
+  }, [open]);
 
   if (!open) return null;
 
@@ -39,14 +50,16 @@ function BookmarkDeleteConfirm({
     <div
       className="bm-confirm-overlay"
       role="presentation"
-      onClick={onCancel}
+      onClick={busy ? undefined : onCancel}
     >
       <div
+        ref={dialogRef}
         className="bm-confirm-dialog"
         role="dialog"
         aria-modal="true"
         aria-labelledby="viewer-bookmark-delete-title"
         aria-describedby="viewer-bookmark-delete-desc"
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
       >
         <p id="viewer-bookmark-delete-title" className="bm-confirm-title">
@@ -69,7 +82,6 @@ function BookmarkDeleteConfirm({
             className="bm-btn bm-btn-confirm-delete"
             onClick={onConfirm}
             disabled={busy}
-            autoFocus
           >
             {busy ? '삭제 중…' : '삭제'}
           </button>
@@ -144,11 +156,8 @@ const ViewerPage = () => {
   const suppressViewport =
     !isViewerPageReady && (isResumePending || Boolean(resumeAnchor));
 
-  const readingChapterRef = useRef(currentChapter);
-  readingChapterRef.current = currentChapter;
-
-  const showToolbarRef = useRef(showToolbar);
-  showToolbarRef.current = showToolbar;
+  const readingChapterRef = useLatestRef(currentChapter);
+  const showToolbarRef = useLatestRef(showToolbar);
 
   const graphClearRef = useRef(null);
 
@@ -212,8 +221,13 @@ const ViewerPage = () => {
 
   const confirmToolbarDelete = useCallback(async () => {
     if (toolbarDeleteConfirmId == null) return;
-    await removeBookmark(toolbarDeleteConfirmId);
-    setToolbarDeleteConfirmId(null);
+    try {
+      await removeBookmark(toolbarDeleteConfirmId);
+      setToolbarDeleteConfirmId(null);
+    } catch (error) {
+      errorUtils.logError('[ViewerPage] 북마크 삭제 실패', error, { bookmarkId: toolbarDeleteConfirmId });
+      toast.error('북마크 삭제에 실패했습니다. 잠시 후 다시 시도해 주세요.');
+    }
   }, [toolbarDeleteConfirmId, removeBookmark]);
 
   const onTooltipError = useCallback(() => {

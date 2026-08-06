@@ -3,9 +3,11 @@ import { createPortal } from "react-dom";
 import PropTypes from "prop-types";
 import { List, MousePointer2, Move, Search, SearchX, SlidersHorizontal, ZoomIn } from "lucide-react";
 import { useClickOutside } from "../../hooks/ui/tooltipHooks";
+import { readSessionHintSeen, useSessionHint } from "../../hooks/common/hooksShared";
 import { findExactSuggestionMatch } from "../../utils/graph/graphCy.js";
 import {
   GRAPH_CHARACTER_FILTER_STAGE_OPTIONS,
+  GRAPH_LAYOUT_CONSTANTS,
   formatGraphEventMetaLabel,
 } from "../../utils/graph/graphCore.js";
 import { resolveEventOrdinalForDisplay } from "../../utils/viewer/viewerSession";
@@ -77,15 +79,13 @@ ActionButton.propTypes = {
   title: PropTypes.string,
 };
 
-const Z_INDEX_TOOLTIP = 99999;
-
 /** 플로팅 노드/간선 툴팁 셸 */
 export function NodeTooltipShell({
   children,
   shellRef,
   className = 'graph-node-tooltip',
   position,
-  zIndex = Z_INDEX_TOOLTIP,
+  zIndex = GRAPH_LAYOUT_CONSTANTS.Z_INDEX_TOOLTIP,
   showContent,
   isDragging,
   handleMouseDown,
@@ -356,46 +356,6 @@ const GESTURE_HINT_SESSION_KEY = "rw-graph-gesture-hint-seen";
 const LEGEND_HINT_SESSION_KEY = "rw-graph-legend-hint-seen";
 const POSITIVITY_GRADIENT = getPositivityGradientCss();
 
-function readSessionHintSeen(key) {
-  try {
-    return sessionStorage.getItem(key) === "1";
-  } catch {
-    return true;
-  }
-}
-
-function markSessionHintSeen(key) {
-  try {
-    sessionStorage.setItem(key, "1");
-  } catch {
-    /* ignore */
-  }
-}
-
-function useSessionHint(storageKey, { autoOpen = true } = {}) {
-  const [hintSeen, setHintSeen] = useState(() => readSessionHintSeen(storageKey));
-  const [open, setOpen] = useState(() => autoOpen && !readSessionHintSeen(storageKey));
-
-  const markSeen = useCallback(() => {
-    markSessionHintSeen(storageKey);
-    setHintSeen(true);
-  }, [storageKey]);
-
-  const dismiss = useCallback(() => {
-    markSeen();
-    setOpen(false);
-  }, [markSeen]);
-
-  const toggle = useCallback(() => {
-    setOpen((v) => {
-      markSeen();
-      return !v;
-    });
-  }, [markSeen]);
-
-  return { hintSeen, open, setOpen, dismiss, toggle, markSeen };
-}
-
 function getSuggestionDisplayName(suggestion) {
   return suggestion?.label || suggestion?.common_name || "Unknown";
 }
@@ -560,6 +520,7 @@ function GraphSearchPalette({
   isSearchActive = false,
 }) {
   const inputRef = useRef(null);
+  const toastTimerRef = useRef(null);
   const [toastMessage, setToastMessage] = useState("");
   const trimmedTerm = (searchTerm || "").trim();
   const canShowResults = open && trimmedTerm.length >= 2;
@@ -588,9 +549,19 @@ function GraphSearchPalette({
     return () => window.removeEventListener("keydown", onKey, true);
   }, [open, onClose, onCloseSuggestions]);
 
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
+    };
+  }, []);
+
   const showToastMessage = useCallback((message) => {
+    if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
     setToastMessage(message);
-    window.setTimeout(() => setToastMessage(""), 3000);
+    toastTimerRef.current = window.setTimeout(() => {
+      toastTimerRef.current = null;
+      setToastMessage("");
+    }, 3000);
   }, []);
 
   const trySubmitSearch = useCallback(() => {

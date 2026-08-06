@@ -400,23 +400,6 @@
   background: transparent;
 }
 
-.book-detail-reader-clear-progress--danger {
-  color: var(--bd-danger);
-}
-
-.book-detail-reader-progress-confirm {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex-shrink: 0;
-}
-
-.book-detail-reader-progress-confirm-text {
-  font-size: 0.6875rem;
-  font-weight: 500;
-  color: var(--bd-text-soft);
-}
-
 .book-detail-scroll {
   flex: 1;
   min-height: 0;

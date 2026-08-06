@@ -32,8 +32,10 @@ const RG = {
   textSubtle: '#6c757d',
   textBrand: '#2f3b2f',
   textMutedBrand: '#3d4f3d',
+  textGray: '#374151',
   danger: '#ef4444',
   progressTrack: '#e8f0e8',
+  surfaceGlass: 'rgba(255, 255, 255, 0.96)',
 };
 
 /** 그래프·UI 공유 팔레트 — relation-graph/tokens.css :root 와 동기화 */
@@ -51,8 +53,10 @@ export const GRAPH_COLORS = {
   nodeBackground: '#f3f5f3',
   nodeText: RG.textBrand,
   edgeText: RG.textMutedBrand,
+  textGray: RG.textGray,
   progressTrack: RG.progressTrack,
   danger: RG.danger,
+  surfaceGlass: RG.surfaceGlass,
 };
 
 export const NODE_SIZE_MIN = 30;

@@ -17,8 +17,8 @@
   --vt-radius: 0.5rem;
   --vt-thumb-size: 1.375rem;
   --vt-thumb-border: 0.1563rem;
-  --vt-danger-bg: #fef2f2;
-  --vt-danger-fg: #b91c1c;
+  --vt-danger-bg: var(--brand-danger-bg);
+  --vt-danger-fg: var(--brand-danger-dark);
   --vt-danger-hover: #fee2e2;
 
   display: flex;

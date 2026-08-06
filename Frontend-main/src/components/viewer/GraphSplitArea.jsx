@@ -1,7 +1,7 @@
 import { lazy, Suspense, useMemo, useRef, memo, useCallback, useEffect, useState, useId } from 'react';
 import PropTypes from 'prop-types';
 import { useNavigate, useParams } from 'react-router-dom';
-import { AlertCircle, Inbox, Loader2, Maximize, Minimize } from 'lucide-react';
+import { AlertCircle, Filter, Inbox, Loader2, Maximize, Minimize } from 'lucide-react';
 import CytoscapeGraphUnified from '../graph/CytoscapeGraphUnified';
 import UnifiedNodeInfo from '../graph/UnifiedNodeInfo';
 import { useGraphElementPipeline } from '../../hooks/graph/useGraphViewState';
@@ -47,12 +47,10 @@ const FULLSCREEN_TOGGLE = {
 const GraphSplitTopBar = memo(function GraphSplitTopBar({
   graphState,
   graphActions,
-  viewerState,
+  bookId,
   searchState,
   searchActions,
 }) {
-  const { book } = viewerState;
-
   const {
     currentChapter,
     currentEvent,
@@ -63,8 +61,6 @@ const GraphSplitTopBar = memo(function GraphSplitTopBar({
   } = graphState;
 
   const { setGraphFullScreen, setEdgeLabelVisible, filterStage, setFilterStage } = graphActions;
-
-  const bookId = useMemo(() => toPositiveNumberOrNull(book?.id), [book?.id]);
 
   const chapterMeta = useMemo(
     () => resolveViewerSplitChapterMeta(bookId, currentChapter),
@@ -328,6 +324,7 @@ const GraphSplitArea = memo(function GraphSplitArea({
   } = searchState;
 
   const { graphPhase, isDataReady, isDataEmpty, appliedGraphKey, book, bookKey, routeBookId } = viewerState;
+  const topBarBookId = useMemo(() => toPositiveNumberOrNull(book?.id), [book?.id]);
   const {
     elements,
     currentEvent,
@@ -335,7 +332,7 @@ const GraphSplitArea = memo(function GraphSplitArea({
     prevValidEvent,
     edgeLabelVisible,
   } = graphState;
-  const { filterStage } = graphActions;
+  const { filterStage, setFilterStage } = graphActions;
   const cyRef = useRef(null);
 
   const topBarSearchState = useMemo(
@@ -398,6 +395,13 @@ const GraphSplitArea = memo(function GraphSplitArea({
   const hasElements = Array.isArray(elements) && elements.length > 0;
   const isEventTransition =
     transitionState.type === 'event' && transitionState.inProgress;
+  // 검색 결과 0건은 CytoscapeGraphUnified 내부 no-results 오버레이가 처리하지만,
+  // 인물 필터(filterStage)로 인한 0건은 여기서 별도 안내가 필요함 — 그렇지 않으면 빈 캔버스만 노출됨
+  const isFilteredToEmpty =
+    hasElements && !isSearchActive && filterStage > 0 && finalElements.length === 0;
+  const resetFilterStage = useCallback(() => {
+    setFilterStage?.(0);
+  }, [setFilterStage]);
 
   /**
    * 그래프 패널에 무엇을 보여줄지 결정하는 파생 상태를 한곳에 모음.
@@ -487,7 +491,7 @@ const GraphSplitArea = memo(function GraphSplitArea({
       <GraphSplitTopBar
         graphState={graphState}
         graphActions={graphActions}
-        viewerState={{ book }}
+        bookId={topBarBookId}
         searchState={topBarSearchState}
         searchActions={topBarSearchActions}
       />
@@ -550,6 +554,21 @@ const GraphSplitArea = memo(function GraphSplitArea({
                       <Loader2 size={16} className="graph-spin" strokeWidth={2} aria-hidden />
                       <span>이벤트 반영 중</span>
                     </div>
+                  </div>
+                ) : null}
+                {isFilteredToEmpty ? (
+                  <div className={fillOverlayClass}>
+                    <GraphNoticePanel
+                      variant="empty"
+                      title="조건에 맞는 인물이 없습니다"
+                      description="현재 필터에 해당하는 핵심 인물이 이 챕터에는 없습니다. 필터를 해제하면 전체 인물을 볼 수 있습니다."
+                      icon={<Filter size={24} strokeWidth={1.75} aria-hidden />}
+                      actions={
+                        <button type="button" className="graph-panel-btn graph-panel-btn--primary" onClick={resetFilterStage}>
+                          필터 해제
+                        </button>
+                      }
+                    />
                   </div>
                 ) : null}
               </div>

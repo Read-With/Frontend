@@ -8,9 +8,11 @@
   --cd-text: #333;
   --cd-text-muted: #666;
   --cd-radius-sm: 0.5rem;
-  --cd-danger: #dc2626;
+  --cd-danger: var(--brand-danger);
+  --cd-danger-dark: var(--brand-danger-dark);
   --cd-focus: var(--brand-focus);
-  --cd-focus-danger: rgba(220, 38, 38, 0.45);
+  --cd-focus-danger: var(--brand-danger-focus);
+  --cd-overlay: var(--brand-overlay);
 
   position: fixed;
   inset: 0;
@@ -19,7 +21,7 @@
     max(0px, env(safe-area-inset-right, 0px))
     max(0px, env(safe-area-inset-bottom, 0px))
     max(0px, env(safe-area-inset-left, 0px));
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--cd-overlay);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -151,7 +153,7 @@
 }
 
 .delete-confirm-delete:hover {
-  background: #b91c1c;
+  background: var(--cd-danger-dark);
 }
 
 .delete-confirm-delete:focus-visible {

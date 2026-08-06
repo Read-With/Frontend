@@ -49,7 +49,6 @@ const radarError = (message) => ({
   error: message || '관계 분석 데이터를 만들지 못했습니다.',
 });
 
-const Z_INDEX_TOOLTIP = 99999;
 const SUMMARY = { COLLAPSED: 'collapsed', WARNING: 'warning', CONTENT: 'content' };
 
 function checkNodeAppearance({ isSidebar, data, node, currentChapter, folderKey, eventNum, elements }) {
@@ -247,16 +246,17 @@ function UnifiedNodeInfo({
   const [appeared, setAppeared] = useState(false);
   const [error, setError] = useState(null);
   const [summaryStage, setSummaryStage] = useState(SUMMARY.COLLAPSED);
-  const [isModalOpen, setIsModalOpen] = useState(() => {
-    if (pendingRef.current) {
-      pendingRef.current = false;
-      return true;
-    }
-    return false;
-  });
+  const [isModalOpen, setIsModalOpen] = useState(() => Boolean(pendingRef.current));
   const keepModalOpenRef = useRef(false);
   const analysisBtnRef = useRef(null);
   const unlockedPovNodeIdsRef = useRef(new Set());
+
+  useEffect(() => {
+    if (pendingRef.current) {
+      pendingRef.current = false;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const openModal = useCallback(() => setIsModalOpen(true), []);
   const closeModal = useCallback(() => {
@@ -488,7 +488,7 @@ function UnifiedNodeInfo({
   const floatingShell = {
     shellRef: mergeRefs(tooltipRef, clickOutsideRef),
     position,
-    zIndex: Z_INDEX_TOOLTIP,
+    zIndex: GRAPH_LAYOUT_CONSTANTS.Z_INDEX_TOOLTIP,
     showContent,
     isDragging,
     handleMouseDown,
@@ -529,7 +529,7 @@ function UnifiedNodeInfo({
           shellRef={tooltipRef}
           className="graph-node-tooltip error"
           position={position}
-          zIndex={Z_INDEX_TOOLTIP}
+          zIndex={GRAPH_LAYOUT_CONSTANTS.Z_INDEX_TOOLTIP}
         >
           {errorContent}
         </NodeTooltipShell>

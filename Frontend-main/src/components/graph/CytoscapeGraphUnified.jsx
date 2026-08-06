@@ -570,7 +570,8 @@ const CytoscapeGraphUnified = ({
         if (hl.length > 0) hl.removeClass("search-highlight");
       }
     });
-  }, [cy, elementsGraphFingerprint, elementsLength, fitNodeIds, fitNodeIdsKey, isSearchActive, applyNodeSizes]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fitNodeIdsKey is the stable identity of fitNodeIds
+  }, [cy, elementsGraphFingerprint, elementsLength, fitNodeIdsKey, isSearchActive, applyNodeSizes]);
 
   const filteredElementIdsStr = useMemo(() => {
     if (!filteredElements?.length) return '';

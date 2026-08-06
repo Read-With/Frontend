@@ -6,15 +6,14 @@ import {
   normalizeSettings,
   VIEWER_MODE_OPTIONS,
 } from '../../utils/viewer/viewerSession';
+import { useModalFocusTrap } from '../../hooks/common/hooksShared';
 import './ViewerSettings.css';
-
-const FOCUSABLE_SELECTOR =
-  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 const ViewerSettings = ({ isOpen, onClose, onApplySettings, settings }) => {
   const titleId = useId();
   const dialogRef = useRef(null);
-  const previouslyFocusedRef = useRef(null);
+
+  useModalFocusTrap(isOpen, dialogRef, onClose);
 
   const [draft, setDraft] = useState(() =>
     normalizeSettings(settings || defaultSettings)
@@ -47,58 +46,6 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, settings }) => {
     },
     [onClose]
   );
-
-  useEffect(() => {
-    if (!isOpen) return undefined;
-
-    previouslyFocusedRef.current = document.activeElement;
-    const dialog = dialogRef.current;
-    if (!dialog) return undefined;
-
-    const getFocusable = () =>
-      Array.from(dialog.querySelectorAll(FOCUSABLE_SELECTOR)).filter(
-        (el) => el.offsetParent !== null || el === document.activeElement
-      );
-
-    const focusable = getFocusable();
-    (focusable[0] || dialog).focus();
-
-    const onKeyDown = (e) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        onClose();
-        return;
-      }
-      if (e.key !== 'Tab') return;
-
-      const focusable = getFocusable();
-      if (focusable.length === 0) {
-        e.preventDefault();
-        dialog.focus();
-        return;
-      }
-
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    };
-
-    document.addEventListener('keydown', onKeyDown);
-
-    return () => {
-      document.removeEventListener('keydown', onKeyDown);
-      const prev = previouslyFocusedRef.current;
-      if (prev && typeof prev.focus === 'function') {
-        prev.focus();
-      }
-    };
-  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 

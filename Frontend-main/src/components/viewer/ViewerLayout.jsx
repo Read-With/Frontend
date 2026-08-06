@@ -1,14 +1,15 @@
 import { useState, useEffect, useMemo, useCallback, memo, useRef } from 'react';
 import PropTypes from 'prop-types';
 import { toast } from 'react-toastify';
-import ViewerToolbar, { createSessionHintStorage } from './ViewerToolbar';
+import ViewerToolbar from './ViewerToolbar';
+import { useIsNarrowViewport, useSessionHint } from '../../hooks/common/hooksShared';
 import './ViewerToolbar.css';
 
 const SPLIT_STORAGE_KEY = 'viewer-graph-split-percent';
 const CHROME_HINT_SESSION_KEY = 'rw-viewer-chrome-hint-seen';
 const SPLIT_MIN = 32;
 const SPLIT_MAX = 68;
-const NARROW_MQ = '(max-width: 767px)';
+const SPLIT_PERSIST_DEBOUNCE_MS = 300;
 const CHROME_HINT_PANEL_ID = 'viewer-chrome-hint-panel';
 /** ViewerToolbar.css의 .viewer-chrome opacity/visibility 전환(0.3s)이 끝난 뒤 resize를 쏘기 위한 지연 — 그 값과 반드시 함께 조정 */
 const LAYOUT_SETTLE_DELAY_MS = 300;
@@ -22,8 +23,6 @@ function readStoredSplitPercent() {
   }
   return 50;
 }
-
-const chromeHintStorage = createSessionHintStorage(CHROME_HINT_SESSION_KEY);
 
 const ViewerProgressBar = memo(function ViewerProgressBar({
   showToolbar,
@@ -107,29 +106,15 @@ function ViewerLayout({
 }) {
   const splitRowRef = useRef(null);
   const [splitPercent, setSplitPercent] = useState(readStoredSplitPercent);
-  const [isNarrow, setIsNarrow] = useState(
-    () => typeof window !== 'undefined' && window.matchMedia(NARROW_MQ).matches
-  );
+  const isNarrow = useIsNarrowViewport();
   const [mobilePane, setMobilePane] = useState('reader');
   const [isSplitDragging, setIsSplitDragging] = useState(false);
-  const [chromeHintOpen, setChromeHintOpen] = useState(() => !chromeHintStorage.read());
+  const chromeHint = useSessionHint(CHROME_HINT_SESSION_KEY);
+  const { open: chromeHintOpen, dismiss: dismissChromeHint } = chromeHint;
   const prevShowGraphRef = useRef(showGraph);
   const skipInitialLayoutSettleRef = useRef(true);
   const onViewerLayoutSettledRef = useRef(onViewerLayoutSettled);
   onViewerLayoutSettledRef.current = onViewerLayoutSettled;
-
-  const dismissChromeHint = useCallback(() => {
-    chromeHintStorage.mark();
-    setChromeHintOpen(false);
-  }, []);
-
-  useEffect(() => {
-    const mq = window.matchMedia(NARROW_MQ);
-    const onChange = () => setIsNarrow(mq.matches);
-    onChange();
-    mq.addEventListener('change', onChange);
-    return () => mq.removeEventListener('change', onChange);
-  }, []);
 
   useEffect(() => {
     const wasShown = prevShowGraphRef.current;
@@ -173,12 +158,18 @@ function ViewerLayout({
   ]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(SPLIT_STORAGE_KEY, String(splitPercent));
-    } catch {
-      /* ignore */
-    }
+    // 드래그 중 pointermove마다 splitPercent가 바뀌므로, 값이 잠잠해진 뒤에만 저장
+    const id = window.setTimeout(() => {
+      try {
+        localStorage.setItem(SPLIT_STORAGE_KEY, String(splitPercent));
+      } catch {
+        /* ignore */
+      }
+    }, SPLIT_PERSIST_DEBOUNCE_MS);
+    return () => window.clearTimeout(id);
   }, [splitPercent]);
+
+  const activeDragCleanupRef = useRef(null);
 
   const onDividerPointerDown = useCallback((event) => {
     if (event.button != null && event.button !== 0) return;
@@ -211,8 +202,7 @@ function ViewerLayout({
       updateFromClientX(e.clientX);
     };
 
-    const onEnd = (e) => {
-      if (e.pointerId !== pointerId) return;
+    const cleanup = () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onEnd);
       window.removeEventListener('pointercancel', onEnd);
@@ -225,11 +215,24 @@ function ViewerLayout({
       }
       document.body.classList.remove('viewer-split-dragging');
       setIsSplitDragging(false);
+      activeDragCleanupRef.current = null;
+    };
+
+    const onEnd = (e) => {
+      if (e.pointerId !== pointerId) return;
+      cleanup();
     };
 
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onEnd);
     window.addEventListener('pointercancel', onEnd);
+    activeDragCleanupRef.current = cleanup;
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      activeDragCleanupRef.current?.();
+    };
   }, []);
 
   const readerPaneClass = useMemo(() => {

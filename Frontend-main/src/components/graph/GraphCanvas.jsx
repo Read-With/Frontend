@@ -55,6 +55,14 @@ function GraphSidebar({
   const previousActiveTooltipRef = useRef(null);
   const animationTimeoutRef = useRef(null);
   const restoreCanvasFocusRef = useRef(false);
+  const openAnimationFrameRef = useRef(null);
+
+  const cancelOpenAnimationFrame = useCallback(() => {
+    if (openAnimationFrameRef.current != null) {
+      cancelAnimationFrame(openAnimationFrameRef.current);
+      openAnimationFrameRef.current = null;
+    }
+  }, []);
 
   const sidebarStyle = useMemo(() => ({
     right: isClosing || !isVisible ? `-${SIDEBAR_WIDTH}px` : '0px',
@@ -89,25 +97,34 @@ function GraphSidebar({
 
     if (activeTooltip && !prevActiveTooltip) {
       clearTimeoutRef(animationTimeoutRef);
+      cancelOpenAnimationFrame();
       setIsClosing(false);
       setIsVisible(false);
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => setIsVisible(true));
+      openAnimationFrameRef.current = requestAnimationFrame(() => {
+        openAnimationFrameRef.current = requestAnimationFrame(() => {
+          openAnimationFrameRef.current = null;
+          setIsVisible(true);
+        });
       });
     } else if (!activeTooltip && prevActiveTooltip) {
+      cancelOpenAnimationFrame();
       runCloseAnimation();
     }
 
     previousActiveTooltipRef.current = activeTooltip;
-  }, [activeTooltip, runCloseAnimation]);
+  }, [activeTooltip, runCloseAnimation, cancelOpenAnimationFrame]);
 
   useEffect(() => {
     if (isSidebarClosing && !isClosing) {
+      cancelOpenAnimationFrame();
       runCloseAnimation();
     }
-  }, [isSidebarClosing, isClosing, runCloseAnimation]);
+  }, [isSidebarClosing, isClosing, runCloseAnimation, cancelOpenAnimationFrame]);
 
-  useEffect(() => () => clearTimeoutRef(animationTimeoutRef), []);
+  useEffect(() => () => {
+    clearTimeoutRef(animationTimeoutRef);
+    cancelOpenAnimationFrame();
+  }, [cancelOpenAnimationFrame]);
 
   if (!isVisible && !isClosing && !activeTooltip) {
     return null;

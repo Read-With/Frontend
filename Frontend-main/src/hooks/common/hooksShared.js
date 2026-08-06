@@ -13,6 +13,161 @@ export function useLatestRef(value) {
   return ref;
 }
 
+/** 뷰어·그래프 공통 모바일 브레이크포인트 */
+export const NARROW_VIEWPORT_MQ = '(max-width: 767px)';
+
+export function useIsNarrowViewport(mediaQuery = NARROW_VIEWPORT_MQ) {
+  const [isNarrow, setIsNarrow] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia(mediaQuery).matches : false
+  );
+
+  useEffect(() => {
+    const mq = window.matchMedia(mediaQuery);
+    const onChange = () => setIsNarrow(mq.matches);
+    onChange();
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, [mediaQuery]);
+
+  return isNarrow;
+}
+
+/** 세션 1회성 온보딩 힌트의 sessionStorage 읽기·기록 공통화 */
+export function readSessionHintSeen(key) {
+  try {
+    return sessionStorage.getItem(key) === '1';
+  } catch {
+    return true;
+  }
+}
+
+export function markSessionHintSeen(key) {
+  try {
+    sessionStorage.setItem(key, '1');
+  } catch {
+    /* ignore */
+  }
+}
+
+/** 세션 1회성 온보딩 힌트 open/dismiss 상태 머신 — 그래프·뷰어 공통 */
+export function useSessionHint(storageKey, { autoOpen = true } = {}) {
+  const [hintSeen, setHintSeen] = useState(() => readSessionHintSeen(storageKey));
+  const [open, setOpen] = useState(() => autoOpen && !readSessionHintSeen(storageKey));
+
+  const markSeen = useCallback(() => {
+    markSessionHintSeen(storageKey);
+    setHintSeen(true);
+  }, [storageKey]);
+
+  const dismiss = useCallback(() => {
+    markSeen();
+    setOpen(false);
+  }, [markSeen]);
+
+  const toggle = useCallback(() => {
+    setOpen((v) => {
+      markSeen();
+      return !v;
+    });
+  }, [markSeen]);
+
+  return { hintSeen, open, setOpen, dismiss, toggle, markSeen };
+}
+
+const MODAL_FOCUS_TRAP_SELECTOR =
+  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/**
+ * 모달/다이얼로그 공용 포커스 관리: 열릴 때 첫 포커스 가능 요소(또는 initialFocusRef)로 이동,
+ * Tab/Shift+Tab을 다이얼로그 내부로 트랩, Escape로 닫기, 닫힐 때 이전 포커스로 복원.
+ * dialogRef가 가리키는 요소에는 tabIndex={-1}이 있어야 함(포커스 가능 요소가 없을 때의 폴백 타깃).
+ * @param {{
+ *   initialFocusRef?: import('react').RefObject<HTMLElement>,
+ *   suspended?: boolean,
+ * }} [options]
+ *   initialFocusRef: 첫 포커스 가능 요소 대신 특정 요소(예: 취소 버튼)로 초기 포커스를 보내고 싶을 때 지정
+ *   suspended: 중첩된 다른 다이얼로그가 열려 이 트랩이 일시적으로 제어권을 넘겨야 할 때 true.
+ *     Tab 트랩과 초기 포커스 이동만 멈추고, 최초 진입 시 캡처한 "이전 포커스"는 건드리지 않아
+ *     중첩 다이얼로그가 열고 닫힐 때마다 포커스가 불필요하게 두 번 튀는 것을 막는다.
+ */
+export function useModalFocusTrap(isOpen, dialogRef, onClose, options = {}) {
+  const { initialFocusRef = null, suspended = false } = options;
+  const previouslyFocusedRef = useRef(null);
+
+  // isOpen이 실제로 열림→닫힘으로 바뀔 때만 이전 포커스를 캡처·복원 (suspended 토글에는 반응하지 않음)
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    previouslyFocusedRef.current = document.activeElement;
+    return () => {
+      const prev = previouslyFocusedRef.current;
+      if (prev && typeof prev.focus === 'function') {
+        prev.focus();
+      }
+    };
+  }, [isOpen]);
+
+  // Tab 트랩 + 초기 포커스 이동은 suspended일 때만 일시 중단
+  useEffect(() => {
+    if (!isOpen || suspended) return undefined;
+    const dialog = dialogRef.current;
+    if (!dialog) return undefined;
+
+    const getFocusable = () =>
+      Array.from(dialog.querySelectorAll(MODAL_FOCUS_TRAP_SELECTOR)).filter(
+        (el) => el.offsetParent !== null || el === document.activeElement
+      );
+
+    const focusable = getFocusable();
+    (initialFocusRef?.current || focusable[0] || dialog).focus();
+
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        onClose?.();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+
+      const currentFocusable = getFocusable();
+      if (currentFocusable.length === 0) {
+        e.preventDefault();
+        dialog.focus();
+        return;
+      }
+
+      const first = currentFocusable[0];
+      const last = currentFocusable[currentFocusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', onKeyDown);
+
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [isOpen, suspended, dialogRef, onClose, initialFocusRef]);
+}
+
+/** 언마운트 후 setState 방지용: 마운트 상태를 ref로 추적 */
+export function useMountedRef() {
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  return mountedRef;
+}
+
 /** imperative handle 슬롯: mount 시 할당, unmount 시 null */
 export function useRefSlot(slotRef, value) {
   useEffect(() => {

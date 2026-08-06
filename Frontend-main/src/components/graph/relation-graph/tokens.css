@@ -33,10 +33,22 @@
   --rg-text-faint: #64748b;
   --rg-text-gray: #374151;
   --rg-text-gray-muted: #9ca3af;
+  --rg-text-slate: #4b5563;
+  --rg-text-near-black: #111827;
   --rg-text-brand: var(--brand-text);
 
   --rg-danger: #ef4444;
   --rg-danger-strong: #dc2626;
+
+  /* relation-tag / quote-box / avatar 전용 */
+  --rg-tag-surface: #eef1f6;
+  --rg-tag-text: #42506b;
+  --rg-tag-accent-default: #6b7c93;
+  --rg-tag-text-prior: #5b6578;
+  --rg-tag-border-prior: #d5dae3;
+  --rg-surface-quote: #f5f5f5;
+  --rg-surface-avatar-placeholder: #e6e8f0;
+  --rg-surface-avatar-img: #f4f4f4;
 
   --rg-focus: var(--rg-brand);
   --rg-overlay: rgba(15, 23, 42, 0.35);

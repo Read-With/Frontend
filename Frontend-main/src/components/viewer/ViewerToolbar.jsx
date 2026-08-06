@@ -17,34 +17,12 @@ import {
 import { findViewerModeOption } from '../../utils/viewer/viewerSession';
 import { userViewerPath, userGraphPath } from '../../utils/common/urlUtils';
 import { useClickOutside } from '../../hooks/ui/tooltipHooks';
+import { useIsNarrowViewport, useSessionHint } from '../../hooks/common/hooksShared';
 import './ViewerToolbar.css';
 
 const MODE_HINT_SESSION_KEY = 'rw-viewer-mode-hint-seen';
 const ICON_SM = 18;
 const MODE_HINT_PANEL_ID = 'viewer-mode-hint-panel';
-
-/** 세션 1회성 온보딩 힌트의 sessionStorage 읽기·기록 공통화 — ViewerLayout의 도구모음 힌트도 이 팩토리를 재사용 */
-// eslint-disable-next-line react-refresh/only-export-components -- 컴포넌트 곁에 둔 순수 유틸이라 새 파일을 만들지 않기로 함
-export function createSessionHintStorage(key) {
-  return {
-    read() {
-      try {
-        return sessionStorage.getItem(key) === '1';
-      } catch {
-        return true;
-      }
-    },
-    mark() {
-      try {
-        sessionStorage.setItem(key, '1');
-      } catch {
-        /* ignore */
-      }
-    },
-  };
-}
-
-const modeHintStorage = createSessionHintStorage(MODE_HINT_SESSION_KEY);
 
 function ToolbarButton({
   onClick,
@@ -184,31 +162,10 @@ function ViewerToolbar({
   const { filename: bookId } = useParams();
   const location = useLocation();
   const book = location.state?.book;
-  const [isMobile, setIsMobile] = useState(
-    () => typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches
-  );
+  const isMobile = useIsNarrowViewport();
   const [showMobileMenu, setShowMobileMenu] = useState(false);
-  const [modeHintSeen, setModeHintSeen] = useState(modeHintStorage.read);
-  const [modeHintOpen, setModeHintOpen] = useState(() => {
-    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches) {
-      return false;
-    }
-    return !modeHintStorage.read();
-  });
-
-  const dismissModeHint = useCallback(() => {
-    modeHintStorage.mark();
-    setModeHintSeen(true);
-    setModeHintOpen(false);
-  }, []);
-
-  useEffect(() => {
-    const mq = window.matchMedia('(max-width: 767px)');
-    const onChange = () => setIsMobile(mq.matches);
-    onChange();
-    mq.addEventListener('change', onChange);
-    return () => mq.removeEventListener('change', onChange);
-  }, []);
+  const modeHint = useSessionHint(MODE_HINT_SESSION_KEY, { autoOpen: !isMobile });
+  const { hintSeen: modeHintSeen, open: modeHintOpen, setOpen: setModeHintOpen, dismiss: dismissModeHint } = modeHint;
 
   useEffect(() => {
     if (!isMobile) setShowMobileMenu(false);
@@ -217,7 +174,7 @@ function ViewerToolbar({
   useEffect(() => {
     if (!isMobile || modeHintSeen) return;
     setModeHintOpen(showMobileMenu);
-  }, [isMobile, showMobileMenu, modeHintSeen]);
+  }, [isMobile, showMobileMenu, modeHintSeen, setModeHintOpen]);
 
   const viewMode = useMemo(() => findViewerModeOption(showGraph), [showGraph]);
   const ModeIcon = viewMode.Icon;
