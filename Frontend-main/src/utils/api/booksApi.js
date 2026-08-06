@@ -126,6 +126,12 @@ export const getBooks = async (params = {}) => {
   return data;
 };
 
+/** getBooks 응답에서 책 배열만 추출 (실패 시 빈 배열) */
+export const getBooksArray = async (params = {}) => {
+  const res = await getBooks(params);
+  return res?.isSuccess && Array.isArray(res.result) ? res.result : [];
+};
+
 export const getBook = async (bookId) => {
   const normalizedBookId = toPositiveNumberOrNull(bookId);
   if (!normalizedBookId) {

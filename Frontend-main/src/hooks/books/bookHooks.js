@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useReducer } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { getBook, getBooks, toggleBookFavorite, getBookManifest } from '../../utils/api/booksApi';
+import { getBook, getBooks, getBooksArray, toggleBookFavorite, getBookManifest } from '../../utils/api/booksApi';
 import { normalizeTitle, normalizeAuthor } from '../../utils/common/valueUtils';
 import { errorUtils, userViewerPath } from '../../utils/common/urlUtils';
 import { prefetchManifest } from '../../utils/common/cache/manifestCache';
@@ -201,10 +201,9 @@ export function useServerBookMatching(bookId, options = {}) {
       try {
         let books = queryClient.getQueryData(BOOKS_QUERY_KEY)?.books;
         if (!Array.isArray(books)) {
-          const res = await getBooks({});
-          books = res?.isSuccess && Array.isArray(res.result) ? res.result : null;
+          books = await getBooksArray();
         }
-        if (cancelled || !books) return;
+        if (cancelled) return;
         setMatchedServerBook(findCanonicalBook(books, titleKey, authorKey));
       } catch {
         if (!cancelled) setMatchedServerBook(null);

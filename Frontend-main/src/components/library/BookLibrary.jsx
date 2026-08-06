@@ -1,13 +1,13 @@
 import { useState, useEffect, useCallback, memo } from 'react';
 import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
-import { Heart, BookOpen, Network, MoreVertical, Info, Clock, Trash2, X } from 'lucide-react';
+import { Heart, BookOpen, Network, MoreVertical, Info, Clock, Trash2 } from 'lucide-react';
 import BookDetailModal, { AuthenticatedImage } from './BookDetailModal';
+import ConfirmDialog from './ConfirmDialog';
 import './BookLibrary.css';
 import { USER_VIEWER_PREFIX, USER_GRAPH_PREFIX, errorUtils } from '../../utils/common/urlUtils';
 import {
   formatLibraryRelativeDate,
-  attachLibraryModalChrome,
   makeOpeningTargetKey,
   getOpeningMode,
 } from '../../utils/library/libraryUtils';
@@ -56,68 +56,6 @@ async function openBookFromLibrary(navigate, book, graphMode) {
   await prewarmGraphBookCache(book);
   navigateFromLibrary(navigate, book, graphMode);
 }
-
-const DeleteConfirmModal = ({ isOpen, onClose, onConfirm }) => {
-  useEffect(() => {
-    if (!isOpen) return undefined;
-    return attachLibraryModalChrome({ onClose });
-  }, [isOpen, onClose]);
-
-  if (!isOpen) return null;
-
-  return (
-    <div 
-      className="delete-confirm-modal-overlay"
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="delete-confirm-title"
-    >
-      <div 
-        className="delete-confirm-modal"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="delete-confirm-header">
-          <h3 id="delete-confirm-title">책 삭제</h3>
-          <button
-            className="delete-confirm-close"
-            onClick={onClose}
-            aria-label="닫기"
-            type="button"
-          >
-            <X size={20} />
-          </button>
-        </div>
-        <div className="delete-confirm-body">
-          <p className="delete-confirm-message">이 책을 삭제하시겠습니까?</p>
-        </div>
-        <div className="delete-confirm-actions">
-          <button
-            className="delete-confirm-cancel"
-            onClick={onClose}
-            type="button"
-          >
-            취소
-          </button>
-          <button
-            className="delete-confirm-delete"
-            onClick={onConfirm}
-            type="button"
-            autoFocus
-          >
-            삭제하기
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-DeleteConfirmModal.propTypes = {
-  isOpen: PropTypes.bool.isRequired,
-  onClose: PropTypes.func.isRequired,
-  onConfirm: PropTypes.func.isRequired,
-};
 
 const BookCard = memo(({ book, onToggleFavorite, onOpenBook, onBookDetailClick, onShowDeleteModal, viewMode = 'grid', openingMode = null }) => {
   const [imageError, setImageError] = useState(false);
@@ -390,15 +328,24 @@ const BookLibrary = memo(({ books, onToggleFavorite, onBookDelete, viewMode = 'g
     }
 
     const abortController = new AbortController();
+    const PREWARM_CONCURRENCY = 3;
 
-    const initializeSequentially = async () => {
-      for (const book of numericBooks) {
-        if (abortController.signal.aborted) break;
-        await prewarmGraphBookCache(book, { signal: abortController.signal });
-      }
+    const initializeWithLimitedConcurrency = async () => {
+      let cursor = 0;
+      const runNext = async () => {
+        while (cursor < numericBooks.length) {
+          if (abortController.signal.aborted) return;
+          const book = numericBooks[cursor];
+          cursor += 1;
+          await prewarmGraphBookCache(book, { signal: abortController.signal });
+        }
+      };
+      await Promise.all(
+        Array.from({ length: Math.min(PREWARM_CONCURRENCY, numericBooks.length) }, runNext)
+      );
     };
 
-    initializeSequentially();
+    initializeWithLimitedConcurrency();
 
     return () => {
       abortController.abort();
@@ -474,8 +421,8 @@ const BookLibrary = memo(({ books, onToggleFavorite, onBookDelete, viewMode = 'g
   return (
     <>
       {books.map((book) => (
-        <BookCard 
-          key={`${book.title}-${book.id}`} 
+        <BookCard
+          key={book.id}
           book={book}
           onToggleFavorite={onToggleFavorite}
           onOpenBook={handleOpenBook}
@@ -494,10 +441,13 @@ const BookLibrary = memo(({ books, onToggleFavorite, onBookDelete, viewMode = 'g
         viewMode={viewMode}
       />
 
-      <DeleteConfirmModal
+      <ConfirmDialog
         isOpen={showDeleteModal}
         onClose={handleCloseDeleteModal}
         onConfirm={handleDeleteConfirm}
+        title="책 삭제"
+        message="이 책을 삭제하시겠습니까?"
+        confirmLabel="삭제하기"
       />
     </>
   );

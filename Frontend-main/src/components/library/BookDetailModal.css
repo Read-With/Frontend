@@ -15,11 +15,6 @@
   outline-offset: 0.125rem;
 }
 
-.book-detail-text-action-btn:focus-visible {
-  outline: 0.125rem solid var(--bd-focus-soft);
-  outline-offset: 0.125rem;
-}
-
 .book-detail-content {
   position: relative;
   display: flex;
@@ -403,6 +398,23 @@
 .book-detail-reader-clear-progress:hover {
   color: var(--bd-danger);
   background: transparent;
+}
+
+.book-detail-reader-clear-progress--danger {
+  color: var(--bd-danger);
+}
+
+.book-detail-reader-progress-confirm {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.book-detail-reader-progress-confirm-text {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: var(--bd-text-soft);
 }
 
 .book-detail-scroll {
@@ -841,85 +853,6 @@
 
 .book-detail-danger-btn--inline {
   width: auto;
-}
-
-.book-detail-danger-btn--solid {
-  color: #fff;
-  background: var(--bd-danger);
-  border-color: var(--bd-danger);
-}
-
-.book-detail-danger-btn--solid:hover {
-  background: var(--bd-danger-dark);
-  border-color: var(--bd-danger-dark);
-  color: #fff;
-}
-
-.book-detail-delete-confirm {
-  width: 100%;
-  padding: 0.25rem 0 0;
-}
-
-.book-detail-delete-confirm-text {
-  margin: 0 0 0.75rem;
-  font-size: 0.8125rem;
-  line-height: 1.5;
-  color: var(--bd-text-dark);
-  text-align: center;
-}
-
-.book-detail-text-action-btn {
-  min-height: 2.75rem;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--bd-muted);
-  background: transparent;
-  border: none;
-  border-radius: 0.5rem;
-  cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 0.1875rem;
-  transition: color 0.2s ease;
-}
-
-.book-detail-text-action-btn:hover {
-  color: var(--bd-text-dark);
-}
-
-.book-detail-delete-confirm-actions {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 0.5rem;
-}
-
-.book-detail-delete-confirm-cancel {
-  align-self: center;
-}
-
-.book-detail-delete-confirm-submit {
-  width: 100%;
-  min-height: 2.75rem;
-}
-
-@media (min-width: 30.0625rem) {
-  .book-detail-delete-confirm-actions {
-    flex-direction: row;
-    align-items: center;
-    gap: 0.75rem;
-  }
-
-  .book-detail-delete-confirm-cancel {
-    align-self: stretch;
-    flex: 0 1 auto;
-    min-width: 5.5rem;
-  }
-
-  .book-detail-delete-confirm-submit {
-    flex: 1;
-    width: auto;
-  }
 }
 
 @media (max-width: 48rem) {

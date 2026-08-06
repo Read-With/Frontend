@@ -1,7 +1,6 @@
 /* BookLibrary — 서재 카드·삭제 확인 (BookDetailModal 톤과 맞춤) */
 
-.book-card,
-.delete-confirm-modal-overlay {
+.book-card {
   --bl-page: #fefcf8;
   --bl-page-top: #f4f6f3;
   --bl-surface: #fff;
@@ -460,155 +459,6 @@
   flex-shrink: 0;
 }
 
-/* ==================== 삭제 확인 모달 ==================== */
-.delete-confirm-modal-overlay {
-  position: fixed;
-  inset: 0;
-  padding:
-    max(0px, env(safe-area-inset-top, 0px))
-    max(0px, env(safe-area-inset-right, 0px))
-    max(0px, env(safe-area-inset-bottom, 0px))
-    max(0px, env(safe-area-inset-left, 0px));
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 10000;
-  animation: book-library-fade-in 0.2s ease;
-}
-
-@keyframes book-library-fade-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-.delete-confirm-modal {
-  background: var(--bl-surface);
-  border-radius: 0.75rem;
-  box-shadow: 0 0.625rem 2.5rem rgba(0, 0, 0, 0.15);
-  width: 90%;
-  max-width: 25rem;
-  overflow: hidden;
-  animation: book-library-slide-up 0.2s ease;
-}
-
-@keyframes book-library-slide-up {
-  from {
-    transform: translateY(1.25rem);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
-}
-
-.delete-confirm-header {
-  padding: 1.25rem 1.5rem;
-  border-bottom: 0.0625rem solid var(--bl-border-soft);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.delete-confirm-header h3 {
-  margin: 0;
-  font-size: 1.25rem;
-  font-weight: 700;
-  color: var(--bl-text);
-}
-
-.delete-confirm-close {
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0.25rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--bl-text-muted);
-  border-radius: 0.25rem;
-  transition: background 0.2s ease, color 0.2s ease;
-}
-
-.delete-confirm-close:hover {
-  background: var(--bl-surface-muted);
-  color: var(--bl-text);
-}
-
-.delete-confirm-close:focus-visible {
-  outline: 0.125rem solid var(--bl-focus);
-  outline-offset: 0.125rem;
-}
-
-.delete-confirm-body {
-  padding: 1.5rem;
-}
-
-.delete-confirm-message {
-  margin: 0 0 0.5rem 0;
-  font-size: 1rem;
-  color: var(--bl-text);
-  line-height: 1.6;
-  font-weight: 500;
-}
-
-.delete-confirm-actions {
-  display: flex;
-  gap: 0.75rem;
-  padding: 1rem 1.5rem;
-  border-top: 0.0625rem solid var(--bl-border-soft);
-  justify-content: flex-end;
-}
-
-.delete-confirm-actions button {
-  min-width: 5rem;
-}
-
-.delete-confirm-cancel,
-.delete-confirm-delete {
-  padding: 0.625rem 1.25rem;
-  border-radius: var(--bl-radius-sm);
-  font-size: 0.95rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.2s ease, color 0.2s ease;
-  border: none;
-}
-
-.delete-confirm-cancel {
-  background: var(--bl-surface-muted);
-  color: var(--bl-text-muted);
-}
-
-.delete-confirm-cancel:hover {
-  background: var(--bl-surface-muted-hover);
-  color: var(--bl-text);
-}
-
-.delete-confirm-cancel:focus-visible {
-  outline: 0.125rem solid var(--bl-focus);
-  outline-offset: 0.125rem;
-}
-
-.delete-confirm-delete {
-  background: var(--bl-danger);
-  color: var(--bl-surface);
-}
-
-.delete-confirm-delete:hover {
-  background: #b91c1c;
-}
-
-.delete-confirm-delete:focus-visible {
-  outline: 0.125rem solid var(--bl-focus-danger);
-  outline-offset: 0.125rem;
-}
-
 /* ==================== 리스트 뷰 ==================== */
 .book-card.list-view {
   flex-direction: row;
@@ -877,12 +727,7 @@
   .book-action-btn::before,
   .book-action-icon,
   .progress-bar-fill,
-  .book-context-item,
-  .delete-confirm-modal-overlay,
-  .delete-confirm-modal,
-  .delete-confirm-close,
-  .delete-confirm-cancel,
-  .delete-confirm-delete {
+  .book-context-item {
     animation: none;
     transition: none;
   }

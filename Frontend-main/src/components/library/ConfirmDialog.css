@@ -1,0 +1,171 @@
+/* ConfirmDialog — BookLibrary/BookDetailModal 공용 삭제 확인 다이얼로그 */
+
+.delete-confirm-modal-overlay {
+  --cd-surface: #fff;
+  --cd-surface-muted: #f8f9fb;
+  --cd-surface-muted-hover: #e8ebef;
+  --cd-border-soft: #f0f4fa;
+  --cd-text: #333;
+  --cd-text-muted: #666;
+  --cd-radius-sm: 0.5rem;
+  --cd-danger: #dc2626;
+  --cd-focus: var(--brand-focus);
+  --cd-focus-danger: rgba(220, 38, 38, 0.45);
+
+  position: fixed;
+  inset: 0;
+  padding:
+    max(0px, env(safe-area-inset-top, 0px))
+    max(0px, env(safe-area-inset-right, 0px))
+    max(0px, env(safe-area-inset-bottom, 0px))
+    max(0px, env(safe-area-inset-left, 0px));
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  animation: confirm-dialog-fade-in 0.2s ease;
+}
+
+@keyframes confirm-dialog-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.delete-confirm-modal {
+  background: var(--cd-surface);
+  border-radius: 0.75rem;
+  box-shadow: 0 0.625rem 2.5rem rgba(0, 0, 0, 0.15);
+  width: 90%;
+  max-width: 25rem;
+  overflow: hidden;
+  animation: confirm-dialog-slide-up 0.2s ease;
+}
+
+@keyframes confirm-dialog-slide-up {
+  from {
+    transform: translateY(1.25rem);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.delete-confirm-header {
+  padding: 1.25rem 1.5rem;
+  border-bottom: 0.0625rem solid var(--cd-border-soft);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.delete-confirm-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--cd-text);
+}
+
+.delete-confirm-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--cd-text-muted);
+  border-radius: 0.25rem;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.delete-confirm-close:hover {
+  background: var(--cd-surface-muted);
+  color: var(--cd-text);
+}
+
+.delete-confirm-close:focus-visible {
+  outline: 0.125rem solid var(--cd-focus);
+  outline-offset: 0.125rem;
+}
+
+.delete-confirm-body {
+  padding: 1.5rem;
+}
+
+.delete-confirm-message {
+  margin: 0 0 0.5rem 0;
+  font-size: 1rem;
+  color: var(--cd-text);
+  line-height: 1.6;
+  font-weight: 500;
+}
+
+.delete-confirm-actions {
+  display: flex;
+  gap: 0.75rem;
+  padding: 1rem 1.5rem;
+  border-top: 0.0625rem solid var(--cd-border-soft);
+  justify-content: flex-end;
+}
+
+.delete-confirm-actions button {
+  min-width: 5rem;
+}
+
+.delete-confirm-cancel,
+.delete-confirm-delete {
+  padding: 0.625rem 1.25rem;
+  border-radius: var(--cd-radius-sm);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+  border: none;
+}
+
+.delete-confirm-cancel {
+  background: var(--cd-surface-muted);
+  color: var(--cd-text-muted);
+}
+
+.delete-confirm-cancel:hover {
+  background: var(--cd-surface-muted-hover);
+  color: var(--cd-text);
+}
+
+.delete-confirm-cancel:focus-visible {
+  outline: 0.125rem solid var(--cd-focus);
+  outline-offset: 0.125rem;
+}
+
+.delete-confirm-delete {
+  background: var(--cd-danger);
+  color: var(--cd-surface);
+}
+
+.delete-confirm-delete:hover {
+  background: #b91c1c;
+}
+
+.delete-confirm-delete:focus-visible {
+  outline: 0.125rem solid var(--cd-focus-danger);
+  outline-offset: 0.125rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .delete-confirm-modal-overlay,
+  .delete-confirm-modal,
+  .delete-confirm-close,
+  .delete-confirm-cancel,
+  .delete-confirm-delete {
+    animation: none;
+    transition: none;
+  }
+}

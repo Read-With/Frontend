@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
 import { Upload, X, Loader2 } from 'lucide-react';
-import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
-import { getBooks, getBook, uploadBook } from '../../utils/api/booksApi';
+import { getBooksArray, getBook, uploadBook } from '../../utils/api/booksApi';
 import { errorUtils } from '../../utils/common/urlUtils';
 import {
   extractEpubFileMetadata,
@@ -13,7 +12,7 @@ import {
   attachLibraryModalChrome,
 } from '../../utils/library/libraryUtils';
 import { normalizeTitle, normalizeAuthor } from '../../utils/common/valueUtils';
-import { BOOKS_QUERY_KEY, findCanonicalBook } from '../../hooks/books/bookHooks';
+import { findCanonicalBook } from '../../hooks/books/bookHooks';
 import './LibraryModalChrome.css';
 import './FileUpload.css';
 
@@ -36,7 +35,6 @@ function withMetadataTimeout(promise, ms = METADATA_EXTRACT_TIMEOUT_MS) {
 }
 
 const FileUpload = ({ onUploadSuccess, onClose }) => {
-  const queryClient = useQueryClient();
   const [dragActive, setDragActive] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
   const [metadata, setMetadata] = useState(EMPTY_METADATA);
@@ -93,11 +91,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
       throw new Error('제목과 저자를 확인해주세요.');
     }
 
-    let books = queryClient.getQueryData(BOOKS_QUERY_KEY)?.books;
-    if (!Array.isArray(books)) {
-      const res = await getBooks({});
-      books = res?.isSuccess && Array.isArray(res.result) ? res.result : [];
-    }
+    const books = await getBooksArray();
 
     const canonical = findCanonicalBook(books, titleKey, authorKey);
     if (canonical) {
