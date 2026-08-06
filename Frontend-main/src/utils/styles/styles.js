@@ -19,6 +19,11 @@ export function mergeRefs(...refs) {
   };
 }
 
+/** falsy 값을 걸러내고 남은 클래스명을 공백으로 join */
+export function joinClasses(...parts) {
+  return parts.filter(Boolean).join(' ');
+}
+
 /** GRAPH_COLORS 재export (소비자는 COLORS 또는 GRAPH_COLORS) */
 export const COLORS = GRAPH_COLORS;
 

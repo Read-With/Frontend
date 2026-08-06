@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import PropTypes from "prop-types";
 import { List, MousePointer2, Move, Search, SearchX, SlidersHorizontal, ZoomIn } from "lucide-react";
@@ -10,6 +10,7 @@ import {
 } from "../../utils/graph/graphCore.js";
 import { resolveEventOrdinalForDisplay } from "../../utils/viewer/viewerSession";
 import { GRAPH_COLORS, getPositivityGradientCss } from "../../utils/styles/graphStyles.js";
+import { joinClasses } from "../../utils/styles/styles.js";
 import "./RelationGraph.css";
 
 /** 인물 이미지 없을 때 공통 실루엣 */
@@ -41,7 +42,7 @@ export function TooltipCloseButton({ onClose, ariaLabel, className }) {
       type="button"
       onClick={onClose}
       aria-label={ariaLabel}
-      className={['tooltip-close-btn', className].filter(Boolean).join(' ')}
+      className={joinClasses('tooltip-close-btn', className)}
     >
       &times;
     </button>
@@ -157,31 +158,49 @@ function handleProfileImageError(e) {
   if (e.target.nextSibling) e.target.nextSibling.style.display = 'block';
 }
 
-export function NodeProfileAvatar({ node }) {
-  const hasImage = !!node?.hasImage;
-  return (
-    <div className="profile-image-placeholder">
-      <div className="profile-img">
-        {hasImage ? (
-          <img
-            src={node.image}
-            alt={node?.displayName || 'character'}
-            crossOrigin="anonymous"
-            decoding="async"
-            loading="eager"
-            onError={handleProfileImageError}
-          />
-        ) : null}
-        <div style={{ display: hasImage ? 'none' : 'block' }}>
-          <PersonSilhouette size={48} />
-        </div>
+/**
+ * 인물 아바타(이미지 또는 실루엣 폴백). 사이드바/툴팁 헤더와 관계 분석 모달 헤더가 공유한다.
+ * innerClassName을 null로 주면 바깥 wrapper 없이 단일 컨테이너로 렌더링(예: relation-modal-avatar).
+ */
+export function NodeProfileAvatar({
+  node,
+  size = 48,
+  className = 'profile-image-placeholder',
+  innerClassName = 'profile-img',
+  style,
+}) {
+  const hasImage = !!node?.hasImage && !!node?.image;
+  const content = (
+    <>
+      {hasImage ? (
+        <img
+          src={node.image}
+          alt={node?.displayName || 'character'}
+          crossOrigin="anonymous"
+          decoding="async"
+          loading="eager"
+          onError={handleProfileImageError}
+        />
+      ) : null}
+      <div style={{ display: hasImage ? 'none' : 'block' }}>
+        <PersonSilhouette size={size} />
       </div>
+    </>
+  );
+
+  return (
+    <div className={className} style={style}>
+      {innerClassName ? <div className={innerClassName}>{content}</div> : content}
     </div>
   );
 }
 
 NodeProfileAvatar.propTypes = {
   node: PropTypes.object,
+  size: PropTypes.number,
+  className: PropTypes.string,
+  innerClassName: PropTypes.string,
+  style: PropTypes.object,
 };
 
 /** 분할·전체 그래프 상단 챕터/사건 메타 (공통) */
@@ -768,8 +787,9 @@ export function GraphFloatingControls({
   const optionsRef = useClickOutside(() => setOptionsOpen(false), optionsOpen);
   const modKey = useModKeyLabel();
 
-  const gestureSeenInitially = readSessionHintSeen(GESTURE_HINT_SESSION_KEY);
-  const legendSeenInitially = readSessionHintSeen(LEGEND_HINT_SESSION_KEY);
+  // 마운트 시 1회만 sessionStorage를 읽는다(매 리렌더마다 동기 I/O 재실행 방지).
+  const gestureSeenInitially = useMemo(() => readSessionHintSeen(GESTURE_HINT_SESSION_KEY), []);
+  const legendSeenInitially = useMemo(() => readSessionHintSeen(LEGEND_HINT_SESSION_KEY), []);
   // 둘 다 미확인이면 조작 안내만 먼저 자동 오픈 → 닫힌 뒤 범례 오픈
   const gestureHint = useSessionHint(GESTURE_HINT_SESSION_KEY, {
     autoOpen: showGestureHint && !gestureSeenInitially,

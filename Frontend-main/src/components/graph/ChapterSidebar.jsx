@@ -3,6 +3,7 @@ import PropTypes from 'prop-types';
 import { BookOpen, ChevronLeft, ChevronRight } from 'lucide-react';
 import { buildChapterSidebarItems } from '../../utils/graph/graphCore.js';
 import { useIsNarrowViewport } from '../../hooks/graph/useGraphViewState.js';
+import { joinClasses } from '../../utils/styles/styles.js';
 import './RelationGraph.css';
 
 const META_READING = '본문 읽는 중';
@@ -113,13 +114,11 @@ export default function ChapterSidebar({
   }, [focusIndex]);
 
   const toggleLabel = isSidebarOpen ? '챕터 목록 접기' : '챕터 목록 펼치기';
-  const railClass = [
+  const railClass = joinClasses(
     'graph-chapter-rail',
     isSidebarOpen ? 'is-open' : 'is-collapsed',
     isNarrow ? 'is-narrow' : '',
-  ]
-    .filter(Boolean)
-    .join(' ');
+  );
 
   return (
     <>
@@ -196,14 +195,12 @@ export default function ChapterSidebar({
                 role="option"
                 data-focus-index={index}
                 ref={selected ? selectedRef : undefined}
-                className={[
+                className={joinClasses(
                   'graph-chapter-rail-item',
                   selected ? 'is-selected' : '',
                   noGraph ? 'is-empty' : '',
                   focused ? 'is-focused' : '',
-                ]
-                  .filter(Boolean)
-                  .join(' ')}
+                )}
                 aria-label={`${item.label}${meta ? `, ${meta}` : ''} 선택`}
                 aria-selected={selected}
                 aria-current={selected ? 'page' : undefined}

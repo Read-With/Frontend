@@ -84,8 +84,6 @@ GraphZoomControls.propTypes = {
   className: PropTypes.string,
 };
 
-export { GraphZoomControls };
-
 const EMPTY_ELEMENTS_UPDATE = {
   nodesToAdd: [],
   edgesToAdd: [],

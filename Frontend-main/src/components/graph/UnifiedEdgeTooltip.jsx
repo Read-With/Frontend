@@ -1,4 +1,5 @@
 import { memo, useState, useEffect, useMemo } from "react";
+import PropTypes from "prop-types";
 import {ResponsiveContainer, LineChart, CartesianGrid, ReferenceLine, Tooltip as RechartsTooltip, Line, XAxis, YAxis,} from "recharts";
 import { useParams } from "react-router-dom";
 import { useTooltipPosition, useClickOutside, useCanvasAvoidPoint } from "../../hooks/ui/tooltipHooks";
@@ -94,8 +95,8 @@ function UnifiedEdgeTooltip({
     setViewMode("info");
   }, [data?.id, data?.source, data?.target]);
 
-  const id1 = toFiniteNumber(data.source);
-  const id2 = toFiniteNumber(data.target);
+  const id1 = toFiniteNumber(data?.source);
+  const id2 = toFiniteNumber(data?.target);
 
   const displayEventNum = toPositiveNumberOrNull(eventNum) ?? 0;
 
@@ -607,11 +608,31 @@ function UnifiedEdgeTooltip({
   );
 }
 
+const endpointShape = PropTypes.shape({
+  label: PropTypes.string,
+  image: PropTypes.string,
+});
+
+UnifiedEdgeTooltip.propTypes = {
+  data: PropTypes.object.isRequired,
+  x: PropTypes.number,
+  y: PropTypes.number,
+  onClose: PropTypes.func,
+  variant: PropTypes.oneOf(['graphPage', 'viewer']),
+  currentChapter: PropTypes.number,
+  eventNum: PropTypes.number,
+  bookId: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+  sourceEndpoint: endpointShape,
+  targetEndpoint: endpointShape,
+  tooltipBoundsRef: PropTypes.shape({ current: PropTypes.any }),
+};
+
 export default memo(UnifiedEdgeTooltip, (prevProps, nextProps) => {
   return (
     prevProps.data === nextProps.data &&
     prevProps.x === nextProps.x &&
     prevProps.y === nextProps.y &&
+    prevProps.onClose === nextProps.onClose &&
     prevProps.currentChapter === nextProps.currentChapter &&
     prevProps.eventNum === nextProps.eventNum &&
     prevProps.variant === nextProps.variant &&

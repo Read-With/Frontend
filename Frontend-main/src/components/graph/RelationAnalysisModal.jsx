@@ -1,4 +1,5 @@
 import { memo, useState, useEffect, useCallback, useMemo, useRef } from "react";
+import PropTypes from "prop-types";
 import {
   GRAPH_LAYOUT_CONSTANTS,
   RELATION_CONNECTION_KIND,
@@ -6,7 +7,8 @@ import {
 import {Radar,RadarChart,PolarGrid,PolarAngleAxis,PolarRadiusAxis,ResponsiveContainer,} from 'recharts';
 import { getPositivityDisplay, clampPositivity, getPositivityGradientCss, GRAPH_COLORS, brandAlpha } from '../../utils/styles/graphStyles.js';
 import { truncateWithEllipsis, cycleIndex } from '../../utils/common/valueUtils.js';
-import { PersonSilhouette } from './GraphControls';
+import { joinClasses } from '../../utils/styles/styles.js';
+import { NodeProfileAvatar } from './GraphControls';
 import './RelationGraph.css';
 
 const NAME_LABEL_MAX = 11; // truncate 시 10자 + …
@@ -29,8 +31,6 @@ const SIBLING_NAV = [
 
 const FOCUSABLE_SELECTOR =
   'button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
-
-const joinClasses = (...parts) => parts.filter(Boolean).join(' ');
 
 function RelationTagsRow({ tags }) {
   if (!tags?.length) return null;
@@ -300,25 +300,6 @@ function FewConnectionsPanel({
           />
         ))}
       </div>
-    </div>
-  );
-}
-
-function PersonAvatar({ node, size = 40 }) {
-  const hasImage = !!node?.hasImage && node?.image;
-  return (
-    <div className="relation-modal-avatar" style={{ width: size, height: size }}>
-      {hasImage ? (
-        <img
-          src={node.image}
-          alt=""
-          crossOrigin="anonymous"
-          decoding="async"
-          loading="eager"
-        />
-      ) : (
-        <PersonSilhouette size={size} />
-      )}
     </div>
   );
 }
@@ -624,7 +605,13 @@ function RelationAnalysisModalImpl({
       >
         <div className="modal-header relation-modal-header">
           <div className="relation-modal-header-main">
-            <PersonAvatar node={node} />
+            <NodeProfileAvatar
+              node={node}
+              size={40}
+              className="relation-modal-avatar"
+              innerClassName={null}
+              style={{ width: 40, height: 40 }}
+            />
             <div className="relation-modal-header-copy">
               <h2 id={titleId} className="tooltip-modal-title">
                 {node?.displayName || '인물'} 관계 분석
@@ -686,6 +673,26 @@ function RelationAnalysisModalImpl({
     </div>
   );
 }
+
+RelationAnalysisModalImpl.propTypes = {
+  node: PropTypes.object,
+  radarChartData: PropTypes.arrayOf(
+    PropTypes.shape({
+      id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+      name: PropTypes.string,
+      positivity: PropTypes.number,
+      normalizedValue: PropTypes.number,
+      relationTags: PropTypes.arrayOf(PropTypes.string),
+    }),
+  ),
+  connectionKind: PropTypes.oneOf(Object.values(RELATION_CONNECTION_KIND)),
+  loadError: PropTypes.string,
+  onClose: PropTypes.func.isRequired,
+  onSelectRelatedNode: PropTypes.func,
+  returnFocusRef: PropTypes.shape({ current: PropTypes.any }),
+  chapterRailWidth: PropTypes.number,
+  reserveRight: PropTypes.number,
+};
 
 const RelationAnalysisModal = memo(RelationAnalysisModalImpl);
 

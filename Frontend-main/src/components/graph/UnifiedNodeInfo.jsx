@@ -1,4 +1,5 @@
 import { lazy, memo, Suspense, useState, useEffect, useCallback, useMemo, useRef } from "react";
+import PropTypes from "prop-types";
 import { useParams } from "react-router-dom";
 import {
   processRelations,
@@ -50,9 +51,6 @@ const radarError = (message) => ({
 
 const Z_INDEX_TOOLTIP = 99999;
 const SUMMARY = { COLLAPSED: 'collapsed', WARNING: 'warning', CONTENT: 'content' };
-
-/** 뷰어처럼 key remount 되어도 분석 모달을 유지하기 위한 플래그 */
-let pendingKeepAnalysisOpen = false;
 
 function checkNodeAppearance({ isSidebar, data, node, currentChapter, folderKey, eventNum, elements }) {
   const isGraphOnlyPage =
@@ -234,6 +232,7 @@ function UnifiedNodeInfo({
   onSelectRelatedNode = null,
   chapterRailWidth = null,
   tooltipBoundsRef = null,
+  pendingKeepAnalysisOpenRef = null,
 }) {
   const { filename: urlFilename } = useParams();
   const isSidebar = displayMode === 'sidebar';
@@ -241,12 +240,16 @@ function UnifiedNodeInfo({
   const folderKey = apiBookId ? `api:${apiBookId}` : null;
   const node = useMemo(() => buildProcessedNode(data), [data]);
 
+  /** 뷰어처럼 key remount 되어도 분석 모달을 유지하기 위한 플래그. 호출부가 넘긴 ref가 없으면 이 인스턴스 전용 ref로 대체(remount 시엔 유지되지 않음). */
+  const ownPendingRef = useRef(false);
+  const pendingRef = pendingKeepAnalysisOpenRef || ownPendingRef;
+
   const [appeared, setAppeared] = useState(false);
   const [error, setError] = useState(null);
   const [summaryStage, setSummaryStage] = useState(SUMMARY.COLLAPSED);
   const [isModalOpen, setIsModalOpen] = useState(() => {
-    if (pendingKeepAnalysisOpen) {
-      pendingKeepAnalysisOpen = false;
+    if (pendingRef.current) {
+      pendingRef.current = false;
       return true;
     }
     return false;
@@ -257,21 +260,21 @@ function UnifiedNodeInfo({
 
   const openModal = useCallback(() => setIsModalOpen(true), []);
   const closeModal = useCallback(() => {
-    pendingKeepAnalysisOpen = false;
+    pendingRef.current = false;
     setIsModalOpen(false);
-  }, []);
+  }, [pendingRef]);
 
   const handleSelectRelatedNode = useCallback((idOrName, options = {}) => {
     if (!onSelectRelatedNode) return false;
     if (options.keepAnalysisOpen) {
       keepModalOpenRef.current = true;
-      pendingKeepAnalysisOpen = true;
+      pendingRef.current = true;
     } else {
-      pendingKeepAnalysisOpen = false;
+      pendingRef.current = false;
       keepModalOpenRef.current = false;
     }
     return onSelectRelatedNode(idOrName, options);
-  }, [onSelectRelatedNode]);
+  }, [onSelectRelatedNode, pendingRef]);
 
   const isPovUnlockedForNode = useCallback((nodeId) => {
     if (nodeId == null || nodeId === '') return false;
@@ -639,5 +642,30 @@ function UnifiedNodeInfo({
     </div>
   );
 }
+
+UnifiedNodeInfo.propTypes = {
+  displayMode: PropTypes.oneOf(['tooltip', 'sidebar']),
+  data: PropTypes.object,
+  x: PropTypes.number,
+  y: PropTypes.number,
+  onClose: PropTypes.func,
+  currentChapter: PropTypes.number,
+  eventNum: PropTypes.number,
+  elements: PropTypes.array,
+  filename: PropTypes.string,
+  currentEvent: PropTypes.any,
+  prevValidEvent: PropTypes.any,
+  povSummaries: PropTypes.any,
+  povError: PropTypes.string,
+  povIsLoading: PropTypes.bool,
+  povCached: PropTypes.bool,
+  onRetryPov: PropTypes.func,
+  showPovSummary: PropTypes.bool,
+  apiBookGraphData: PropTypes.object,
+  onSelectRelatedNode: PropTypes.func,
+  chapterRailWidth: PropTypes.number,
+  tooltipBoundsRef: PropTypes.shape({ current: PropTypes.any }),
+  pendingKeepAnalysisOpenRef: PropTypes.shape({ current: PropTypes.bool }),
+};
 
 export default memo(UnifiedNodeInfo);

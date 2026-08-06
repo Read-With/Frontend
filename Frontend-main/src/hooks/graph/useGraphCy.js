@@ -15,6 +15,8 @@ import {
   applySelectionHighlight,
   buildTapShowArgs,
   calculateGraphTooltipPosition,
+  captureCyViewport,
+  centerSelectionOnElementId,
   clearHighlightClassesOn,
   ensureElementsInBounds,
   fitGraphToNodes,
@@ -25,6 +27,7 @@ import {
   isSidebarElement,
   openTooltipFromTap,
   resolveGraphTooltipAnchor,
+  restoreCyViewport,
   syncReciprocalPairJunctionOffsets,
   runPresetLayout,
   runCoseBilkentLayout,
@@ -37,6 +40,7 @@ import {
   OVERLAP_PROFILES,
 } from '../../utils/graph/graphModel';
 import {
+  GRAPH_LAYOUT_CONSTANTS,
   GRAPH_ZOOM,
   GRAPH_CHARACTER_FILTER_STAGE_OPTIONS,
 } from '../../utils/graph/graphCore.js';
@@ -601,6 +605,82 @@ export function useGraphTopbarToolsReserve(topbarRef, toolsRef, enabled = true) 
     ro.observe(tools);
     return () => ro.disconnect();
   }, [enabled, topbarRef, toolsRef]);
+}
+
+/**
+ * 그래프 캔버스의 뷰포트 포커스 저장/복원과 선택·툴팁 해제 로직을 한데 묶은 훅.
+ * 노드/간선 선택 시 현재 뷰포트를 저장해뒀다가, 선택 해제(사이드바 닫힘, 챕터 전환 등) 시 복원한다.
+ */
+export function useGraphViewportFocus({
+  cyRef,
+  graphClearRef,
+  isNarrow,
+  isSidebarOpen,
+  closeSidebar,
+  startClosing,
+  cancelClosing,
+}) {
+  const preFocusViewportRef = useRef(null);
+
+  const clearGraphSelection = useCallback((options = {}) => {
+    graphClearRef.current?.(options);
+    if (options.restoreViewport === false) {
+      preFocusViewportRef.current = null;
+      return;
+    }
+    const snapshot = preFocusViewportRef.current;
+    preFocusViewportRef.current = null;
+    restoreCyViewport(cyRef.current, snapshot, {
+      duration: GRAPH_LAYOUT_CONSTANTS.FOCUS_PAN_MS,
+    });
+  }, [cyRef, graphClearRef]);
+
+  // 좌(챕터 레일)는 캔버스 offset으로 이미 제외. 우(정보 슬라이드바)는 오버레이라 예약.
+  const centerSelection = useCallback((elementId) => {
+    const cy = cyRef.current;
+    if (!cy || elementId == null || elementId === '') return;
+
+    if (!preFocusViewportRef.current) {
+      preFocusViewportRef.current = captureCyViewport(cy);
+    }
+
+    const reserveLeft = isNarrow && isSidebarOpen
+      ? GRAPH_LAYOUT_CONSTANTS.SIDEBAR.OPEN_WIDTH
+      : 0;
+
+    centerSelectionOnElementId(cy, elementId, {
+      duration: GRAPH_LAYOUT_CONSTANTS.FOCUS_PAN_MS,
+      reserveRight: GRAPH_LAYOUT_CONSTANTS.TOOLTIP_SIDEBAR_WIDTH,
+      reserveLeft,
+      padding: 40,
+    });
+  }, [cyRef, isNarrow, isSidebarOpen]);
+
+  const onClearTooltip = useCallback(() => {
+    closeSidebar();
+    const snapshot = preFocusViewportRef.current;
+    preFocusViewportRef.current = null;
+    restoreCyViewport(cyRef.current, snapshot, {
+      duration: GRAPH_LAYOUT_CONSTANTS.FOCUS_PAN_MS,
+    });
+  }, [cyRef, closeSidebar]);
+
+  const dismissTooltip = useCallback(() => {
+    clearGraphSelection({ fitViewport: false });
+    startClosing();
+  }, [clearGraphSelection, startClosing]);
+
+  const onBeforeOpenTooltip = useCallback(() => {
+    cancelClosing();
+  }, [cancelClosing]);
+
+  return {
+    clearGraphSelection,
+    centerSelection,
+    onClearTooltip,
+    dismissTooltip,
+    onBeforeOpenTooltip,
+  };
 }
 
 export function useGraphTooltipSelection({

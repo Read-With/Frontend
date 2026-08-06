@@ -48,6 +48,7 @@ function GraphSidebar({
   onSelectRelatedNode = null,
   chapterRailWidth = null,
   onRequestFocusCanvas = null,
+  pendingKeepAnalysisOpenRef = null,
 }) {
   const [isClosing, setIsClosing] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
@@ -134,6 +135,7 @@ function GraphSidebar({
         apiBookGraphData={apiBookGraphData}
         onSelectRelatedNode={onSelectRelatedNode}
         chapterRailWidth={chapterRailWidth}
+        pendingKeepAnalysisOpenRef={pendingKeepAnalysisOpenRef}
         {...sharedTooltipProps}
       />
     );
@@ -194,6 +196,7 @@ function GraphCanvas({
   graphClearRef,
   graphSelectNodeRef = null,
   onSelectRelatedNode = null,
+  pendingKeepAnalysisOpenRef = null,
 }) {
   const { isSidebarClosing, onCloseSidebar, onStartClosing, onClearGraph } = sidebarControl;
   const { isSearchActive, filteredElements, searchTerm, fitNodeIds } = searchState;
@@ -296,6 +299,7 @@ function GraphCanvas({
               onSelectRelatedNode={onSelectRelatedNode}
               chapterRailWidth={chapterRailWidth}
               onRequestFocusCanvas={focusCanvas}
+              pendingKeepAnalysisOpenRef={pendingKeepAnalysisOpenRef}
             />
           )}
 
@@ -387,6 +391,7 @@ GraphCanvas.propTypes = {
   graphClearRef: PropTypes.object,
   graphSelectNodeRef: PropTypes.object,
   onSelectRelatedNode: PropTypes.func,
+  pendingKeepAnalysisOpenRef: PropTypes.shape({ current: PropTypes.bool }),
 };
 
 export default memo(GraphCanvas);
