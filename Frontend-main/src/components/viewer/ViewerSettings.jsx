@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useId } from 'react';
+import PropTypes from 'prop-types';
 import { Check, Eye, Type, X } from 'lucide-react';
 import {
   defaultSettings,
@@ -257,6 +258,17 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, settings }) => {
       </div>
     </div>
   );
+};
+
+ViewerSettings.propTypes = {
+  isOpen: PropTypes.bool.isRequired,
+  onClose: PropTypes.func.isRequired,
+  onApplySettings: PropTypes.func.isRequired,
+  settings: PropTypes.shape({
+    showGraph: PropTypes.bool,
+    fontSize: PropTypes.number,
+    lineHeight: PropTypes.number,
+  }),
 };
 
 export default ViewerSettings;

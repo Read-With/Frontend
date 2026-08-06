@@ -1,4 +1,5 @@
 import { lazy, Suspense, useMemo, useRef, memo, useCallback, useEffect, useState, useId } from 'react';
+import PropTypes from 'prop-types';
 import { useNavigate, useParams } from 'react-router-dom';
 import { AlertCircle, Inbox, Loader2, Maximize, Minimize } from 'lucide-react';
 import CytoscapeGraphUnified from '../graph/CytoscapeGraphUnified';
@@ -395,20 +396,58 @@ const GraphSplitArea = memo(function GraphSplitArea({
   });
 
   const hasElements = Array.isArray(elements) && elements.length > 0;
-  // 확정 이벤트 + 타깃 callKey 일치 시에만 노출 (이전 이벤트 stale 금지)
-  const canShowGraph = isDataReady && hasResolvedEvent && hasElements && graphMatchesTarget;
-  const isGraphIdle = graphPhase === 'idle';
   const isEventTransition =
     transitionState.type === 'event' && transitionState.inProgress;
-  const isGraphRefreshing = graphPhase === 'event' || isEventTransition;
 
-  const isDataLoadCompleteAndEmpty =
-    isGraphIdle &&
-    isDataReady &&
-    isDataEmpty &&
-    !hasElements &&
-    hasResolvedEvent &&
-    graphMatchesTarget;
+  /**
+   * 그래프 패널에 무엇을 보여줄지 결정하는 파생 상태를 한곳에 모음.
+   * - canShowGraph: 확정 이벤트 + 타깃 callKey 일치 + elements 있음 → 캔버스 노출 (이전 이벤트 stale 금지)
+   * - isDataLoadCompleteAndEmpty: 로딩이 끝났고 이 챕터엔 표시할 이벤트가 없음 → 빈 상태 패널
+   * - isGraphRefreshing: 이벤트 전환 중 → 캔버스는 유지한 채 오버레이만 노출
+   * - shouldShowLoading / resolvedApiError: 캔버스를 아직 그릴 수 없을 때의 대체 패널
+   */
+  const graphStatus = useMemo(() => {
+    const isGraphIdle = graphPhase === 'idle';
+    const canShowGraph = isDataReady && hasResolvedEvent && hasElements && graphMatchesTarget;
+    const isGraphRefreshing = graphPhase === 'event' || isEventTransition;
+    const isDataLoadCompleteAndEmpty =
+      isGraphIdle && isDataReady && isDataEmpty && !hasElements && hasResolvedEvent && graphMatchesTarget;
+    const resolvedApiError = normalizeGraphApiError(apiError);
+    const shouldShowLoading = !canShowGraph && !isDataLoadCompleteAndEmpty && !resolvedApiError;
+    const showRefreshOverlay = canShowGraph && isGraphRefreshing;
+    const loadingNotice = getViewerGraphLoadingNotice(
+      isGraphRefreshing || !isDataReady || !hasResolvedEvent || !graphMatchesTarget,
+      isLocationDetermined,
+      transitionState.type
+    );
+    return {
+      canShowGraph,
+      isDataLoadCompleteAndEmpty,
+      resolvedApiError,
+      shouldShowLoading,
+      showRefreshOverlay,
+      loadingNotice,
+    };
+  }, [
+    graphPhase,
+    isEventTransition,
+    isDataReady,
+    hasResolvedEvent,
+    hasElements,
+    graphMatchesTarget,
+    isDataEmpty,
+    apiError,
+    isLocationDetermined,
+    transitionState.type,
+  ]);
+  const {
+    canShowGraph,
+    isDataLoadCompleteAndEmpty,
+    resolvedApiError,
+    shouldShowLoading,
+    showRefreshOverlay,
+    loadingNotice,
+  } = graphStatus;
 
   // hidden 동안에는 이전에 표시 중이던 이벤트 메타를 유지 (새 이벤트+옛 elements 혼선 방지)
   const [mountedEvent, setMountedEvent] = useState(currentEvent);
@@ -424,21 +463,6 @@ const GraphSplitArea = memo(function GraphSplitArea({
   const graphEventForCanvas = canShowGraph ? currentEvent : mountedEvent;
   const graphChapterForCanvas = canShowGraph ? currentChapter : mountedChapter;
   const graphPrevValidForCanvas = canShowGraph ? prevValidEvent : mountedPrevValidEvent;
-
-  const resolvedApiError = normalizeGraphApiError(apiError);
-
-  const shouldShowLoading =
-    !canShowGraph &&
-    !isDataLoadCompleteAndEmpty &&
-    !resolvedApiError;
-
-  const showRefreshOverlay = canShowGraph && isGraphRefreshing;
-
-  const loadingNotice = getViewerGraphLoadingNotice(
-    isGraphRefreshing || !isDataReady || !hasResolvedEvent || !graphMatchesTarget,
-    isLocationDetermined,
-    transitionState.type
-  );
 
   const openRelationGraphPage = useCallback(() => {
     const id = resolvePositiveBookId(routeBookId, book?.id, bookKey, routeFilename);
@@ -565,5 +589,27 @@ const GraphSplitArea = memo(function GraphSplitArea({
     </div>
   );
 });
+
+GraphSplitArea.propTypes = {
+  graphState: PropTypes.object.isRequired,
+  graphActions: PropTypes.object.isRequired,
+  viewerState: PropTypes.object.isRequired,
+  searchState: PropTypes.object,
+  searchActions: PropTypes.object,
+  tooltipProps: PropTypes.shape({
+    activeTooltip: PropTypes.object,
+    onClearTooltip: PropTypes.func,
+    onSetActiveTooltip: PropTypes.func,
+    graphClearRef: PropTypes.object,
+  }).isRequired,
+  transitionState: PropTypes.shape({
+    type: PropTypes.string,
+    inProgress: PropTypes.bool,
+  }).isRequired,
+  apiError: PropTypes.oneOfType([PropTypes.object, PropTypes.string]),
+  cachedLocation: PropTypes.object,
+  resumeAnchor: PropTypes.object,
+  onToggleGraph: PropTypes.func,
+};
 
 export default GraphSplitArea;

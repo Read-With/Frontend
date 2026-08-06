@@ -9,6 +9,7 @@ import {
   useMemo,
 } from 'react';
 import { flushSync } from 'react-dom';
+import PropTypes from 'prop-types';
 import { errorUtils } from '../../utils/common/urlUtils';
 import {
   absoluteOffsetFromReadingProgressPercent,
@@ -538,4 +539,22 @@ const XhtmlViewer = forwardRef(
 );
 
 XhtmlViewer.displayName = 'XhtmlViewer';
+XhtmlViewer.propTypes = {
+  book: PropTypes.object,
+  bookKey: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  onCurrentPageChange: PropTypes.func,
+  onTotalPagesChange: PropTypes.func,
+  onCurrentLineChange: PropTypes.func,
+  settings: PropTypes.shape({
+    fontSize: PropTypes.number,
+    lineHeight: PropTypes.number,
+    fontFamily: PropTypes.string,
+    margin: PropTypes.number,
+  }),
+  manifestReady: PropTypes.bool,
+  suppressViewport: PropTypes.bool,
+  suppressMessage: PropTypes.string,
+  onToggleChrome: PropTypes.func,
+};
+
 export default XhtmlViewer;
