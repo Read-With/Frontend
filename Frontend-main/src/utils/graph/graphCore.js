@@ -372,9 +372,9 @@ export const GRAPH_ZOOM = {
   /** 소규모 그래프가 화면에 가깝게 채워지도록 상한을 넉넉히 */
   MAX: 3.2,
   /** cy.fit 여백 — 가장자리 여유 (작을수록 그래프가 크게 보임) */
-  FIT_PADDING: 32,
+  FIT_PADDING: 44,
   /** 최초/챕터 fit 전용 여백 — 등장 시 노드·간선이 캔버스 가장자리에 닿지 않도록 충분히 확보 */
-  FIT_PADDING_INITIAL: 32,
+  FIT_PADDING_INITIAL: 44,
   /** 초기 fit 후 추가 줌인 배율 (1 = 추가 없음).
    *  1보다 크면 fit 이후 화면 밖으로 나가는 노드가 재보정 없이 방치되므로 1로 고정 */
   FIT_FILL: 1,
