@@ -167,6 +167,40 @@ export const COSE_BILKENT_LAYOUT = Object.freeze({
   tilingPaddingHorizontal: 32,
 });
 
+/** 노드가 몇 개뿐인 그래프에 COSE_BILKENT_LAYOUT 기본값(넓은 그래프 기준)을 그대로 쓰면
+ *  서로 당겨줄 간선·중력이 약해 과도하게 퍼진다. 노드 수가 적을수록 간선 길이·반발력을
+ *  줄이고 중력을 높여 촘촘하게 모은다. */
+const LAYOUT_DENSITY_RANGE = {
+  MIN_NODES: 3,
+  MAX_NODES: 20,
+  SPARSE: { idealEdgeLength: 70, nodeRepulsion: 2200, gravity: 0.5 },
+};
+
+function lerp(a, b, t) {
+  return a + (b - a) * t;
+}
+
+/** 노드 수에 맞춰 idealEdgeLength·nodeRepulsion·gravity를 보간한 cose-bilkent 레이아웃 옵션 */
+export function resolveCoseBilkentLayout(nodeCount) {
+  const { MIN_NODES, MAX_NODES, SPARSE } = LAYOUT_DENSITY_RANGE;
+  const count = Number(nodeCount);
+
+  if (!Number.isFinite(count) || count <= MIN_NODES) {
+    return { ...COSE_BILKENT_LAYOUT, ...SPARSE };
+  }
+  if (count >= MAX_NODES) {
+    return { ...COSE_BILKENT_LAYOUT };
+  }
+
+  const t = (count - MIN_NODES) / (MAX_NODES - MIN_NODES);
+  return {
+    ...COSE_BILKENT_LAYOUT,
+    idealEdgeLength: lerp(SPARSE.idealEdgeLength, COSE_BILKENT_LAYOUT.idealEdgeLength, t),
+    nodeRepulsion: lerp(SPARSE.nodeRepulsion, COSE_BILKENT_LAYOUT.nodeRepulsion, t),
+    gravity: lerp(SPARSE.gravity, COSE_BILKENT_LAYOUT.gravity, t),
+  };
+}
+
 /** @param {'graph'|'viewer'|'default'} [context='default'] viewer는 분할 밀도용 얇은 간선 */
 export const getEdgeStyle = (context = 'default') => ({
   width: context === 'viewer' ? 3.5 : 5,

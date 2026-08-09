@@ -4,7 +4,7 @@ import cytoscape from 'cytoscape';
 import coseBilkent from 'cytoscape-cose-bilkent';
 import {
   PRESET_LAYOUT,
-  COSE_BILKENT_LAYOUT,
+  resolveCoseBilkentLayout,
   estimateNodeSizePx,
 } from '../styles/graphStyles.js';
 import { clampPositivity } from '../common/valueUtils';
@@ -120,12 +120,12 @@ export function runPresetLayout(cy, eles) {
   }
 }
 
-/** 최초/전체 재배치용 cose-bilkent (실패 시 preset) */
+/** 최초/전체 재배치용 cose-bilkent (실패 시 preset). 노드 수가 적으면 간격을 촘촘하게 스케일. */
 export function runCoseBilkentLayout(cy) {
   if (!cy) return;
   ensureCoseBilkentRegistered();
   try {
-    cy.layout({ ...COSE_BILKENT_LAYOUT }).run();
+    cy.layout(resolveCoseBilkentLayout(cy.nodes().length)).run();
   } catch {
     runPresetLayout(cy);
   }
