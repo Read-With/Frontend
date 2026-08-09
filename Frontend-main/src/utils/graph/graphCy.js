@@ -1358,7 +1358,8 @@ const PLACEMENT_EXPAND_RING_MULTS = [3.0, 3.5, 4.0, 5.0, 6.0, 8.0];
 const PLACEMENT_SPIRAL_MAX = 360;
 const PLACEMENT_SPIRAL_STEP = 6;
 const PLACEMENT_GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
-const PLACEMENT_IDEAL_EDGE = 100;
+/** COSE_BILKENT_LAYOUT.idealEdgeLength와 맞춰, 전체 재배치와 증분 배치의 여유 간격을 일치시킨다 */
+const PLACEMENT_IDEAL_EDGE = 130;
 const PLACEMENT_LABEL_GAP = 10;
 const PLACEMENT_BOUNDS_PAD = 80;
 /** 라벨 겹침은 soft penalty (body-body만 hard reject) */

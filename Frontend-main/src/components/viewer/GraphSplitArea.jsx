@@ -6,7 +6,7 @@ import CytoscapeGraphUnified from '../graph/CytoscapeGraphUnified';
 import UnifiedNodeInfo from '../graph/UnifiedNodeInfo';
 import { useGraphElementPipeline } from '../../hooks/graph/useGraphViewState';
 import { getEdgeStyle, createGraphStylesheet } from '../../utils/styles/graphStyles';
-import { centerSelectionOnElementId } from '../../utils/graph/graphCy';
+import { captureCyViewport, centerSelectionOnElementId, restoreCyViewport } from '../../utils/graph/graphCy';
 import {
   GraphA11yStatus,
   shouldIgnoreGraphOutsideClick,
@@ -159,28 +159,47 @@ const GraphContainer = memo(function GraphContainer({
     ? filteredElements
     : elements;
 
-  const dismissTooltip = useCallback(() => {
+  // 클릭으로 뷰포트가 이동하기 전 상태를 저장해뒀다가, 선택 해제 시 그 배치로 되돌린다.
+  const preFocusViewportRef = useRef(null);
+
+  // 챕터·이벤트가 바뀌면 그래프 자체가 다시 fit되므로, 이전 배치 스냅샷은 더 이상 유효하지 않다.
+  useEffect(() => {
+    preFocusViewportRef.current = null;
+  }, [currentChapter, currentEvent]);
+
+  const restoreFocusViewport = useCallback(() => {
+    const snapshot = preFocusViewportRef.current;
+    preFocusViewportRef.current = null;
+    if (snapshot) restoreCyViewport(cyRef.current, snapshot, { duration: 400 });
+  }, [cyRef]);
+
+  const handleClearTooltip = useCallback(() => {
+    restoreFocusViewport();
     onClearTooltip?.();
-  }, [onClearTooltip]);
+  }, [restoreFocusViewport, onClearTooltip]);
 
   const closeTooltipAndRestoreFocus = useCallback(() => {
-    onClearTooltip?.();
+    handleClearTooltip();
     requestAnimationFrame(() => {
       canvasAreaRef.current?.focus({ preventScroll: true });
     });
-  }, [onClearTooltip]);
+  }, [handleClearTooltip]);
 
   const { onKeyDown: handleCanvasKeyDown, liveAnnouncement, ariaLabel } = useGraphCanvasKeyboard({
     cyRef,
     graphClearRef,
     selectElementRef: graphSelectElementRef,
     activeTooltip,
-    onClearTooltip: dismissTooltip,
+    onClearTooltip: handleClearTooltip,
   });
 
   const centerSelection = useCallback((elementId) => {
     const cy = cyRef.current;
     if (!cy) return;
+
+    if (!preFocusViewportRef.current) {
+      preFocusViewportRef.current = captureCyViewport(cy);
+    }
 
     // 분할화면은 패널이 좁아 툴팁 전체 폭을 비우면 줌이 과도하게 줄어듦 — 약간 겹침 허용
     centerSelectionOnElementId(cy, elementId, {
@@ -200,7 +219,7 @@ const GraphContainer = memo(function GraphContainer({
     centerSelection,
     focusDelayMs: 50,
     tooltipOpen: !!activeTooltip,
-    onDismiss: dismissTooltip,
+    onDismiss: handleClearTooltip,
     shouldIgnoreClick: (event) => shouldIgnoreGraphOutsideClick(event, 'viewer'),
     attachDelayMs: 50,
   });
@@ -286,7 +305,7 @@ const GraphContainer = memo(function GraphContainer({
           filteredElements={filteredElements}
           onShowNodeTooltip={onShowNodeTooltip}
           onShowEdgeTooltip={onShowEdgeTooltip}
-          onClearTooltip={onClearTooltip}
+          onClearTooltip={handleClearTooltip}
           selectedElementRef={selectedElementRef}
           graphClearRef={graphClearRef}
           graphSelectNodeRef={graphSelectNodeRef}
@@ -418,7 +437,8 @@ const GraphSplitArea = memo(function GraphSplitArea({
       isGraphIdle && isDataReady && isDataEmpty && !hasElements && hasResolvedEvent && graphMatchesTarget;
     const resolvedApiError = normalizeGraphApiError(apiError);
     const shouldShowLoading = !canShowGraph && !isDataLoadCompleteAndEmpty && !resolvedApiError;
-    const showRefreshOverlay = canShowGraph && isGraphRefreshing;
+    // 에러가 있으면 "이벤트 반영 중" 칩과 동시에 겹쳐 보이지 않도록 에러를 우선한다.
+    const showRefreshOverlay = canShowGraph && isGraphRefreshing && !resolvedApiError;
     const loadingNotice = getViewerGraphLoadingNotice(
       isGraphRefreshing || !isDataReady || !hasResolvedEvent || !graphMatchesTarget,
       isLocationDetermined,
@@ -556,7 +576,7 @@ const GraphSplitArea = memo(function GraphSplitArea({
                     </div>
                   </div>
                 ) : null}
-                {isFilteredToEmpty ? (
+                {isFilteredToEmpty && !resolvedApiError && !shouldShowLoading && !showRefreshOverlay ? (
                   <div className={fillOverlayClass}>
                     <GraphNoticePanel
                       variant="empty"

@@ -1167,10 +1167,10 @@ export const OVERLAP_RESOLVE = Object.freeze({
 });
 
 export const OVERLAP_PROFILES = Object.freeze({
-  /** 최초 로딩·전체 재배치: 본체 겹침 허용 없음 */
-  INITIAL: Object.freeze({ padding: 8, tolerance: 0, maxIterations: 16, extraPasses: 3 }),
-  /** 동시 등장 신규 노드끼리: 본체 겹침 허용 없음 */
-  APPEAR: Object.freeze({ padding: 8, tolerance: 0, maxIterations: 12, extraPasses: 2 }),
+  /** 최초 로딩·전체 재배치: 본체 겹침 허용 없음. 정착 상태이므로 여유 간격을 크게 둔다 */
+  INITIAL: Object.freeze({ padding: 16, tolerance: 0, maxIterations: 16, extraPasses: 3 }),
+  /** 동시 등장 신규 노드끼리: 본체 겹침 허용 없음. INITIAL과 동일한 여유로 배치 밀도를 맞춘다 */
+  APPEAR: Object.freeze({ padding: 16, tolerance: 0, maxIterations: 12, extraPasses: 2 }),
   INCREMENTAL: Object.freeze({ padding: 6, tolerance: 3, maxIterations: 4, extraPasses: 1 }),
   RESIZE: Object.freeze({ padding: 5, tolerance: 3, maxIterations: 2, extraPasses: 0 }),
   /** 사용자 드래그: 본체 겹침 즉시 반응, 드래그 노드는 movableIds에서 제외해 자유 배치 유지 */

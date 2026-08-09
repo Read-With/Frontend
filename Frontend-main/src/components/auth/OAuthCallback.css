@@ -162,7 +162,8 @@
   margin: 1.25rem 0 0;
   padding: 0.75rem 0.875rem;
   box-sizing: border-box;
-  font-size: clamp(0.925rem, 2.4vw, 1.0625rem);
+  overflow-x: auto;
+  font-size: clamp(0.7rem, 2.4vw, 1.0625rem);
   font-weight: 400;
   line-height: 1.75;
   letter-spacing: 0.04em;
@@ -171,6 +172,13 @@
   border-radius: var(--oauth-radius);
   border: 0.0625rem solid var(--oauth-surface-border);
   animation: oauth-callback-fade-in 0.4s ease;
+}
+
+/* 로그인 대기 멘트는 줄바꿈 없이 한 줄로 표시 */
+.oauth-callback-hint .oauth-callback-sentence {
+  display: inline-block;
+  width: auto;
+  white-space: nowrap;
 }
 
 .oauth-callback-content--error .oauth-callback-body {

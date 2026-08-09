@@ -11,7 +11,7 @@ import { joinClasses } from '../../utils/styles/styles.js';
 import { NodeProfileAvatar } from './GraphControls';
 import './RelationGraph.css';
 
-const NAME_LABEL_MAX = 11; // truncate 시 10자 + …
+const NAME_LABEL_MAX = 19; // truncate 시 18자 + …
 const RADAR_GRID = brandAlpha(0.22);
 const RADAR_AXIS_TICK = '#6f7f6f';
 const RADAR_FILL = brandAlpha(0.14);
@@ -445,7 +445,7 @@ function RelationAnalysisModalImpl({
     const distance = Math.sqrt(dx * dx + dy * dy) || 1;
     const raw = payload.value || '';
     const label = truncateWithEllipsis(raw, NAME_LABEL_MAX);
-    const scale = (distance + Math.max(34, 20 + (label.length * 1.8))) / distance;
+    const scale = (distance + Math.max(38, 26 + (label.length * 2.2))) / distance;
 
     return (
       <text
@@ -454,7 +454,7 @@ function RelationAnalysisModalImpl({
         textAnchor="middle"
         dominantBaseline="middle"
         fill={active ? color : RADAR_AXIS_TICK}
-        fontSize={active ? 14 : 12}
+        fontSize={active ? 16 : 14}
         fontWeight={active ? 700 : 500}
         letterSpacing={active ? '0.01em' : '0'}
         style={{ cursor: point ? 'pointer' : 'default' }}
@@ -473,7 +473,7 @@ function RelationAnalysisModalImpl({
       <ResponsiveContainer width="100%" height="100%">
         <RadarChart
           data={radarChartData}
-          margin={{ top: 52, right: 52, bottom: 52, left: 52 }}
+          margin={{ top: 68, right: 68, bottom: 68, left: 68 }}
           style={{ outline: 'none' }}
         >
           <PolarGrid

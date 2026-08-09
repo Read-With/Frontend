@@ -609,6 +609,43 @@ const isRetryableAssetStatus = (status) =>
 const stillNeedsProtectedImageResolve = (image) =>
   !!image && isProtectedPublicAsset(image) && !String(image).startsWith('blob:');
 
+/**
+ * /public/ 밖의 직접 URL(CDN 등)은 인증 없이 그대로 <img>/캔버스에 쓰인다 — CORS 차단이나
+ * 파일 부재 시 브라우저가 조용히 로드를 실패시켜, 그래프 노드에 이미지도 배경색도 없이
+ * 빈 원만 남는다. 실제 로드 가능 여부를 한 번 프로브해 실패분은 image 필드를 제거,
+ * 스타일시트의 기본 배경색(node 셀렉터)으로 폴백시킨다.
+ */
+const directImageLoadableCache = new Map();
+const DIRECT_IMAGE_PROBE_TIMEOUT_MS = 4_000;
+
+const needsDirectImageVerification = (image) =>
+  !!image && !isProtectedPublicAsset(image) && !String(image).startsWith('blob:');
+
+function probeImageLoadable(url) {
+  if (typeof Image === 'undefined') return Promise.resolve(true);
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (ok) => {
+      if (settled) return;
+      settled = true;
+      resolve(ok);
+    };
+    const img = new Image();
+    img.onload = () => finish(true);
+    img.onerror = () => finish(false);
+    // 응답이 느릴 뿐 실패는 아닐 수 있으므로, 타임아웃은 실패로 단정하지 않고 통과시킨다.
+    setTimeout(() => finish(true), DIRECT_IMAGE_PROBE_TIMEOUT_MS);
+    img.src = url;
+  });
+}
+
+async function isDirectImageLoadable(url) {
+  if (directImageLoadableCache.has(url)) return directImageLoadableCache.get(url);
+  const ok = await probeImageLoadable(url);
+  directImageLoadableCache.set(url, ok);
+  return ok;
+}
+
 function extractBookIdFromPublicAssetUrl(url) {
   const s = sanitizeAssetUrl(url);
   if (!s) return null;
@@ -737,10 +774,22 @@ export async function fetchAuthenticatedAssetBlobUrl(sourceUrl, options = {}) {
 
 async function resolveOneGraphProfileImage(el, { force = false } = {}) {
   const image = el?.data?.image;
-  if (!stillNeedsProtectedImageResolve(image)) return el;
-  const blobUrl = await fetchAuthenticatedAssetBlobUrl(image, { force });
-  if (!blobUrl || blobUrl === image) return el;
-  return { ...el, data: { ...el.data, image: blobUrl } };
+  if (!image) return el;
+
+  if (stillNeedsProtectedImageResolve(image)) {
+    const blobUrl = await fetchAuthenticatedAssetBlobUrl(image, { force });
+    if (!blobUrl || blobUrl === image) return el;
+    return { ...el, data: { ...el.data, image: blobUrl } };
+  }
+
+  if (needsDirectImageVerification(image)) {
+    const loadable = await isDirectImageLoadable(image);
+    if (loadable) return el;
+    const { image: _unused, ...restData } = el.data;
+    return { ...el, data: restData };
+  }
+
+  return el;
 }
 
 export function graphElementsHaveUnresolvedProfileImages(elements) {

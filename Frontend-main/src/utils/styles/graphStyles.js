@@ -147,22 +147,24 @@ export const PRESET_LAYOUT = Object.freeze({
   animate: false,
 });
 
-/** 최초 로딩·전체 재배치용. animate:false로 동기 완료 */
+/** 최초 로딩·전체 재배치용. animate:false로 동기 완료
+ *  노드 반지름이 최대 40px(NODE_SIZE_MAX/2)까지 나오므로, 인접 노드가 맞닿아 보이지 않도록
+ *  idealEdgeLength·nodeRepulsion·tilingPadding을 노드 크기 대비 여유 있게 잡는다. */
 export const COSE_BILKENT_LAYOUT = Object.freeze({
   name: 'cose-bilkent',
   fit: false,
   animate: false,
   randomize: false,
   nodeDimensionsIncludeLabels: true,
-  nodeRepulsion: 4500,
-  idealEdgeLength: 100,
+  nodeRepulsion: 5500,
+  idealEdgeLength: 130,
   edgeElasticity: 0.45,
   nestingFactor: 0.1,
   gravity: 0.25,
   numIter: 2500,
   tile: true,
-  tilingPaddingVertical: 20,
-  tilingPaddingHorizontal: 20,
+  tilingPaddingVertical: 32,
+  tilingPaddingHorizontal: 32,
 });
 
 /** @param {'graph'|'viewer'|'default'} [context='default'] viewer는 분할 밀도용 얇은 간선 */
