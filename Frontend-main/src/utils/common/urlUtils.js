@@ -631,6 +631,10 @@ function probeImageLoadable(url) {
       resolve(ok);
     };
     const img = new Image();
+    // Cytoscape는 background-image를 기본 crossOrigin='anonymous'로 로드한다(캔버스 오염 방지).
+    // 여기서도 동일하게 설정해야, CORS 헤더가 없는 origin의 이미지를 "로드 가능"으로 오판하지 않는다
+    // (crossOrigin 없는 <img> 프로브는 통과하지만 실제 캔버스 렌더링은 CORS로 차단되는 불일치 방지).
+    img.crossOrigin = 'anonymous';
     img.onload = () => finish(true);
     img.onerror = () => finish(false);
     // 응답이 느릴 뿐 실패는 아닐 수 있으므로, 타임아웃은 실패로 단정하지 않고 통과시킨다.

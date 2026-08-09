@@ -22,6 +22,7 @@ import {
   fitGraphToNodes,
   fitGraphViewportInContainer,
   handleGraphCanvasHotkeys,
+  isElementsFitInViewport,
   isGraphDragEndEvent,
   isGraphContainerSizeReady,
   isSidebarElement,
@@ -273,9 +274,40 @@ export function useGraphLayout({
       } = options;
       if (!cyInstance) return;
 
+      // 전체 재배치(초기·챕터 전환)가 아닌 증분 갱신(이벤트 확정 등)에서는 기존 배치를
+      // 흔들지 않는 게 원칙이지만, 늘어난 노드·간선(라벨 포함)이 현재 팬·줌 뷰포트를
+      // 벗어나면 좁은 화면 안으로 욱여넣어(cramping) 겹치는 대신 카메라를 재조정한다.
+      if (!shouldFitOnInitialLoad && isGraphContainerSizeReady(containerRef.current)) {
+        const visible = cyInstance.elements(':visible');
+        if (
+          visible.length > 0 &&
+          !isElementsFitInViewport(cyInstance, visible, GRAPH_ZOOM.FIT_PADDING)
+        ) {
+          // fitGraphViewportInContainer는 fit 직후 동기적으로 ensureElementsInBounds를
+          // 돌리므로(애니메이션 중 팬·줌 값을 기준으로 하면 어긋남) duration 0(즉시)을 유지한다.
+          const refit = fitGraphViewportInContainer(cyInstance, containerRef.current, {
+            eles: visible,
+          });
+          if (refit) {
+            syncReciprocalPairJunctionOffsets(cyInstance);
+            return;
+          }
+        }
+      }
+
       const runBounds = () => {
-        if (!skipEnsureBounds && isGraphContainerSizeReady(containerRef.current)) {
+        if (skipEnsureBounds || !isGraphContainerSizeReady(containerRef.current)) return;
+        if (!movableIds) {
           ensureElementsInBounds(cyInstance, containerRef.current);
+          return;
+        }
+        // 전체 fit이 없는 증분 추가: 새로 들어온 노드만 캔버스 안으로 제약하고
+        // 기존 노드는 사용자가 기억한 배치를 그대로 유지한다.
+        const idSet = movableIds instanceof Set ? movableIds : new Set([...movableIds].map(String));
+        if (idSet.size === 0) return;
+        const scopedNodes = cyInstance.nodes().filter((n) => idSet.has(String(n.id())));
+        if (scopedNodes.length > 0) {
+          ensureElementsInBounds(cyInstance, containerRef.current, { nodes: scopedNodes });
         }
       };
 
@@ -465,9 +497,12 @@ export function useGraphLayout({
       requestAnimationFrame(() => {
         if (useIncrementalPreset) {
           resolveOverlapCascade(addedNodeIds, needsLocalReorder);
+          // 전체 fit이 없는 경로라도, 새로 추가된 노드는 항상 캔버스 안으로 제약해
+          // 이벤트 이동 시 잘려 보이지 않게 한다(기존 노드 배치는 movableIds 범위로 보존).
           handleLayoutComplete(cy, shouldFitViewport, {
             skipOverlap: true,
-            skipEnsureBounds: !shouldFitViewport,
+            skipEnsureBounds: false,
+            movableIds: addedNodeIds,
           });
         } else {
           handleLayoutComplete(cy, shouldFitViewport, {

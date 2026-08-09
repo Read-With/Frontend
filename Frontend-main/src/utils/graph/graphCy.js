@@ -421,6 +421,45 @@ export const ensureElementsInBounds = (cy, container, options = {}) => {
 
 /* ─── 뷰포트 · 선택 포커스 ─── */
 
+/**
+ * 주어진 요소(노드+간선, 라벨 포함)가 현재 팬·줌 뷰포트 안에 padding 여유를 두고
+ * 모두 들어와 있는지. 이벤트 확정 등으로 노드·간선이 늘어난 뒤, 뷰포트 재조정(fit)이
+ * 필요한지 판단하는 데 쓴다 — 배치 자체는 건드리지 않는 순수 판별 함수.
+ * @returns {boolean} 판단 불가(요소·extent 없음 등)한 경우도 true(재조정 불필요로 간주)
+ */
+export function isElementsFitInViewport(cy, eles, paddingPx = 0) {
+  if (!cy || cy.destroyed?.() || !eles || eles.length === 0) return true;
+
+  let bb;
+  try {
+    bb = eles.boundingBox({ includeLabels: true, includeOverlays: false });
+  } catch {
+    return true;
+  }
+  if (!bb || ![bb.x1, bb.x2, bb.y1, bb.y2].every(Number.isFinite)) return true;
+
+  let extent;
+  try {
+    extent = typeof cy.extent === 'function' ? cy.extent() : null;
+  } catch {
+    extent = null;
+  }
+  if (!extent || ![extent.x1, extent.x2, extent.y1, extent.y2].every(Number.isFinite)) {
+    return true;
+  }
+
+  const zoom = typeof cy.zoom === 'function' ? cy.zoom() : 1;
+  const safeZoom = Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
+  const pad = Math.max(0, paddingPx) / safeZoom;
+
+  return (
+    bb.x1 >= extent.x1 + pad &&
+    bb.x2 <= extent.x2 - pad &&
+    bb.y1 >= extent.y1 + pad &&
+    bb.y2 <= extent.y2 - pad
+  );
+}
+
 /** fit에 쓸 요소: 노드+간선(+라벨 BB). 지정 eles가 있으면 그대로. */
 function resolveFitElements(cy, eles) {
   if (eles?.length) return eles;
