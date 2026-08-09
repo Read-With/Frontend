@@ -1070,7 +1070,7 @@ export function resolvePovSummary(
   }
 
   return {
-    text: `${node.displayName}에 대한 챕터 ${chapterLabel} 시점 요약이 아직 준비되지 않았습니다.`,
-    status: S.PENDING,
+    text: '해당 챕터에서는 해당 캐릭터의 등장 비중이 낮아 별도의 분석 내용이 제공되지 않습니다.',
+    status: S.NO_DATA,
   };
 }

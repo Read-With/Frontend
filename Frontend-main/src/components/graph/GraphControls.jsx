@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import PropTypes from "prop-types";
-import { List, MousePointer2, Move, Search, SearchX, SlidersHorizontal, ZoomIn } from "lucide-react";
+import { List, Search, SearchX, SlidersHorizontal } from "lucide-react";
 import { useClickOutside } from "../../hooks/ui/tooltipHooks";
 import { readSessionHintSeen, useSessionHint } from "../../hooks/common/hooksShared";
 import { findExactSuggestionMatch } from "../../utils/graph/graphCy.js";
@@ -352,7 +352,6 @@ CharacterFilterSegmented.propTypes = {
   onChange: PropTypes.func.isRequired,
 };
 
-const GESTURE_HINT_SESSION_KEY = "rw-graph-gesture-hint-seen";
 const LEGEND_HINT_SESSION_KEY = "rw-graph-legend-hint-seen";
 const POSITIVITY_GRADIENT = getPositivityGradientCss();
 
@@ -408,42 +407,6 @@ GraphHintShell.propTypes = {
   panelId: PropTypes.string.isRequired,
   icon: PropTypes.elementType.isRequired,
   children: PropTypes.node.isRequired,
-};
-
-function GraphGestureHint({ hint }) {
-  const panelId = "graph-gesture-hint-panel";
-  const [usesTouch] = useState(
-    () => globalThis.matchMedia?.("(pointer: coarse)").matches ?? false,
-  );
-
-  return (
-    <GraphHintShell
-      open={hint.open}
-      hintSeen={hint.hintSeen}
-      onToggle={hint.toggle}
-      onDismiss={hint.dismiss}
-      buttonLabel="조작 안내"
-      buttonTitle="조작 안내"
-      panelId={panelId}
-      icon={MousePointer2}
-    >
-      <p className="graph-hint-panel-title">조작 안내</p>
-      <ul className="graph-hint-panel-list">
-        <li><MousePointer2 aria-hidden />노드·간선 선택</li>
-        <li><Move aria-hidden />{usesTouch ? "한 손가락으로 이동" : "드래그로 이동"}</li>
-        <li><ZoomIn aria-hidden />{usesTouch ? "두 손가락으로 확대·축소" : "휠로 확대·축소"}</li>
-      </ul>
-    </GraphHintShell>
-  );
-}
-
-GraphGestureHint.propTypes = {
-  hint: PropTypes.shape({
-    open: PropTypes.bool.isRequired,
-    hintSeen: PropTypes.bool.isRequired,
-    toggle: PropTypes.func.isRequired,
-    dismiss: PropTypes.func.isRequired,
-  }).isRequired,
 };
 
 function GraphCanvasLegend({ hint }) {
@@ -741,7 +704,7 @@ GraphSearchPalette.propTypes = {
 };
 
 /**
- * 검색 팔레트 · 필터 · 간선 라벨 · (선택) 조작 안내·범례
+ * 검색 팔레트 · 필터 · 간선 라벨 · (선택) 범례
  */
 export function GraphFloatingControls({
   searchState,
@@ -751,7 +714,6 @@ export function GraphFloatingControls({
   filterStage,
   onFilterChange,
   showLegend = true,
-  showGestureHint = true,
 }) {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [optionsOpen, setOptionsOpen] = useState(false);
@@ -759,30 +721,10 @@ export function GraphFloatingControls({
   const modKey = useModKeyLabel();
 
   // 마운트 시 1회만 sessionStorage를 읽는다(매 리렌더마다 동기 I/O 재실행 방지).
-  const gestureSeenInitially = useMemo(() => readSessionHintSeen(GESTURE_HINT_SESSION_KEY), []);
   const legendSeenInitially = useMemo(() => readSessionHintSeen(LEGEND_HINT_SESSION_KEY), []);
-  // 둘 다 미확인이면 조작 안내만 먼저 자동 오픈 → 닫힌 뒤 범례 오픈
-  const gestureHint = useSessionHint(GESTURE_HINT_SESSION_KEY, {
-    autoOpen: showGestureHint && !gestureSeenInitially,
-  });
   const legendHint = useSessionHint(LEGEND_HINT_SESSION_KEY, {
-    autoOpen: showLegend && legendSeenInitially === false && gestureSeenInitially,
+    autoOpen: showLegend && !legendSeenInitially,
   });
-
-  useEffect(() => {
-    if (!showLegend || !showGestureHint) return;
-    if (!gestureHint.hintSeen || legendHint.hintSeen || legendHint.open) return;
-    if (gestureHint.open) return;
-    legendHint.setOpen(true);
-  }, [
-    showLegend,
-    showGestureHint,
-    gestureHint.hintSeen,
-    gestureHint.open,
-    legendHint.hintSeen,
-    legendHint.open,
-    legendHint.setOpen,
-  ]);
 
   const {
     searchTerm,
@@ -879,7 +821,6 @@ export function GraphFloatingControls({
           ) : null}
         </div>
 
-        {showGestureHint ? <GraphGestureHint hint={gestureHint} /> : null}
         {showLegend ? <GraphCanvasLegend hint={legendHint} /> : null}
       </div>
 
@@ -923,5 +864,4 @@ GraphFloatingControls.propTypes = {
   filterStage: PropTypes.number.isRequired,
   onFilterChange: PropTypes.func.isRequired,
   showLegend: PropTypes.bool,
-  showGestureHint: PropTypes.bool,
 };

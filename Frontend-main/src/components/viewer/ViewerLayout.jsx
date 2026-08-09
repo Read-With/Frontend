@@ -2,15 +2,13 @@ import { useState, useEffect, useMemo, useCallback, memo, useRef } from 'react';
 import PropTypes from 'prop-types';
 import { toast } from 'react-toastify';
 import ViewerToolbar from './ViewerToolbar';
-import { useIsNarrowViewport, useSessionHint } from '../../hooks/common/hooksShared';
+import { useIsNarrowViewport } from '../../hooks/common/hooksShared';
 import './ViewerToolbar.css';
 
 const SPLIT_STORAGE_KEY = 'viewer-graph-split-percent';
-const CHROME_HINT_SESSION_KEY = 'rw-viewer-chrome-hint-seen';
 const SPLIT_MIN = 32;
 const SPLIT_MAX = 68;
 const SPLIT_PERSIST_DEBOUNCE_MS = 300;
-const CHROME_HINT_PANEL_ID = 'viewer-chrome-hint-panel';
 /** ViewerToolbar.css의 .viewer-chrome opacity/visibility 전환(0.3s)이 끝난 뒤 resize를 쏘기 위한 지연 — 그 값과 반드시 함께 조정 */
 const LAYOUT_SETTLE_DELAY_MS = 300;
 
@@ -109,8 +107,6 @@ function ViewerLayout({
   const isNarrow = useIsNarrowViewport();
   const [mobilePane, setMobilePane] = useState('reader');
   const [isSplitDragging, setIsSplitDragging] = useState(false);
-  const chromeHint = useSessionHint(CHROME_HINT_SESSION_KEY);
-  const { open: chromeHintOpen, dismiss: dismissChromeHint } = chromeHint;
   const prevShowGraphRef = useRef(showGraph);
   const skipInitialLayoutSettleRef = useRef(true);
   const onViewerLayoutSettledRef = useRef(onViewerLayoutSettled);
@@ -362,26 +358,6 @@ function ViewerLayout({
           progressMetricsReady={progressMetricsReady}
         />
       </div>
-
-      {chromeHintOpen ? (
-        <div className="viewer-chrome-coach" role="status" aria-labelledby={CHROME_HINT_PANEL_ID}>
-          <p id={CHROME_HINT_PANEL_ID} className="viewer-chrome-coach-title">
-            화면 가운데를 탭하면 도구모음을 열고 닫을 수 있어요
-          </p>
-          <p className="viewer-chrome-coach-desc">
-            좌우 가장자리 탭, 휠, 스와이프로 페이지를 넘길 수 있어요.
-          </p>
-          <div className="viewer-chrome-coach-actions">
-            <button
-              type="button"
-              className="viewer-chrome-coach-btn viewer-chrome-coach-btn--primary"
-              onClick={dismissChromeHint}
-            >
-              확인
-            </button>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }
