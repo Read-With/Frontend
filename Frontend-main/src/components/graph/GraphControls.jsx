@@ -367,9 +367,10 @@ function GraphHintShell({
   buttonLabel,
   buttonTitle,
   panelId,
-  icon: Icon,
+  icon,
   children,
 }) {
+  const Icon = icon;
   const rootRef = useClickOutside(() => {
     if (open) onDismiss();
   }, open);

@@ -4,7 +4,7 @@ export const MANIFEST_CACHE_PREFIX = 'manifest_cache_v2_';
 export const MANIFEST_TTL_MS = 15 * 60 * 1000;
 
 export const PROGRESS_CACHE_KEY = 'readwith_progress_cache';
-export const PROGRESS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+export const PROGRESS_CACHE_TTL_MS = 3 * 24 * 60 * 60 * 1000;
 
 const BOOKS_CACHE_KEY = 'readwith_books_server_cache';
 const BOOKS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;

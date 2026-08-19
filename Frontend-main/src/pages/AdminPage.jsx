@@ -1184,41 +1184,22 @@ const AdminPage = () => {
     );
 
     if (!confirmed) return;
-    setLoading(true);
-    setError(null);
-    setResponse(null);
 
-    try {
-      const result = await apiClient.post(
-        `/image-generation/books/${selectedBook.id}/characters/${char.id}/regenerate`
-      );
-
-      if (result.data?.isSuccess) {
-        // 이미지 생성 상태 갱신
-        setImageGenerationStatus(result.data.result);
-
-        // 캐릭터 목록도 새 이미지 상태로 갱신
-        if (result.data.result?.characters) {
-        setCharacters(result.data.result.characters);
-        }
-
-        alert(
-          `캐릭터 [${char.commonName || char.name}] 이미지 재생성이 요청되었습니다.`
-        );
-
-      } else {
-        setError(result.data);
+    await handleApiCall(
+      `regen-${char.id}`,
+      () =>
+        apiClient.post(
+          `/image-generation/books/${selectedBook.id}/characters/${char.id}/regenerate`
+        ),
+      {
+        successMessage: `캐릭터 [${char.commonName || char.name}] 이미지 재생성이 요청되었습니다.`,
+        showResultPanel: false,
+        updateState: (data) => {
+          setImageGenerationStatus(data);
+          if (data?.characters) setCharacters(data.characters);
+        },
       }
-    } catch (err) {
-      console.error(err);
-      setError(
-        err.response?.data ?? {
-          message: err.message ?? "이미지 재생성에 실패했습니다.",
-        }
-      );
-    } finally {
-      setLoading(false);
-    }
+    );
   };
 
   const handleRegenerateFailed = () => {
