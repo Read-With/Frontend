@@ -59,8 +59,8 @@ export const GRAPH_COLORS = {
   surfaceGlass: RG.surfaceGlass,
 };
 
-export const NODE_SIZE_MIN = 30;
-export const NODE_SIZE_MAX = 80;
+const NODE_SIZE_MIN = 30;
+const NODE_SIZE_MAX = 80;
 
 const RESPONSIVE_NODE_SIZE_RANGES = Object.freeze([
   { maxWidth: 420, min: 22, max: 54 },
@@ -256,7 +256,7 @@ function isMissingPositivity(positivity) {
 }
 
 /** @returns {{ color: string, text: string }} */
-export function getRelationStyle(positivity) {
+function getRelationStyle(positivity) {
   if (isMissingPositivity(positivity)) {
     return { color: getRelationColor(0), text: '정보 없음' };
   }
@@ -284,10 +284,6 @@ export function getPositivityDisplay(positivity) {
     label: text,
     percent: isMissingPositivity(positivity) ? 0 : Math.round(clampPositivity(positivity) * 100),
   };
-}
-
-export function clearStyleCache() {
-  relationStyleCache.clear();
 }
 
 /* ─── Cytoscape stylesheet ─── */

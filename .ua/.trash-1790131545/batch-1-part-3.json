@@ -1,0 +1,3143 @@
+{
+ "nodes": [
+  {
+   "id": "file:Frontend-main/src/utils/api/authApi.js",
+   "type": "file",
+   "name": "authApi.js",
+   "filePath": "Frontend-main/src/utils/api/authApi.js",
+   "summary": "JWT 만료 판별, 선제적 토큰 갱신, 인증 헤더 부착 fetch, 에러 정규화, 로그아웃을 담당하는 인증 API 클라이언트 계층입니다.",
+   "tags": [
+    "api-client",
+    "authentication",
+    "jwt",
+    "utility",
+    "service"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/api/authApi.js:makeSilentError",
+   "type": "function",
+   "name": "makeSilentError",
+   "filePath": "Frontend-main/src/utils/api/authApi.js",
+   "lineRange": [
+    13,
+    18
+   ],
+   "summary": "인증 API 헬퍼 함수: makeSilentError.",
+   "tags": [
+    "api-client",
+    "authentication",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/api/authApi.js:isForbiddenError",
+   "type": "function",
+   "name": "isForbiddenError",
+   "filePath": "Frontend-main/src/utils/api/authApi.js",
+   "lineRange": [
+    20,
+    21
+   ],
+   "summary": "인증 API 헬퍼 함수: isForbiddenError.",
+   "tags": [
+    "api-client",
+    "authentication",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/api/authApi.js:isNotFoundError",
+   "type": "function",
+   "name": "isNotFoundError",
+   "filePath": "Frontend-main/src/utils/api/authApi.js",
+   "lineRange": [
+    23,
+    24
+   ],
+   "summary": "인증 API 헬퍼 함수: isNotFoundError.",
+   "tags": [
+    "api-client",
+    "authentication",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/api/authApi.js:requireBookId",
+   "type": "function",
+   "name": "requireBookId",
+   "filePath": "Frontend-main/src/utils/api/authApi.js",
+   "lineRange": [
+    28,
+    30
+   ],
+   "summary": "인증 API 헬퍼 함수: requireBookId.",
+   "tags": [
+    "api-client",
+    "authentication",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/api/authApi.js:pickResponseResult",
+   "type": "function",
+   "name": "pickResponseResult",
+   "filePath": "Frontend-main/src/utils/api/authApi.js",
+   "lineRange": [
+    35,
+    46
+   ],
+   "summary": "인증 API 헬퍼 함수: pickResponseResult.",
+   "tags": [
+    "api-client",
+    "authentication",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/api/authApi.js:toUnifiedApiResponse",
+   "type": "function",
+   "name": "toUnifiedApiResponse",
+   "filePath": "Frontend-main/src/utils/api/authApi.js",
+   "lineRange": [
+    48,
+    60
+   ],
+   "summary": "인증 API 헬퍼 함수: toUnifiedApiResponse.",
+   "tags": [
+    "api-client",
+    "authentication",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/api/authApi.js:mapSoftFailResponse",
+   "type": "function",
+   "name": "mapSoftFailResponse",
+   "filePath": "Frontend-main/src/utils/api/authApi.js",
+   "lineRange": [
+    69,
+    94
+   ],
+   "summary": "403/404 응답을 에러 대신 소프트 실패 결과로 변환합니다.",
+   "tags": [
+    "api-client",
+    "authentication",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/api/authApi.js:decodeJwtPayload",
+   "type": "function",
+   "name": "decodeJwtPayload",
+   "filePath": "Frontend-main/src/utils/api/authApi.js",
+   "lineRange": [
+    101,
+    113
+   ],
+   "summary": "인증 API 헬퍼 함수: decodeJwtPayload.",
+   "tags": [
+    "api-client",
+    "authentication",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/api/authApi.js:isTokenValid",
+   "type": "function",
+   "name": "isTokenValid",
+   "filePath": "Frontend-main/src/utils/api/authApi.js",
+   "lineRange": [
+    115,
+    135
+   ],
+   "summary": "JWT 페이로드를 디코드해 토큰 유효성을 확인합니다.",
+   "tags": [
+    "api-client",
+    "authentication",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/api/authApi.js:getTokenExpirationTime",
+   "type": "function",
+   "name": "getTokenExpirationTime",
+   "filePath": "Frontend-main/src/utils/api/authApi.js",
+   "lineRange": [
+    137,
+    146
+   ],
+   "summary": "인증 API 헬퍼 함수: getTokenExpirationTime.",
+   "tags": [
+    "api-client",
+    "authentication",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/api/authApi.js:isTokenExpiringSoon",
+   "type": "function",
+   "name": "isTokenExpiringSoon",
+   "filePath": "Frontend-main/src/utils/api/authApi.js",
+   "lineRange": [
+    149,
+    153
+   ],
+   "summary": "인증 API 헬퍼 함수: isTokenExpiringSoon.",
+   "tags": [
+    "api-client",
+    "authentication",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/api/authApi.js:getProactiveRefreshBufferSeconds",
+   "type": "function",
+   "name": "getProactiveRefreshBufferSeconds",
+   "filePath": "Frontend-main/src/utils/api/authApi.js",
+   "lineRange": [
+    159,
+    170
+   ],
+   "summary": "인증 API 헬퍼 함수: getProactiveRefreshBufferSeconds.",
+   "tags": [
+    "api-client",
+    "authentication",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/api/authApi.js:refreshAccessTokenIfExpiringSoon",
+   "type": "function",
+   "name": "refreshAccessTokenIfExpiringSoon",
+   "filePath": "Frontend-main/src/utils/api/authApi.js",
+   "lineRange": [
+    178,
+    192
+   ],
+   "summary": "인증 API 헬퍼 함수: refreshAccessTokenIfExpiringSoon.",
+   "tags": [
+    "api-client",
+    "authentication",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/api/authApi.js:authorizedFetch",
+   "type": "function",
+   "name": "authorizedFetch",
+   "filePath": "Frontend-main/src/utils/api/authApi.js",
+   "lineRange": [
+    194,
+    228
+   ],
+   "summary": "Authorization 헤더를 부착한 fetch를 수행하고 401 시 갱신을 시도합니다.",
+   "tags": [
+    "api-client",
+    "authentication",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/api/authApi.js:toHttpError",
+   "type": "function",
+   "name": "toHttpError",
+   "filePath": "Frontend-main/src/utils/api/authApi.js",
+   "lineRange": [
+    253,
+    265
+   ],
+   "summary": "인증 API 헬퍼 함수: toHttpError.",
+   "tags": [
+    "api-client",
+    "authentication",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/api/authApi.js:authenticatedRequest",
+   "type": "function",
+   "name": "authenticatedRequest",
+   "filePath": "Frontend-main/src/utils/api/authApi.js",
+   "lineRange": [
+    281,
+    348
+   ],
+   "summary": "토큰 갱신·재시도를 포함해 인증된 JSON API 요청을 수행하고 에러를 정규화합니다.",
+   "tags": [
+    "api-client",
+    "authentication",
+    "exported"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/api/authApi.js:refreshToken",
+   "type": "function",
+   "name": "refreshToken",
+   "filePath": "Frontend-main/src/utils/api/authApi.js",
+   "lineRange": [
+    350,
+    407
+   ],
+   "summary": "리프레시 토큰으로 액세스 토큰을 재발급하고 저장합니다.",
+   "tags": [
+    "api-client",
+    "authentication",
+    "exported"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/api/authApi.js:authenticatedFetch",
+   "type": "function",
+   "name": "authenticatedFetch",
+   "filePath": "Frontend-main/src/utils/api/authApi.js",
+   "lineRange": [
+    410,
+    416
+   ],
+   "summary": "인증 API 헬퍼 함수: authenticatedFetch.",
+   "tags": [
+    "api-client",
+    "authentication",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/api/authApi.js:ensureSessionAccessToken",
+   "type": "function",
+   "name": "ensureSessionAccessToken",
+   "filePath": "Frontend-main/src/utils/api/authApi.js",
+   "lineRange": [
+    421,
+    440
+   ],
+   "summary": "인증 API 헬퍼 함수: ensureSessionAccessToken.",
+   "tags": [
+    "api-client",
+    "authentication",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/api/authApi.js:logout",
+   "type": "function",
+   "name": "logout",
+   "filePath": "Frontend-main/src/utils/api/authApi.js",
+   "lineRange": [
+    442,
+    454
+   ],
+   "summary": "서버 로그아웃 호출 후 로컬 인증 데이터를 삭제합니다.",
+   "tags": [
+    "api-client",
+    "authentication",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "file:Frontend-main/src/utils/api/booksApi.js",
+   "type": "file",
+   "name": "booksApi.js",
+   "filePath": "Frontend-main/src/utils/api/booksApi.js",
+   "summary": "도서 목록·상세·업로드, 즐겨찾기, 북마크 CRUD, 읽기 진행률 저장/조회, manifest 및 챕터 POV 요약 조회를 담당하는 도서 REST API 클라이언트입니다.",
+   "tags": [
+    "api-client",
+    "books",
+    "bookmarks",
+    "reading-progress",
+    "service"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/api/booksApi.js:normalizeBookCore",
+   "type": "function",
+   "name": "normalizeBookCore",
+   "filePath": "Frontend-main/src/utils/api/booksApi.js",
+   "lineRange": [
+    41,
+    62
+   ],
+   "summary": "도서 API 함수: normalizeBookCore.",
+   "tags": [
+    "api-client",
+    "books",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/api/booksApi.js:normalizeManifestBook",
+   "type": "function",
+   "name": "normalizeManifestBook",
+   "filePath": "Frontend-main/src/utils/api/booksApi.js",
+   "lineRange": [
+    76,
+    84
+   ],
+   "summary": "도서 API 함수: normalizeManifestBook.",
+   "tags": [
+    "api-client",
+    "books",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/api/booksApi.js:buildBooksQueryString",
+   "type": "function",
+   "name": "buildBooksQueryString",
+   "filePath": "Frontend-main/src/utils/api/booksApi.js",
+   "lineRange": [
+    86,
+    98
+   ],
+   "summary": "도서 API 함수: buildBooksQueryString.",
+   "tags": [
+    "api-client",
+    "books",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/api/booksApi.js:getBooks",
+   "type": "function",
+   "name": "getBooks",
+   "filePath": "Frontend-main/src/utils/api/booksApi.js",
+   "lineRange": [
+    100,
+    127
+   ],
+   "summary": "쿼리 조건으로 도서 목록을 조회하고 정규화합니다.",
+   "tags": [
+    "api-client",
+    "books",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/api/booksApi.js:getBooksArray",
+   "type": "function",
+   "name": "getBooksArray",
+   "filePath": "Frontend-main/src/utils/api/booksApi.js",
+   "lineRange": [
+    130,
+    133
+   ],
+   "summary": "도서 API 함수: getBooksArray.",
+   "tags": [
+    "api-client",
+    "books",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/api/booksApi.js:getBook",
+   "type": "function",
+   "name": "getBook",
+   "filePath": "Frontend-main/src/utils/api/booksApi.js",
+   "lineRange": [
+    135,
+    162
+   ],
+   "summary": "단일 도서 상세를 조회합니다.",
+   "tags": [
+    "api-client",
+    "books",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/api/booksApi.js:uploadBook",
+   "type": "function",
+   "name": "uploadBook",
+   "filePath": "Frontend-main/src/utils/api/booksApi.js",
+   "lineRange": [
+    164,
+    183
+   ],
+   "summary": "EPUB 파일을 업로드합니다.",
+   "tags": [
+    "api-client",
+    "books",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/api/booksApi.js:toggleBookFavorite",
+   "type": "function",
+   "name": "toggleBookFavorite",
+   "filePath": "Frontend-main/src/utils/api/booksApi.js",
+   "lineRange": [
+    185,
+    193
+   ],
+   "summary": "도서 API 함수: toggleBookFavorite.",
+   "tags": [
+    "api-client",
+    "books",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/api/booksApi.js:normalizeChapterPovSummariesResult",
+   "type": "function",
+   "name": "normalizeChapterPovSummariesResult",
+   "filePath": "Frontend-main/src/utils/api/booksApi.js",
+   "lineRange": [
+    195,
+    226
+   ],
+   "summary": "도서 API 함수: normalizeChapterPovSummariesResult.",
+   "tags": [
+    "api-client",
+    "books",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/api/booksApi.js:getChapterPovSummaries",
+   "type": "function",
+   "name": "getChapterPovSummaries",
+   "filePath": "Frontend-main/src/utils/api/booksApi.js",
+   "lineRange": [
+    230,
+    259
+   ],
+   "summary": "챕터별 인물 POV 요약을 조회합니다.",
+   "tags": [
+    "api-client",
+    "books",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/api/booksApi.js:getBookmarks",
+   "type": "function",
+   "name": "getBookmarks",
+   "filePath": "Frontend-main/src/utils/api/booksApi.js",
+   "lineRange": [
+    271,
+    305
+   ],
+   "summary": "도서의 북마크 목록을 조회·정규화합니다.",
+   "tags": [
+    "api-client",
+    "books",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/api/booksApi.js:loadBookmarks",
+   "type": "function",
+   "name": "loadBookmarks",
+   "filePath": "Frontend-main/src/utils/api/booksApi.js",
+   "lineRange": [
+    307,
+    313
+   ],
+   "summary": "도서 API 함수: loadBookmarks.",
+   "tags": [
+    "api-client",
+    "books",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/api/booksApi.js:createBookmark",
+   "type": "function",
+   "name": "createBookmark",
+   "filePath": "Frontend-main/src/utils/api/booksApi.js",
+   "lineRange": [
+    324,
+    362
+   ],
+   "summary": "북마크를 생성합니다.",
+   "tags": [
+    "api-client",
+    "books",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/api/booksApi.js:updateBookmark",
+   "type": "function",
+   "name": "updateBookmark",
+   "filePath": "Frontend-main/src/utils/api/booksApi.js",
+   "lineRange": [
+    364,
+    385
+   ],
+   "summary": "북마크를 수정합니다.",
+   "tags": [
+    "api-client",
+    "books",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/api/booksApi.js:deleteBookmark",
+   "type": "function",
+   "name": "deleteBookmark",
+   "filePath": "Frontend-main/src/utils/api/booksApi.js",
+   "lineRange": [
+    387,
+    399
+   ],
+   "summary": "북마크를 삭제합니다.",
+   "tags": [
+    "api-client",
+    "books",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/api/booksApi.js:saveProgress",
+   "type": "function",
+   "name": "saveProgress",
+   "filePath": "Frontend-main/src/utils/api/booksApi.js",
+   "lineRange": [
+    434,
+    470
+   ],
+   "summary": "읽기 진행률을 서버에 저장하고 캐시를 갱신합니다.",
+   "tags": [
+    "api-client",
+    "books",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/api/booksApi.js:saveProgressKeepalive",
+   "type": "function",
+   "name": "saveProgressKeepalive",
+   "filePath": "Frontend-main/src/utils/api/booksApi.js",
+   "lineRange": [
+    472,
+    494
+   ],
+   "summary": "페이지 종료 시 keepalive fetch로 진행률을 저장합니다.",
+   "tags": [
+    "api-client",
+    "books",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/api/booksApi.js:getBookProgress",
+   "type": "function",
+   "name": "getBookProgress",
+   "filePath": "Frontend-main/src/utils/api/booksApi.js",
+   "lineRange": [
+    502,
+    546
+   ],
+   "summary": "서버 진행률을 조회하고 로컬 캐시와 병합합니다.",
+   "tags": [
+    "api-client",
+    "books",
+    "exported"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/api/booksApi.js:deleteBookProgress",
+   "type": "function",
+   "name": "deleteBookProgress",
+   "filePath": "Frontend-main/src/utils/api/booksApi.js",
+   "lineRange": [
+    548,
+    565
+   ],
+   "summary": "도서 API 함수: deleteBookProgress.",
+   "tags": [
+    "api-client",
+    "books",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/api/booksApi.js:getBookManifest",
+   "type": "function",
+   "name": "getBookManifest",
+   "filePath": "Frontend-main/src/utils/api/booksApi.js",
+   "lineRange": [
+    569,
+    621
+   ],
+   "summary": "도서 manifest(챕터·이벤트 구조)를 조회해 캐시에 저장합니다.",
+   "tags": [
+    "api-client",
+    "books",
+    "exported"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "type": "file",
+   "name": "urlUtils.js",
+   "filePath": "Frontend-main/src/utils/common/urlUtils.js",
+   "summary": "API/CDN 기본 URL 해석, Google OAuth URL 생성과 에러 메시지 변환, 사용자 라우트 경로 빌더, 보호 에셋 blob URL 로딩 및 그래프 프로필 이미지 해석을 모은 공용 유틸리티입니다.",
+   "tags": [
+    "utility",
+    "url",
+    "oauth",
+    "asset-loading",
+    "routing"
+   ],
+   "complexity": "complex",
+   "languageNotes": "여러 관심사(URL, OAuth 에러, 에셋 캐시)가 한 파일에 모여 있어 다수 모듈의 공통 의존점이 됩니다."
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/urlUtils.js:getApiBaseUrl",
+   "type": "function",
+   "name": "getApiBaseUrl",
+   "filePath": "Frontend-main/src/utils/common/urlUtils.js",
+   "lineRange": [
+    44,
+    53
+   ],
+   "summary": "환경에 맞는 API 기본 URL을 반환합니다.",
+   "tags": [
+    "utility",
+    "url",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/urlUtils.js:getGoogleOAuthRedirectUri",
+   "type": "function",
+   "name": "getGoogleOAuthRedirectUri",
+   "filePath": "Frontend-main/src/utils/common/urlUtils.js",
+   "lineRange": [
+    55,
+    78
+   ],
+   "summary": "URL/OAuth/에셋 유틸 함수: getGoogleOAuthRedirectUri.",
+   "tags": [
+    "utility",
+    "url",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/urlUtils.js:getPostLoginHomeUrl",
+   "type": "function",
+   "name": "getPostLoginHomeUrl",
+   "filePath": "Frontend-main/src/utils/common/urlUtils.js",
+   "lineRange": [
+    80,
+    93
+   ],
+   "summary": "URL/OAuth/에셋 유틸 함수: getPostLoginHomeUrl.",
+   "tags": [
+    "utility",
+    "url",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/urlUtils.js:getDevBackendHintUrl",
+   "type": "function",
+   "name": "getDevBackendHintUrl",
+   "filePath": "Frontend-main/src/utils/common/urlUtils.js",
+   "lineRange": [
+    95,
+    109
+   ],
+   "summary": "URL/OAuth/에셋 유틸 함수: getDevBackendHintUrl.",
+   "tags": [
+    "utility",
+    "url",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/urlUtils.js:isOAuthCallbackRoute",
+   "type": "function",
+   "name": "isOAuthCallbackRoute",
+   "filePath": "Frontend-main/src/utils/common/urlUtils.js",
+   "lineRange": [
+    113,
+    117
+   ],
+   "summary": "URL/OAuth/에셋 유틸 함수: isOAuthCallbackRoute.",
+   "tags": [
+    "utility",
+    "url",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/urlUtils.js:buildGoogleOAuthAuthUrl",
+   "type": "function",
+   "name": "buildGoogleOAuthAuthUrl",
+   "filePath": "Frontend-main/src/utils/common/urlUtils.js",
+   "lineRange": [
+    130,
+    146
+   ],
+   "summary": "Google OAuth 인가 URL을 조립합니다.",
+   "tags": [
+    "utility",
+    "url",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/urlUtils.js:startGoogleOAuthLogin",
+   "type": "function",
+   "name": "startGoogleOAuthLogin",
+   "filePath": "Frontend-main/src/utils/common/urlUtils.js",
+   "lineRange": [
+    148,
+    171
+   ],
+   "summary": "state·PKCE를 생성하고 Google OAuth 인증 페이지로 이동합니다.",
+   "tags": [
+    "utility",
+    "url",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/urlUtils.js:buildGoogleRedirectUriMismatchMessage",
+   "type": "function",
+   "name": "buildGoogleRedirectUriMismatchMessage",
+   "filePath": "Frontend-main/src/utils/common/urlUtils.js",
+   "lineRange": [
+    173,
+    193
+   ],
+   "summary": "URL/OAuth/에셋 유틸 함수: buildGoogleRedirectUriMismatchMessage.",
+   "tags": [
+    "utility",
+    "url",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/urlUtils.js:isProtectedPublicAsset",
+   "type": "function",
+   "name": "isProtectedPublicAsset",
+   "filePath": "Frontend-main/src/utils/common/urlUtils.js",
+   "lineRange": [
+    200,
+    214
+   ],
+   "summary": "URL/OAuth/에셋 유틸 함수: isProtectedPublicAsset.",
+   "tags": [
+    "utility",
+    "url",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/urlUtils.js:rewriteLegacyAssetUrl",
+   "type": "function",
+   "name": "rewriteLegacyAssetUrl",
+   "filePath": "Frontend-main/src/utils/common/urlUtils.js",
+   "lineRange": [
+    216,
+    226
+   ],
+   "summary": "URL/OAuth/에셋 유틸 함수: rewriteLegacyAssetUrl.",
+   "tags": [
+    "utility",
+    "url",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/urlUtils.js:sanitizeAssetUrl",
+   "type": "function",
+   "name": "sanitizeAssetUrl",
+   "filePath": "Frontend-main/src/utils/common/urlUtils.js",
+   "lineRange": [
+    238,
+    243
+   ],
+   "summary": "URL/OAuth/에셋 유틸 함수: sanitizeAssetUrl.",
+   "tags": [
+    "utility",
+    "url",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/urlUtils.js:preferDevPublicProxyPath",
+   "type": "function",
+   "name": "preferDevPublicProxyPath",
+   "filePath": "Frontend-main/src/utils/common/urlUtils.js",
+   "lineRange": [
+    245,
+    261
+   ],
+   "summary": "URL/OAuth/에셋 유틸 함수: preferDevPublicProxyPath.",
+   "tags": [
+    "utility",
+    "url",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/urlUtils.js:routeProtectedPublicAssetForSameOriginProxy",
+   "type": "function",
+   "name": "routeProtectedPublicAssetForSameOriginProxy",
+   "filePath": "Frontend-main/src/utils/common/urlUtils.js",
+   "lineRange": [
+    263,
+    278
+   ],
+   "summary": "URL/OAuth/에셋 유틸 함수: routeProtectedPublicAssetForSameOriginProxy.",
+   "tags": [
+    "utility",
+    "url",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/urlUtils.js:resolveAssetFetchUrl",
+   "type": "function",
+   "name": "resolveAssetFetchUrl",
+   "filePath": "Frontend-main/src/utils/common/urlUtils.js",
+   "lineRange": [
+    280,
+    285
+   ],
+   "summary": "URL/OAuth/에셋 유틸 함수: resolveAssetFetchUrl.",
+   "tags": [
+    "utility",
+    "url",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/urlUtils.js:resolveApiArtifactUrl",
+   "type": "function",
+   "name": "resolveApiArtifactUrl",
+   "filePath": "Frontend-main/src/utils/common/urlUtils.js",
+   "lineRange": [
+    287,
+    306
+   ],
+   "summary": "URL/OAuth/에셋 유틸 함수: resolveApiArtifactUrl.",
+   "tags": [
+    "utility",
+    "url",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/urlUtils.js:buildOAuthCommon401Message",
+   "type": "function",
+   "name": "buildOAuthCommon401Message",
+   "filePath": "Frontend-main/src/utils/common/urlUtils.js",
+   "lineRange": [
+    315,
+    346
+   ],
+   "summary": "URL/OAuth/에셋 유틸 함수: buildOAuthCommon401Message.",
+   "tags": [
+    "utility",
+    "url",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/urlUtils.js:resolveOAuthUrlError",
+   "type": "function",
+   "name": "resolveOAuthUrlError",
+   "filePath": "Frontend-main/src/utils/common/urlUtils.js",
+   "lineRange": [
+    356,
+    364
+   ],
+   "summary": "URL/OAuth/에셋 유틸 함수: resolveOAuthUrlError.",
+   "tags": [
+    "utility",
+    "url",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/urlUtils.js:resolveOAuthApiBodyError",
+   "type": "function",
+   "name": "resolveOAuthApiBodyError",
+   "filePath": "Frontend-main/src/utils/common/urlUtils.js",
+   "lineRange": [
+    366,
+    405
+   ],
+   "summary": "URL/OAuth/에셋 유틸 함수: resolveOAuthApiBodyError.",
+   "tags": [
+    "utility",
+    "url",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/urlUtils.js:resolveOAuthHttpError",
+   "type": "function",
+   "name": "resolveOAuthHttpError",
+   "filePath": "Frontend-main/src/utils/common/urlUtils.js",
+   "lineRange": [
+    407,
+    459
+   ],
+   "summary": "OAuth 토큰 교환 HTTP 에러를 사용자용 메시지로 변환합니다.",
+   "tags": [
+    "utility",
+    "url",
+    "exported"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/urlUtils.js:normalizeOAuthFetchError",
+   "type": "function",
+   "name": "normalizeOAuthFetchError",
+   "filePath": "Frontend-main/src/utils/common/urlUtils.js",
+   "lineRange": [
+    461,
+    476
+   ],
+   "summary": "URL/OAuth/에셋 유틸 함수: normalizeOAuthFetchError.",
+   "tags": [
+    "utility",
+    "url",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/urlUtils.js:getOAuthErrorTip",
+   "type": "function",
+   "name": "getOAuthErrorTip",
+   "filePath": "Frontend-main/src/utils/common/urlUtils.js",
+   "lineRange": [
+    478,
+    497
+   ],
+   "summary": "URL/OAuth/에셋 유틸 함수: getOAuthErrorTip.",
+   "tags": [
+    "utility",
+    "url",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/urlUtils.js:parseViewerReaderSplat",
+   "type": "function",
+   "name": "parseViewerReaderSplat",
+   "filePath": "Frontend-main/src/utils/common/urlUtils.js",
+   "lineRange": [
+    516,
+    526
+   ],
+   "summary": "URL/OAuth/에셋 유틸 함수: parseViewerReaderSplat.",
+   "tags": [
+    "utility",
+    "url",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/urlUtils.js:resolveViewerReadingPosition",
+   "type": "function",
+   "name": "resolveViewerReadingPosition",
+   "filePath": "Frontend-main/src/utils/common/urlUtils.js",
+   "lineRange": [
+    529,
+    534
+   ],
+   "summary": "URL/OAuth/에셋 유틸 함수: resolveViewerReadingPosition.",
+   "tags": [
+    "utility",
+    "url",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/urlUtils.js:userViewerPath",
+   "type": "function",
+   "name": "userViewerPath",
+   "filePath": "Frontend-main/src/utils/common/urlUtils.js",
+   "lineRange": [
+    536,
+    538
+   ],
+   "summary": "URL/OAuth/에셋 유틸 함수: userViewerPath.",
+   "tags": [
+    "utility",
+    "url",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/urlUtils.js:userViewerReadingPath",
+   "type": "function",
+   "name": "userViewerReadingPath",
+   "filePath": "Frontend-main/src/utils/common/urlUtils.js",
+   "lineRange": [
+    540,
+    546
+   ],
+   "summary": "URL/OAuth/에셋 유틸 함수: userViewerReadingPath.",
+   "tags": [
+    "utility",
+    "url",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/urlUtils.js:userViewerBookmarksPath",
+   "type": "function",
+   "name": "userViewerBookmarksPath",
+   "filePath": "Frontend-main/src/utils/common/urlUtils.js",
+   "lineRange": [
+    549,
+    555
+   ],
+   "summary": "URL/OAuth/에셋 유틸 함수: userViewerBookmarksPath.",
+   "tags": [
+    "utility",
+    "url",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/urlUtils.js:userGraphPath",
+   "type": "function",
+   "name": "userGraphPath",
+   "filePath": "Frontend-main/src/utils/common/urlUtils.js",
+   "lineRange": [
+    557,
+    559
+   ],
+   "summary": "URL/OAuth/에셋 유틸 함수: userGraphPath.",
+   "tags": [
+    "utility",
+    "url",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/urlUtils.js:clearAuthenticatedAssetBlobCache",
+   "type": "function",
+   "name": "clearAuthenticatedAssetBlobCache",
+   "filePath": "Frontend-main/src/utils/common/urlUtils.js",
+   "lineRange": [
+    575,
+    582
+   ],
+   "summary": "URL/OAuth/에셋 유틸 함수: clearAuthenticatedAssetBlobCache.",
+   "tags": [
+    "utility",
+    "url",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/urlUtils.js:probeImageLoadable",
+   "type": "function",
+   "name": "probeImageLoadable",
+   "filePath": "Frontend-main/src/utils/common/urlUtils.js",
+   "lineRange": [
+    624,
+    644
+   ],
+   "summary": "URL/OAuth/에셋 유틸 함수: probeImageLoadable.",
+   "tags": [
+    "utility",
+    "url",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/urlUtils.js:buildCoverRefreshSource",
+   "type": "function",
+   "name": "buildCoverRefreshSource",
+   "filePath": "Frontend-main/src/utils/common/urlUtils.js",
+   "lineRange": [
+    667,
+    676
+   ],
+   "summary": "URL/OAuth/에셋 유틸 함수: buildCoverRefreshSource.",
+   "tags": [
+    "utility",
+    "url",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/urlUtils.js:fetchProtectedBlobUrl",
+   "type": "function",
+   "name": "fetchProtectedBlobUrl",
+   "filePath": "Frontend-main/src/utils/common/urlUtils.js",
+   "lineRange": [
+    678,
+    741
+   ],
+   "summary": "인증이 필요한 에셋을 fetch해 blob URL로 캐싱합니다.",
+   "tags": [
+    "utility",
+    "url",
+    "internal"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/urlUtils.js:fetchAuthenticatedAssetBlobUrl",
+   "type": "function",
+   "name": "fetchAuthenticatedAssetBlobUrl",
+   "filePath": "Frontend-main/src/utils/common/urlUtils.js",
+   "lineRange": [
+    743,
+    777
+   ],
+   "summary": "보호 에셋을 인증 fetch로 가져와 blob URL을 반환합니다.",
+   "tags": [
+    "utility",
+    "url",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/urlUtils.js:resolveOneGraphProfileImage",
+   "type": "function",
+   "name": "resolveOneGraphProfileImage",
+   "filePath": "Frontend-main/src/utils/common/urlUtils.js",
+   "lineRange": [
+    779,
+    797
+   ],
+   "summary": "URL/OAuth/에셋 유틸 함수: resolveOneGraphProfileImage.",
+   "tags": [
+    "utility",
+    "url",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/urlUtils.js:graphElementsHaveUnresolvedProfileImages",
+   "type": "function",
+   "name": "graphElementsHaveUnresolvedProfileImages",
+   "filePath": "Frontend-main/src/utils/common/urlUtils.js",
+   "lineRange": [
+    799,
+    802
+   ],
+   "summary": "URL/OAuth/에셋 유틸 함수: graphElementsHaveUnresolvedProfileImages.",
+   "tags": [
+    "utility",
+    "url",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/urlUtils.js:resolveGraphElementsProfileImages",
+   "type": "function",
+   "name": "resolveGraphElementsProfileImages",
+   "filePath": "Frontend-main/src/utils/common/urlUtils.js",
+   "lineRange": [
+    804,
+    808
+   ],
+   "summary": "그래프 요소의 인물 프로필 이미지 URL을 해석합니다.",
+   "tags": [
+    "utility",
+    "url",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "file:Frontend-main/src/utils/security/authTokenStorage.js",
+   "type": "file",
+   "name": "authTokenStorage.js",
+   "filePath": "Frontend-main/src/utils/security/authTokenStorage.js",
+   "summary": "액세스/리프레시 토큰과 Google 사용자 정보를 저장소에 읽고 쓰며, 인증 데이터 삭제 시 캐시 정리와 AUTH_CLEARED 이벤트를 발행합니다.",
+   "tags": [
+    "security",
+    "token-storage",
+    "authentication",
+    "utility"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/security/authTokenStorage.js:getStoredAccessToken",
+   "type": "function",
+   "name": "getStoredAccessToken",
+   "filePath": "Frontend-main/src/utils/security/authTokenStorage.js",
+   "lineRange": [
+    78,
+    87
+   ],
+   "summary": "토큰 저장소 함수: getStoredAccessToken.",
+   "tags": [
+    "security",
+    "token-storage",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/security/authTokenStorage.js:setStoredAccessToken",
+   "type": "function",
+   "name": "setStoredAccessToken",
+   "filePath": "Frontend-main/src/utils/security/authTokenStorage.js",
+   "lineRange": [
+    89,
+    100
+   ],
+   "summary": "토큰 저장소 함수: setStoredAccessToken.",
+   "tags": [
+    "security",
+    "token-storage",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/security/authTokenStorage.js:getStoredRefreshToken",
+   "type": "function",
+   "name": "getStoredRefreshToken",
+   "filePath": "Frontend-main/src/utils/security/authTokenStorage.js",
+   "lineRange": [
+    102,
+    104
+   ],
+   "summary": "토큰 저장소 함수: getStoredRefreshToken.",
+   "tags": [
+    "security",
+    "token-storage",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/security/authTokenStorage.js:setStoredRefreshToken",
+   "type": "function",
+   "name": "setStoredRefreshToken",
+   "filePath": "Frontend-main/src/utils/security/authTokenStorage.js",
+   "lineRange": [
+    106,
+    108
+   ],
+   "summary": "토큰 저장소 함수: setStoredRefreshToken.",
+   "tags": [
+    "security",
+    "token-storage",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/security/authTokenStorage.js:getStoredGoogleUserJson",
+   "type": "function",
+   "name": "getStoredGoogleUserJson",
+   "filePath": "Frontend-main/src/utils/security/authTokenStorage.js",
+   "lineRange": [
+    110,
+    112
+   ],
+   "summary": "토큰 저장소 함수: getStoredGoogleUserJson.",
+   "tags": [
+    "security",
+    "token-storage",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/security/authTokenStorage.js:setStoredGoogleUserJson",
+   "type": "function",
+   "name": "setStoredGoogleUserJson",
+   "filePath": "Frontend-main/src/utils/security/authTokenStorage.js",
+   "lineRange": [
+    114,
+    116
+   ],
+   "summary": "토큰 저장소 함수: setStoredGoogleUserJson.",
+   "tags": [
+    "security",
+    "token-storage",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/security/authTokenStorage.js:removeStoredGoogleUser",
+   "type": "function",
+   "name": "removeStoredGoogleUser",
+   "filePath": "Frontend-main/src/utils/security/authTokenStorage.js",
+   "lineRange": [
+    118,
+    120
+   ],
+   "summary": "토큰 저장소 함수: removeStoredGoogleUser.",
+   "tags": [
+    "security",
+    "token-storage",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/security/authTokenStorage.js:clearAuthData",
+   "type": "function",
+   "name": "clearAuthData",
+   "filePath": "Frontend-main/src/utils/security/authTokenStorage.js",
+   "lineRange": [
+    123,
+    140
+   ],
+   "summary": "저장된 인증 정보와 관련 캐시를 삭제하고 AUTH_CLEARED 이벤트를 발행합니다.",
+   "tags": [
+    "security",
+    "token-storage",
+    "exported"
+   ],
+   "complexity": "simple"
+  }
+ ],
+ "edges": [
+  {
+   "source": "file:Frontend-main/src/utils/api/authApi.js",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:makeSilentError",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/authApi.js",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:makeSilentError",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/authApi.js",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:isForbiddenError",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/authApi.js",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:isForbiddenError",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/authApi.js",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:isNotFoundError",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/authApi.js",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:isNotFoundError",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/authApi.js",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:requireBookId",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/authApi.js",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:requireBookId",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/authApi.js",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:pickResponseResult",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/authApi.js",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:pickResponseResult",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/authApi.js",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:toUnifiedApiResponse",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/authApi.js",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:toUnifiedApiResponse",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/authApi.js",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:mapSoftFailResponse",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/authApi.js",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:mapSoftFailResponse",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/authApi.js",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:decodeJwtPayload",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/authApi.js",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:isTokenValid",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/authApi.js",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:isTokenValid",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/authApi.js",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:getTokenExpirationTime",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/authApi.js",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:isTokenExpiringSoon",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/authApi.js",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:isTokenExpiringSoon",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/authApi.js",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:getProactiveRefreshBufferSeconds",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/authApi.js",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:getProactiveRefreshBufferSeconds",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/authApi.js",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:refreshAccessTokenIfExpiringSoon",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/authApi.js",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:authorizedFetch",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/authApi.js",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:toHttpError",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/authApi.js",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:authenticatedRequest",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/authApi.js",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:authenticatedRequest",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/authApi.js",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:refreshToken",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/authApi.js",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:refreshToken",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/authApi.js",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:authenticatedFetch",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/authApi.js",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:authenticatedFetch",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/authApi.js",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:ensureSessionAccessToken",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/authApi.js",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:ensureSessionAccessToken",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/authApi.js",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:logout",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/authApi.js",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:logout",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/authApi.js",
+   "target": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/authApi.js",
+   "target": "file:Frontend-main/src/utils/security/authTokenStorage.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/booksApi.js",
+   "target": "function:Frontend-main/src/utils/api/booksApi.js:normalizeBookCore",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/booksApi.js",
+   "target": "function:Frontend-main/src/utils/api/booksApi.js:normalizeManifestBook",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/booksApi.js",
+   "target": "function:Frontend-main/src/utils/api/booksApi.js:normalizeManifestBook",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/booksApi.js",
+   "target": "function:Frontend-main/src/utils/api/booksApi.js:buildBooksQueryString",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/booksApi.js",
+   "target": "function:Frontend-main/src/utils/api/booksApi.js:getBooks",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/booksApi.js",
+   "target": "function:Frontend-main/src/utils/api/booksApi.js:getBooks",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/booksApi.js",
+   "target": "function:Frontend-main/src/utils/api/booksApi.js:getBooksArray",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/booksApi.js",
+   "target": "function:Frontend-main/src/utils/api/booksApi.js:getBooksArray",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/booksApi.js",
+   "target": "function:Frontend-main/src/utils/api/booksApi.js:getBook",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/booksApi.js",
+   "target": "function:Frontend-main/src/utils/api/booksApi.js:getBook",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/booksApi.js",
+   "target": "function:Frontend-main/src/utils/api/booksApi.js:uploadBook",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/booksApi.js",
+   "target": "function:Frontend-main/src/utils/api/booksApi.js:uploadBook",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/booksApi.js",
+   "target": "function:Frontend-main/src/utils/api/booksApi.js:toggleBookFavorite",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/booksApi.js",
+   "target": "function:Frontend-main/src/utils/api/booksApi.js:toggleBookFavorite",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/booksApi.js",
+   "target": "function:Frontend-main/src/utils/api/booksApi.js:normalizeChapterPovSummariesResult",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/booksApi.js",
+   "target": "function:Frontend-main/src/utils/api/booksApi.js:normalizeChapterPovSummariesResult",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/booksApi.js",
+   "target": "function:Frontend-main/src/utils/api/booksApi.js:getChapterPovSummaries",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/booksApi.js",
+   "target": "function:Frontend-main/src/utils/api/booksApi.js:getChapterPovSummaries",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/booksApi.js",
+   "target": "function:Frontend-main/src/utils/api/booksApi.js:getBookmarks",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/booksApi.js",
+   "target": "function:Frontend-main/src/utils/api/booksApi.js:loadBookmarks",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/booksApi.js",
+   "target": "function:Frontend-main/src/utils/api/booksApi.js:loadBookmarks",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/booksApi.js",
+   "target": "function:Frontend-main/src/utils/api/booksApi.js:createBookmark",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/booksApi.js",
+   "target": "function:Frontend-main/src/utils/api/booksApi.js:createBookmark",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/booksApi.js",
+   "target": "function:Frontend-main/src/utils/api/booksApi.js:updateBookmark",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/booksApi.js",
+   "target": "function:Frontend-main/src/utils/api/booksApi.js:updateBookmark",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/booksApi.js",
+   "target": "function:Frontend-main/src/utils/api/booksApi.js:deleteBookmark",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/booksApi.js",
+   "target": "function:Frontend-main/src/utils/api/booksApi.js:deleteBookmark",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/booksApi.js",
+   "target": "function:Frontend-main/src/utils/api/booksApi.js:saveProgress",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/booksApi.js",
+   "target": "function:Frontend-main/src/utils/api/booksApi.js:saveProgress",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/booksApi.js",
+   "target": "function:Frontend-main/src/utils/api/booksApi.js:saveProgressKeepalive",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/booksApi.js",
+   "target": "function:Frontend-main/src/utils/api/booksApi.js:saveProgressKeepalive",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/booksApi.js",
+   "target": "function:Frontend-main/src/utils/api/booksApi.js:getBookProgress",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/booksApi.js",
+   "target": "function:Frontend-main/src/utils/api/booksApi.js:getBookProgress",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/booksApi.js",
+   "target": "function:Frontend-main/src/utils/api/booksApi.js:deleteBookProgress",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/booksApi.js",
+   "target": "function:Frontend-main/src/utils/api/booksApi.js:deleteBookProgress",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/booksApi.js",
+   "target": "function:Frontend-main/src/utils/api/booksApi.js:getBookManifest",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/booksApi.js",
+   "target": "function:Frontend-main/src/utils/api/booksApi.js:getBookManifest",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/booksApi.js",
+   "target": "file:Frontend-main/src/utils/api/authApi.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/booksApi.js",
+   "target": "file:Frontend-main/src/utils/bookmarks/bookmarkUtils.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/booksApi.js",
+   "target": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/booksApi.js",
+   "target": "file:Frontend-main/src/utils/common/cache/progressCache.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/booksApi.js",
+   "target": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/booksApi.js",
+   "target": "file:Frontend-main/src/utils/common/valueUtils.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/booksApi.js",
+   "target": "file:Frontend-main/src/utils/security/authTokenStorage.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/utils/api/booksApi.js",
+   "target": "file:Frontend-main/src/utils/viewer/viewerSession.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:getApiBaseUrl",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:getApiBaseUrl",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:getGoogleOAuthRedirectUri",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:getGoogleOAuthRedirectUri",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:getPostLoginHomeUrl",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:getPostLoginHomeUrl",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:getDevBackendHintUrl",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:getDevBackendHintUrl",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:isOAuthCallbackRoute",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:isOAuthCallbackRoute",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:buildGoogleOAuthAuthUrl",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:buildGoogleOAuthAuthUrl",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:startGoogleOAuthLogin",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:startGoogleOAuthLogin",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:buildGoogleRedirectUriMismatchMessage",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:buildGoogleRedirectUriMismatchMessage",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:isProtectedPublicAsset",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:isProtectedPublicAsset",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:rewriteLegacyAssetUrl",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:sanitizeAssetUrl",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:sanitizeAssetUrl",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:preferDevPublicProxyPath",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:routeProtectedPublicAssetForSameOriginProxy",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:resolveAssetFetchUrl",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:resolveAssetFetchUrl",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:resolveApiArtifactUrl",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:resolveApiArtifactUrl",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:buildOAuthCommon401Message",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:resolveOAuthUrlError",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:resolveOAuthUrlError",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:resolveOAuthApiBodyError",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:resolveOAuthApiBodyError",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:resolveOAuthHttpError",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:resolveOAuthHttpError",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:normalizeOAuthFetchError",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:normalizeOAuthFetchError",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:getOAuthErrorTip",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:getOAuthErrorTip",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:parseViewerReaderSplat",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:parseViewerReaderSplat",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:resolveViewerReadingPosition",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:resolveViewerReadingPosition",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:userViewerPath",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:userViewerPath",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:userViewerReadingPath",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:userViewerReadingPath",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:userViewerBookmarksPath",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:userViewerBookmarksPath",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:userGraphPath",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:userGraphPath",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:clearAuthenticatedAssetBlobCache",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:clearAuthenticatedAssetBlobCache",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:probeImageLoadable",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:buildCoverRefreshSource",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:fetchProtectedBlobUrl",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:fetchAuthenticatedAssetBlobUrl",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:fetchAuthenticatedAssetBlobUrl",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:resolveOneGraphProfileImage",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:graphElementsHaveUnresolvedProfileImages",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:graphElementsHaveUnresolvedProfileImages",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:resolveGraphElementsProfileImages",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:resolveGraphElementsProfileImages",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "file:Frontend-main/src/utils/common/valueUtils.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "file:Frontend-main/src/utils/security/authTokenStorage.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "target": "file:Frontend-main/src/utils/security/oauthSecurity.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/utils/security/authTokenStorage.js",
+   "target": "function:Frontend-main/src/utils/security/authTokenStorage.js:getStoredAccessToken",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/security/authTokenStorage.js",
+   "target": "function:Frontend-main/src/utils/security/authTokenStorage.js:getStoredAccessToken",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/security/authTokenStorage.js",
+   "target": "function:Frontend-main/src/utils/security/authTokenStorage.js:setStoredAccessToken",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/security/authTokenStorage.js",
+   "target": "function:Frontend-main/src/utils/security/authTokenStorage.js:setStoredAccessToken",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/security/authTokenStorage.js",
+   "target": "function:Frontend-main/src/utils/security/authTokenStorage.js:getStoredRefreshToken",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/security/authTokenStorage.js",
+   "target": "function:Frontend-main/src/utils/security/authTokenStorage.js:getStoredRefreshToken",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/security/authTokenStorage.js",
+   "target": "function:Frontend-main/src/utils/security/authTokenStorage.js:setStoredRefreshToken",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/security/authTokenStorage.js",
+   "target": "function:Frontend-main/src/utils/security/authTokenStorage.js:setStoredRefreshToken",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/security/authTokenStorage.js",
+   "target": "function:Frontend-main/src/utils/security/authTokenStorage.js:getStoredGoogleUserJson",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/security/authTokenStorage.js",
+   "target": "function:Frontend-main/src/utils/security/authTokenStorage.js:getStoredGoogleUserJson",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/security/authTokenStorage.js",
+   "target": "function:Frontend-main/src/utils/security/authTokenStorage.js:setStoredGoogleUserJson",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/security/authTokenStorage.js",
+   "target": "function:Frontend-main/src/utils/security/authTokenStorage.js:setStoredGoogleUserJson",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/security/authTokenStorage.js",
+   "target": "function:Frontend-main/src/utils/security/authTokenStorage.js:removeStoredGoogleUser",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/security/authTokenStorage.js",
+   "target": "function:Frontend-main/src/utils/security/authTokenStorage.js:removeStoredGoogleUser",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/security/authTokenStorage.js",
+   "target": "function:Frontend-main/src/utils/security/authTokenStorage.js:clearAuthData",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/security/authTokenStorage.js",
+   "target": "function:Frontend-main/src/utils/security/authTokenStorage.js:clearAuthData",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/security/authTokenStorage.js",
+   "target": "file:Frontend-main/src/utils/common/cache/cacheManager.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/utils/security/authTokenStorage.js",
+   "target": "file:Frontend-main/src/utils/common/valueUtils.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/authApi.js:refreshAccessTokenIfExpiringSoon",
+   "target": "function:Frontend-main/src/utils/security/authTokenStorage.js:getStoredAccessToken",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/authApi.js:authorizedFetch",
+   "target": "function:Frontend-main/src/utils/security/authTokenStorage.js:clearAuthData",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/authApi.js:authenticatedRequest",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:getApiBaseUrl",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/authApi.js:authenticatedRequest",
+   "target": "function:Frontend-main/src/utils/security/authTokenStorage.js:clearAuthData",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/authApi.js:refreshToken",
+   "target": "function:Frontend-main/src/utils/security/authTokenStorage.js:getStoredRefreshToken",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/authApi.js:refreshToken",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:getApiBaseUrl",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/authApi.js:refreshToken",
+   "target": "function:Frontend-main/src/utils/security/authTokenStorage.js:clearAuthData",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/authApi.js:refreshToken",
+   "target": "function:Frontend-main/src/utils/security/authTokenStorage.js:setStoredAccessToken",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/authApi.js:refreshToken",
+   "target": "function:Frontend-main/src/utils/security/authTokenStorage.js:setStoredRefreshToken",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/authApi.js:refreshToken",
+   "target": "function:Frontend-main/src/utils/security/authTokenStorage.js:setStoredGoogleUserJson",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/authApi.js:ensureSessionAccessToken",
+   "target": "function:Frontend-main/src/utils/security/authTokenStorage.js:getStoredAccessToken",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/authApi.js:ensureSessionAccessToken",
+   "target": "function:Frontend-main/src/utils/security/authTokenStorage.js:setStoredAccessToken",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/authApi.js:ensureSessionAccessToken",
+   "target": "function:Frontend-main/src/utils/security/authTokenStorage.js:getStoredRefreshToken",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/authApi.js:logout",
+   "target": "function:Frontend-main/src/utils/security/authTokenStorage.js:clearAuthData",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:normalizeBookCore",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:sanitizeAssetUrl",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:normalizeManifestBook",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:sanitizeAssetUrl",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:getBooks",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:authenticatedRequest",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:getBooks",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:mapSoftFailResponse",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:getBook",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:toPositiveNumberOrNull",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:getBook",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:makeSilentError",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:getBook",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:authenticatedRequest",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:getBook",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:mapSoftFailResponse",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:getBook",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:isNotFoundError",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:getBook",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:isForbiddenError",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:uploadBook",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:authenticatedRequest",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:toggleBookFavorite",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:authenticatedRequest",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:getChapterPovSummaries",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:toPositiveNumberOrNull",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:getChapterPovSummaries",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:toOneBasedChapterIndexOrNull",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:getChapterPovSummaries",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:authenticatedRequest",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:getBookmarks",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:toPositiveNumberOrNull",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:getBookmarks",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:authenticatedRequest",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:getBookmarks",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:mapSoftFailResponse",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:createBookmark",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:toPositiveNumberOrNull",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:createBookmark",
+   "target": "function:Frontend-main/src/utils/common/cache/progressCache.js:normalizeStartEndLocatorsForServer",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:createBookmark",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:authenticatedRequest",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:updateBookmark",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:authenticatedRequest",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:deleteBookmark",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:authenticatedRequest",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:saveProgress",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:authenticatedRequest",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:saveProgress",
+   "target": "function:Frontend-main/src/utils/common/cache/progressCache.js:setProgressToCache",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:saveProgress",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:toUnifiedApiResponse",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:saveProgress",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:isForbiddenError",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:saveProgressKeepalive",
+   "target": "function:Frontend-main/src/utils/security/authTokenStorage.js:getStoredAccessToken",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:saveProgressKeepalive",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:isTokenValid",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:saveProgressKeepalive",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:getApiBaseUrl",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:getBookProgress",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:makeSilentError",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:getBookProgress",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:authenticatedRequest",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:getBookProgress",
+   "target": "function:Frontend-main/src/utils/common/cache/progressCache.js:getProgressFromCache",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:getBookProgress",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:resolveProgressLocator",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:getBookProgress",
+   "target": "function:Frontend-main/src/utils/common/cache/progressCache.js:ensureProgressRowLocator",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:getBookProgress",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:locatorsEqual",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:getBookProgress",
+   "target": "function:Frontend-main/src/utils/viewer/viewerSession.js:normalizeReadingProgressPercent",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:getBookProgress",
+   "target": "function:Frontend-main/src/utils/common/cache/progressCache.js:setProgressToCache",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:getBookProgress",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:toUnifiedApiResponse",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:deleteBookProgress",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:requireBookId",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:deleteBookProgress",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:authenticatedRequest",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:deleteBookProgress",
+   "target": "function:Frontend-main/src/utils/common/cache/progressCache.js:removeProgressFromCache",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:deleteBookProgress",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:toUnifiedApiResponse",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:getBookManifest",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:makeSilentError",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:getBookManifest",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:getManifestFromCache",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:getBookManifest",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:toUnifiedApiResponse",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:getBookManifest",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:authenticatedRequest",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:getBookManifest",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:mapSoftFailResponse",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:getBookManifest",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:pickResponseResult",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:getBookManifest",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:setManifestData",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/api/booksApi.js:getBookManifest",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:isNotFoundError",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/common/urlUtils.js:getApiBaseUrl",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:trimTrailingSlash",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/common/urlUtils.js:getPostLoginHomeUrl",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:trimTrailingSlash",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/common/urlUtils.js:buildGoogleOAuthAuthUrl",
+   "target": "function:Frontend-main/src/utils/security/oauthSecurity.js:createAndStoreGoogleOAuthState",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/common/urlUtils.js:startGoogleOAuthLogin",
+   "target": "function:Frontend-main/src/utils/security/oauthSecurity.js:secureLog",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/common/urlUtils.js:resolveApiArtifactUrl",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:trimTrailingSlash",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/common/urlUtils.js:parseViewerReaderSplat",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:toOneBasedChapterIndexOrNull",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/common/urlUtils.js:userViewerReadingPath",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:toOneBasedChapterIndexOrNull",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/security/authTokenStorage.js:clearAuthData",
+   "target": "function:Frontend-main/src/utils/common/cache/cacheManager.js:clearBooksCache",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  }
+ ]
+}

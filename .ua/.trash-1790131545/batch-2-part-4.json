@@ -1,0 +1,3265 @@
+{
+ "nodes": [
+  {
+   "id": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "type": "file",
+   "name": "manifestCache.js",
+   "filePath": "Frontend-main/src/utils/common/cache/manifestCache.js",
+   "summary": "책 manifest의 정규화·캐시(메모리/localStorage)와 locator↔오프셋·진도·이벤트 조회 유틸을 제공하는 캐시 모듈입니다.",
+   "tags": [
+    "cache",
+    "manifest",
+    "utility",
+    "reading-progress",
+    "locator"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/cache/manifestCache.js:normalizeEvent",
+   "type": "function",
+   "name": "normalizeEvent",
+   "filePath": "Frontend-main/src/utils/common/cache/manifestCache.js",
+   "lineRange": [
+    45,
+    64
+   ],
+   "summary": "manifest 이벤트 원본을 id·인덱스·텍스트 오프셋 필드로 정규화합니다.",
+   "tags": [
+    "manifest",
+    "cache",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/cache/manifestCache.js:normalizeChapter",
+   "type": "function",
+   "name": "normalizeChapter",
+   "filePath": "Frontend-main/src/utils/common/cache/manifestCache.js",
+   "lineRange": [
+    66,
+    125
+   ],
+   "summary": "manifest 챕터 원본을 인덱스·제목·길이·paragraphStarts·이벤트 목록으로 정규화합니다.",
+   "tags": [
+    "manifest",
+    "cache",
+    "internal"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/cache/manifestCache.js:parseCharacterNames",
+   "type": "function",
+   "name": "parseCharacterNames",
+   "filePath": "Frontend-main/src/utils/common/cache/manifestCache.js",
+   "lineRange": [
+    127,
+    138
+   ],
+   "summary": "인물 이름 필드(문자열/배열/JSON)를 이름 배열로 파싱합니다.",
+   "tags": [
+    "manifest",
+    "cache",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/cache/manifestCache.js:normalizeCharacter",
+   "type": "function",
+   "name": "normalizeCharacter",
+   "filePath": "Frontend-main/src/utils/common/cache/manifestCache.js",
+   "lineRange": [
+    140,
+    155
+   ],
+   "summary": "manifest 인물 원본을 id·이름·설명·주요인물 여부 등으로 정규화합니다.",
+   "tags": [
+    "manifest",
+    "cache",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/cache/manifestCache.js:normalizeReaderArtifacts",
+   "type": "function",
+   "name": "normalizeReaderArtifacts",
+   "filePath": "Frontend-main/src/utils/common/cache/manifestCache.js",
+   "lineRange": [
+    157,
+    170
+   ],
+   "summary": "manifest의 리더 아티팩트(EPUB/텍스트 URL 등) 필드를 정규화합니다.",
+   "tags": [
+    "manifest",
+    "cache",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/cache/manifestCache.js:normalizeProgressMetadata",
+   "type": "function",
+   "name": "normalizeProgressMetadata",
+   "filePath": "Frontend-main/src/utils/common/cache/manifestCache.js",
+   "lineRange": [
+    172,
+    190
+   ],
+   "summary": "manifest의 진도 계산용 메타데이터(챕터 길이 등)를 정규화합니다.",
+   "tags": [
+    "manifest",
+    "cache",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/cache/manifestCache.js:normalizeManifestData",
+   "type": "function",
+   "name": "normalizeManifestData",
+   "filePath": "Frontend-main/src/utils/common/cache/manifestCache.js",
+   "lineRange": [
+    192,
+    216
+   ],
+   "summary": "서버 manifest 전체를 챕터·인물·이벤트·아티팩트 구조로 정규화합니다.",
+   "tags": [
+    "manifest",
+    "cache",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/cache/manifestCache.js:getEffectiveChapterLengthForProgress",
+   "type": "function",
+   "name": "getEffectiveChapterLengthForProgress",
+   "filePath": "Frontend-main/src/utils/common/cache/manifestCache.js",
+   "lineRange": [
+    242,
+    248
+   ],
+   "summary": "진도 계산에 사용할 챕터의 유효 길이를 반환합니다.",
+   "tags": [
+    "manifest",
+    "cache",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/cache/manifestCache.js:calculateMaxChapterFromChapters",
+   "type": "function",
+   "name": "calculateMaxChapterFromChapters",
+   "filePath": "Frontend-main/src/utils/common/cache/manifestCache.js",
+   "lineRange": [
+    250,
+    258
+   ],
+   "summary": "챕터 목록에서 최대 챕터 번호를 계산합니다.",
+   "tags": [
+    "manifest",
+    "cache",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/cache/manifestCache.js:migrateLegacyManifestStorage",
+   "type": "function",
+   "name": "migrateLegacyManifestStorage",
+   "filePath": "Frontend-main/src/utils/common/cache/manifestCache.js",
+   "lineRange": [
+    260,
+    274
+   ],
+   "summary": "구버전 localStorage manifest 키를 정리·마이그레이션합니다.",
+   "tags": [
+    "manifest",
+    "cache",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/cache/manifestCache.js:chapterLocalOffsetToLocator",
+   "type": "function",
+   "name": "chapterLocalOffsetToLocator",
+   "filePath": "Frontend-main/src/utils/common/cache/manifestCache.js",
+   "lineRange": [
+    297,
+    325
+   ],
+   "summary": "챕터 내부 코드포인트 오프셋을 v2 locator(blockIndex·offset)로 변환합니다.",
+   "tags": [
+    "manifest",
+    "cache",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/cache/manifestCache.js:chapterLocalCodePointFromLocator",
+   "type": "function",
+   "name": "chapterLocalCodePointFromLocator",
+   "filePath": "Frontend-main/src/utils/common/cache/manifestCache.js",
+   "lineRange": [
+    331,
+    363
+   ],
+   "summary": "v2 locator를 챕터 rawText 기준 로컬 코드포인트 위치로 환산합니다.",
+   "tags": [
+    "manifest",
+    "cache",
+    "internal"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/cache/manifestCache.js:pickManifestEventForChapterLocalOffset",
+   "type": "function",
+   "name": "pickManifestEventForChapterLocalOffset",
+   "filePath": "Frontend-main/src/utils/common/cache/manifestCache.js",
+   "lineRange": [
+    365,
+    387
+   ],
+   "summary": "챕터 로컬 오프셋이 속하는 manifest 이벤트 구간을 찾습니다.",
+   "tags": [
+    "manifest",
+    "cache",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/cache/manifestCache.js:resolveLocatorToEventParams",
+   "type": "function",
+   "name": "resolveLocatorToEventParams",
+   "filePath": "Frontend-main/src/utils/common/cache/manifestCache.js",
+   "lineRange": [
+    393,
+    437
+   ],
+   "summary": "읽기 locator에 대응하는 챕터·eventIdx·eventId를 manifest 이벤트 구간으로 계산합니다.",
+   "tags": [
+    "manifest",
+    "cache",
+    "exported"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/cache/manifestCache.js:locatorFromBookAbsoluteOffset",
+   "type": "function",
+   "name": "locatorFromBookAbsoluteOffset",
+   "filePath": "Frontend-main/src/utils/common/cache/manifestCache.js",
+   "lineRange": [
+    443,
+    471
+   ],
+   "summary": "책 전체 기준 절대 오프셋을 챕터 길이 누적으로 v2 locator로 근사합니다.",
+   "tags": [
+    "manifest",
+    "cache",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/cache/manifestCache.js:chapterLocalForProgress",
+   "type": "function",
+   "name": "chapterLocalForProgress",
+   "filePath": "Frontend-main/src/utils/common/cache/manifestCache.js",
+   "lineRange": [
+    491,
+    505
+   ],
+   "summary": "진도 계산용으로 locator를 챕터 로컬 오프셋으로 해석합니다(스텝/페이지 인코딩 처리).",
+   "tags": [
+    "manifest",
+    "cache",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/cache/manifestCache.js:canResolveProgressMetrics",
+   "type": "function",
+   "name": "canResolveProgressMetrics",
+   "filePath": "Frontend-main/src/utils/common/cache/manifestCache.js",
+   "lineRange": [
+    514,
+    518
+   ],
+   "summary": "manifest로 진도 지표를 계산할 수 있는지 확인합니다.",
+   "tags": [
+    "manifest",
+    "cache",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/cache/manifestCache.js:locatorFromChapterLocalOffset",
+   "type": "function",
+   "name": "locatorFromChapterLocalOffset",
+   "filePath": "Frontend-main/src/utils/common/cache/manifestCache.js",
+   "lineRange": [
+    520,
+    521
+   ],
+   "summary": "챕터 로컬 오프셋을 locator로 변환하는 공개 래퍼입니다.",
+   "tags": [
+    "manifest",
+    "cache",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/cache/manifestCache.js:chapterLocalOffsetFromLocator",
+   "type": "function",
+   "name": "chapterLocalOffsetFromLocator",
+   "filePath": "Frontend-main/src/utils/common/cache/manifestCache.js",
+   "lineRange": [
+    524,
+    525
+   ],
+   "summary": "locator를 챕터 로컬 코드포인트로 변환하는 공개 래퍼입니다(진도·북마크 resume 공용).",
+   "tags": [
+    "manifest",
+    "cache",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/cache/manifestCache.js:locatorToBookAbsoluteOffset",
+   "type": "function",
+   "name": "locatorToBookAbsoluteOffset",
+   "filePath": "Frontend-main/src/utils/common/cache/manifestCache.js",
+   "lineRange": [
+    527,
+    546
+   ],
+   "summary": "locator를 책 전체 기준 절대 코드포인트 오프셋으로 변환합니다.",
+   "tags": [
+    "manifest",
+    "cache",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/cache/manifestCache.js:readingProgressPercentFromLocator",
+   "type": "function",
+   "name": "readingProgressPercentFromLocator",
+   "filePath": "Frontend-main/src/utils/common/cache/manifestCache.js",
+   "lineRange": [
+    548,
+    553
+   ],
+   "summary": "locator로부터 책 전체 읽기 진도 퍼센트를 계산합니다.",
+   "tags": [
+    "manifest",
+    "cache",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/cache/manifestCache.js:absoluteOffsetFromReadingProgressPercent",
+   "type": "function",
+   "name": "absoluteOffsetFromReadingProgressPercent",
+   "filePath": "Frontend-main/src/utils/common/cache/manifestCache.js",
+   "lineRange": [
+    555,
+    568
+   ],
+   "summary": "읽기 진도 퍼센트를 책 전체 절대 오프셋으로 역변환합니다.",
+   "tags": [
+    "manifest",
+    "cache",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/cache/manifestCache.js:resolveProgressMetricsFromLocator",
+   "type": "function",
+   "name": "resolveProgressMetricsFromLocator",
+   "filePath": "Frontend-main/src/utils/common/cache/manifestCache.js",
+   "lineRange": [
+    570,
+    584
+   ],
+   "summary": "locator로부터 절대 오프셋·퍼센트 등 진도 지표를 한 번에 계산합니다.",
+   "tags": [
+    "manifest",
+    "cache",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/cache/manifestCache.js:setManifestData",
+   "type": "function",
+   "name": "setManifestData",
+   "filePath": "Frontend-main/src/utils/common/cache/manifestCache.js",
+   "lineRange": [
+    591,
+    615
+   ],
+   "summary": "정규화된 manifest를 메모리와 localStorage 캐시에 저장합니다.",
+   "tags": [
+    "manifest",
+    "cache",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/cache/manifestCache.js:getManifestFromCache",
+   "type": "function",
+   "name": "getManifestFromCache",
+   "filePath": "Frontend-main/src/utils/common/cache/manifestCache.js",
+   "lineRange": [
+    617,
+    634
+   ],
+   "summary": "메모리/localStorage에서 만료되지 않은 manifest를 조회합니다.",
+   "tags": [
+    "manifest",
+    "cache",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/cache/manifestCache.js:hasManifestData",
+   "type": "function",
+   "name": "hasManifestData",
+   "filePath": "Frontend-main/src/utils/common/cache/manifestCache.js",
+   "lineRange": [
+    636,
+    646
+   ],
+   "summary": "책의 유효한 manifest 캐시 존재 여부를 확인합니다.",
+   "tags": [
+    "manifest",
+    "cache",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/cache/manifestCache.js:invalidateManifest",
+   "type": "function",
+   "name": "invalidateManifest",
+   "filePath": "Frontend-main/src/utils/common/cache/manifestCache.js",
+   "lineRange": [
+    648,
+    658
+   ],
+   "summary": "책의 manifest 캐시를 메모리와 스토리지에서 제거합니다.",
+   "tags": [
+    "manifest",
+    "cache",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/cache/manifestCache.js:prefetchManifest",
+   "type": "function",
+   "name": "prefetchManifest",
+   "filePath": "Frontend-main/src/utils/common/cache/manifestCache.js",
+   "lineRange": [
+    660,
+    694
+   ],
+   "summary": "booksApi로 manifest를 가져와 정규화 후 캐시에 저장하며 중복 요청을 방지합니다.",
+   "tags": [
+    "manifest",
+    "cache",
+    "exported"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/cache/manifestCache.js:getChapterDataFromManifest",
+   "type": "function",
+   "name": "getChapterDataFromManifest",
+   "filePath": "Frontend-main/src/utils/common/cache/manifestCache.js",
+   "lineRange": [
+    705,
+    710
+   ],
+   "summary": "주어진 manifest에서 챕터 인덱스에 해당하는 챕터 데이터를 찾습니다.",
+   "tags": [
+    "manifest",
+    "cache",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/cache/manifestCache.js:getChapterData",
+   "type": "function",
+   "name": "getChapterData",
+   "filePath": "Frontend-main/src/utils/common/cache/manifestCache.js",
+   "lineRange": [
+    717,
+    725
+   ],
+   "summary": "책 ID와 챕터 인덱스로 캐시된 manifest의 챕터 데이터를 조회합니다.",
+   "tags": [
+    "manifest",
+    "cache",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/cache/manifestCache.js:findManifestEventInChapter",
+   "type": "function",
+   "name": "findManifestEventInChapter",
+   "filePath": "Frontend-main/src/utils/common/cache/manifestCache.js",
+   "lineRange": [
+    734,
+    751
+   ],
+   "summary": "챕터 manifest 이벤트에서 eventId 또는 eventIdx로 이벤트를 조회합니다.",
+   "tags": [
+    "manifest",
+    "cache",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/cache/manifestCache.js:getLastManifestEventInChapter",
+   "type": "function",
+   "name": "getLastManifestEventInChapter",
+   "filePath": "Frontend-main/src/utils/common/cache/manifestCache.js",
+   "lineRange": [
+    754,
+    767
+   ],
+   "summary": "챕터 manifest 이벤트 중 최대 인덱스 이벤트를 반환합니다.",
+   "tags": [
+    "manifest",
+    "cache",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/cache/manifestCache.js:getFirstManifestEventInChapter",
+   "type": "function",
+   "name": "getFirstManifestEventInChapter",
+   "filePath": "Frontend-main/src/utils/common/cache/manifestCache.js",
+   "lineRange": [
+    770,
+    783
+   ],
+   "summary": "챕터 manifest 이벤트 중 최소 인덱스 이벤트를 반환합니다.",
+   "tags": [
+    "manifest",
+    "cache",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/cache/manifestCache.js:getFirstManifestEventInBook",
+   "type": "function",
+   "name": "getFirstManifestEventInBook",
+   "filePath": "Frontend-main/src/utils/common/cache/manifestCache.js",
+   "lineRange": [
+    786,
+    796
+   ],
+   "summary": "책 전체 기준 가장 첫 이벤트를 반환합니다.",
+   "tags": [
+    "manifest",
+    "cache",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/cache/manifestCache.js:getLastManifestEventInBook",
+   "type": "function",
+   "name": "getLastManifestEventInBook",
+   "filePath": "Frontend-main/src/utils/common/cache/manifestCache.js",
+   "lineRange": [
+    799,
+    809
+   ],
+   "summary": "책 전체 기준 가장 마지막 이벤트를 반환합니다.",
+   "tags": [
+    "manifest",
+    "cache",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/cache/manifestCache.js:listBookManifestEventIds",
+   "type": "function",
+   "name": "listBookManifestEventIds",
+   "filePath": "Frontend-main/src/utils/common/cache/manifestCache.js",
+   "lineRange": [
+    812,
+    832
+   ],
+   "summary": "책 전체 eventId를 챕터·이벤트 순으로 나열합니다.",
+   "tags": [
+    "manifest",
+    "cache",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/cache/manifestCache.js:getLastEventIdxFromChapterData",
+   "type": "function",
+   "name": "getLastEventIdxFromChapterData",
+   "filePath": "Frontend-main/src/utils/common/cache/manifestCache.js",
+   "lineRange": [
+    838,
+    849
+   ],
+   "summary": "manifest 챕터 데이터에서 이벤트 인덱스 상한 힌트를 구하며 이벤트가 없으면 null을 반환합니다.",
+   "tags": [
+    "manifest",
+    "cache",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/cache/manifestCache.js:resolveLastEventIdxForChapter",
+   "type": "function",
+   "name": "resolveLastEventIdxForChapter",
+   "filePath": "Frontend-main/src/utils/common/cache/manifestCache.js",
+   "lineRange": [
+    854,
+    858
+   ],
+   "summary": "manifest 기준 챕터의 마지막 이벤트 인덱스를 반환합니다.",
+   "tags": [
+    "manifest",
+    "cache",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/common/cache/manifestCache.js:getMaxChapter",
+   "type": "function",
+   "name": "getMaxChapter",
+   "filePath": "Frontend-main/src/utils/common/cache/manifestCache.js",
+   "lineRange": [
+    860,
+    867
+   ],
+   "summary": "책 manifest 기준 최대 챕터 번호를 반환합니다.",
+   "tags": [
+    "manifest",
+    "cache",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "type": "file",
+   "name": "graphCore.js",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "summary": "그래프 요소 ID·관계 정규화, 라벨 히스토리, 인물 표시 이름 해석, 챕터 사이드바 항목, POV 요약 등 그래프 핵심 유틸 모음입니다.",
+   "tags": [
+    "utility",
+    "relation-graph",
+    "normalization",
+    "character-name"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:directedEdgeElementId",
+   "type": "function",
+   "name": "directedEdgeElementId",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    31,
+    31
+   ],
+   "summary": "방향 간선의 Cytoscape 요소 ID를 생성합니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:extractApiBookId",
+   "type": "function",
+   "name": "extractApiBookId",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    33,
+    41
+   ],
+   "summary": "책 객체/값에서 서버 API용 bookId를 추출합니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:normalizeElementId",
+   "type": "function",
+   "name": "normalizeElementId",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    43,
+    43
+   ],
+   "summary": "요소 ID를 문자열로 정규화합니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:isGraphEdgeElement",
+   "type": "function",
+   "name": "isGraphEdgeElement",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    45,
+    46
+   ],
+   "summary": "Cytoscape 요소가 간선인지 판별합니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:isGraphNodeElement",
+   "type": "function",
+   "name": "isGraphNodeElement",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    48,
+    49
+   ],
+   "summary": "Cytoscape 요소가 노드인지 판별합니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:undirectedPairKey",
+   "type": "function",
+   "name": "undirectedPairKey",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    52,
+    56
+   ],
+   "summary": "순서와 무관한 무방향 노드 쌍 키를 생성합니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:sortElementsByDataId",
+   "type": "function",
+   "name": "sortElementsByDataId",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    58,
+    63
+   ],
+   "summary": "그래프 요소를 data.id 기준으로 정렬합니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:uniqueStrings",
+   "type": "function",
+   "name": "uniqueStrings",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    65,
+    76
+   ],
+   "summary": "문자열 배열에서 공백·중복을 제거합니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:sortedUniqueJoin",
+   "type": "function",
+   "name": "sortedUniqueJoin",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    79,
+    81
+   ],
+   "summary": "고유 문자열을 정렬 후 결합해 fingerprint 등에 사용합니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:normalizeRelationArray",
+   "type": "function",
+   "name": "normalizeRelationArray",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    83,
+    93
+   ],
+   "summary": "관계 라벨 값을 정규화된 문자열 배열로 변환합니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:pickLastRelationLabel",
+   "type": "function",
+   "name": "pickLastRelationLabel",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    96,
+    103
+   ],
+   "summary": "관계 라벨 배열에서 가장 최근 라벨을 고릅니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:labelEventOrderHint",
+   "type": "function",
+   "name": "labelEventOrderHint",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    111,
+    115
+   ],
+   "summary": "eventId·ordinal에서 라벨 등장의 상대 순서 힌트를 계산합니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:normalizeLabelHistoryMeta",
+   "type": "function",
+   "name": "normalizeLabelHistoryMeta",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    137,
+    155
+   ],
+   "summary": "관계 라벨 히스토리 항목의 first/last 메타를 정규화합니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:mergeRelationLabelHistory",
+   "type": "function",
+   "name": "mergeRelationLabelHistory",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    158,
+    195
+   ],
+   "summary": "양방향·중복 관계 라벨 히스토리를 대소문자 무시로 병합하며 이른 first·늦은 last를 유지합니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "exported"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:appendRelationLabelHistory",
+   "type": "function",
+   "name": "appendRelationLabelHistory",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    201,
+    238
+   ],
+   "summary": "deltas 누적 시 현재 이벤트 라벨을 관계 라벨 히스토리에 증분 반영합니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "exported"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:indexLabelHistoryByLower",
+   "type": "function",
+   "name": "indexLabelHistoryByLower",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    240,
+    249
+   ],
+   "summary": "라벨 히스토리를 소문자 라벨 키로 인덱싱합니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:buildRelationTagDisplayItems",
+   "type": "function",
+   "name": "buildRelationTagDisplayItems",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    256,
+    317
+   ],
+   "summary": "툴팁용 관계 태그 목록을 등장 시점(added/changed/prior)과 긍정도 색상 톤과 함께 구성합니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "exported"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:calculateLastEventForChapter",
+   "type": "function",
+   "name": "calculateLastEventForChapter",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    320,
+    346
+   ],
+   "summary": "manifest 힌트로 챕터의 마지막 이벤트 인덱스를 계산하며 없으면 null을 반환합니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:resolveChapterSidebarWidth",
+   "type": "function",
+   "name": "resolveChapterSidebarWidth",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    392,
+    397
+   ],
+   "summary": "사이드바 열림 여부와 뷰포트에 따라 챕터 사이드바 폭을 계산합니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:buildChapterSidebarItems",
+   "type": "function",
+   "name": "buildChapterSidebarItems",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    402,
+    427
+   ],
+   "summary": "챕터 사이드바 목록 항목(번호·제목·툴팁)을 생성합니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:normalizeRelation",
+   "type": "function",
+   "name": "normalizeRelation",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    431,
+    479
+   ],
+   "summary": "API 관계 레코드를 id1/id2·긍정도·라벨·이벤트 메타를 가진 표준 관계로 정규화합니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "exported"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:isSamePair",
+   "type": "function",
+   "name": "isSamePair",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    481,
+    501
+   ],
+   "summary": "두 관계가 같은 인물 쌍을 가리키는지 판별합니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:relationEventMetaPassthrough",
+   "type": "function",
+   "name": "relationEventMetaPassthrough",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    513,
+    528
+   ],
+   "summary": "관계 레코드의 이벤트 메타 필드를 그대로 전달용으로 추출합니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:resolveManifestEventId",
+   "type": "function",
+   "name": "resolveManifestEventId",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    531,
+    533
+   ],
+   "summary": "manifest/structure/delta 이벤트에서 eventId를 추출합니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:processRelations",
+   "type": "function",
+   "name": "processRelations",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    535,
+    560
+   ],
+   "summary": "관계 목록을 정규화하고 자기 참조·중복 관계를 제거합니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:extractRadarChartData",
+   "type": "function",
+   "name": "extractRadarChartData",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    562,
+    600
+   ],
+   "summary": "선택 인물과 연결된 관계를 레이더 차트용 데이터로 추출합니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "exported"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:extractCharacterId",
+   "type": "function",
+   "name": "extractCharacterId",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    611,
+    614
+   ],
+   "summary": "인물 객체에서 정규화된 인물 ID를 추출합니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:isUsableCharacterDisplayName",
+   "type": "function",
+   "name": "isUsableCharacterDisplayName",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    617,
+    625
+   ],
+   "summary": "숫자 ID 문자열이 아닌 표시용 이름인지 검사합니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:pickCharacterDisplayName",
+   "type": "function",
+   "name": "pickCharacterDisplayName",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    627,
+    642
+   ],
+   "summary": "인물 레코드의 여러 이름 필드 중 표시 이름을 고릅니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:getMemoryMap",
+   "type": "function",
+   "name": "getMemoryMap",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    647,
+    656
+   ],
+   "summary": "책별 인물 표시 이름 세션 메모리 맵을 가져오거나 생성합니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:rememberCharacterDisplayName",
+   "type": "function",
+   "name": "rememberCharacterDisplayName",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    658,
+    664
+   ],
+   "summary": "인물 ID의 표시 이름을 세션 메모리에 기억합니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:lookupRememberedCharacterDisplayName",
+   "type": "function",
+   "name": "lookupRememberedCharacterDisplayName",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    674,
+    678
+   ],
+   "summary": "세션 메모리에서 인물 표시 이름을 조회합니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:buildManifestCharacterNameLookup",
+   "type": "function",
+   "name": "buildManifestCharacterNameLookup",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    680,
+    690
+   ],
+   "summary": "manifest 인물 목록으로 ID→이름 룩업을 생성합니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:buildCharacterDisplayNameLookup",
+   "type": "function",
+   "name": "buildCharacterDisplayNameLookup",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    693,
+    707
+   ],
+   "summary": "payload·manifest·세션 메모리를 합쳐 ID→이름 룩업을 생성합니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:resolveCharacterDisplayName",
+   "type": "function",
+   "name": "resolveCharacterDisplayName",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    709,
+    728
+   ],
+   "summary": "우선순위에 따라 인물 ID의 최종 표시 이름을 결정합니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:enrichGraphCharacters",
+   "type": "function",
+   "name": "enrichGraphCharacters",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    730,
+    761
+   ],
+   "summary": "그래프 인물 목록에 manifest·메모리 기반 표시 이름을 보강합니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "exported"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:applyDisplayNamesToElements",
+   "type": "function",
+   "name": "applyDisplayNamesToElements",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    763,
+    798
+   ],
+   "summary": "Cytoscape 노드 요소의 label에 해석된 표시 이름을 적용합니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "exported"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:enrichGraphPayload",
+   "type": "function",
+   "name": "enrichGraphPayload",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    800,
+    808
+   ],
+   "summary": "그래프 payload 전체의 인물 표시 이름을 보강합니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:formatGraphEventMetaLabel",
+   "type": "function",
+   "name": "formatGraphEventMetaLabel",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    811,
+    815
+   ],
+   "summary": "상단 메타·스크러버 공통 이벤트 라벨(Event N)을 포맷합니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:listChapterEventIndices",
+   "type": "function",
+   "name": "listChapterEventIndices",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    818,
+    833
+   ],
+   "summary": "챕터 manifest 이벤트를 정렬된 eventIdx 목록으로 변환합니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:resolveReadingEventNumForChapter",
+   "type": "function",
+   "name": "resolveReadingEventNumForChapter",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    836,
+    846
+   ],
+   "summary": "진도 캐시 기준으로 해당 챕터의 현재 읽기 사건 번호를 구합니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:resolveRelationConnectionKind",
+   "type": "function",
+   "name": "resolveRelationConnectionKind",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    859,
+    867
+   ],
+   "summary": "레이더 연결 수를 모달 connectionKind 값으로 매핑합니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:normalizeMatchName",
+   "type": "function",
+   "name": "normalizeMatchName",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    879,
+    884
+   ],
+   "summary": "이름 비교를 위해 공백·대소문자를 정규화합니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:collectNodeMatchNames",
+   "type": "function",
+   "name": "collectNodeMatchNames",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    886,
+    901
+   ],
+   "summary": "노드의 이름·별칭 등 매칭용 이름 집합을 수집합니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:normalizeGraphIdString",
+   "type": "function",
+   "name": "normalizeGraphIdString",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    904,
+    910
+   ],
+   "summary": "ID/이름 비교용 문자열로 정규화합니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:buildNodeIdentityContext",
+   "type": "function",
+   "name": "buildNodeIdentityContext",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    912,
+    921
+   ],
+   "summary": "노드 식별 비교용 ID·이름 컨텍스트를 구성합니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:isSameNodeIdentifier",
+   "type": "function",
+   "name": "isSameNodeIdentifier",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    923,
+    951
+   ],
+   "summary": "ID 또는 이름 기준으로 두 노드가 동일 인물인지 판별합니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:collectUndirectedRelations",
+   "type": "function",
+   "name": "collectUndirectedRelations",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    954,
+    978
+   ],
+   "summary": "관계 목록에서 동일 쌍을 한 번만 포함하는 무방향 관계 목록을 만듭니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:buildProcessedNode",
+   "type": "function",
+   "name": "buildProcessedNode",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    981,
+    997
+   ],
+   "summary": "툴팁 표시용 노드 모델을 생성합니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:readPovSpoilerUnlocked",
+   "type": "function",
+   "name": "readPovSpoilerUnlocked",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    1002,
+    1004
+   ],
+   "summary": "POV 스포일러 해제 여부를 반환하며 항상 false인 deprecated 함수입니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:unlockPovSpoilerSession",
+   "type": "function",
+   "name": "unlockPovSpoilerSession",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    1007,
+    1009
+   ],
+   "summary": "POV 스포일러 세션 해제용 deprecated no-op 함수입니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:clearPovSpoilerSession",
+   "type": "function",
+   "name": "clearPovSpoilerSession",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    1011,
+    1017
+   ],
+   "summary": "레거시 POV 스포일러 세션 저장값을 제거합니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/utils/graph/graphCore.js:resolvePovSummary",
+   "type": "function",
+   "name": "resolvePovSummary",
+   "filePath": "Frontend-main/src/utils/graph/graphCore.js",
+   "lineRange": [
+    1022,
+    1076
+   ],
+   "summary": "노드 선택·스포일러 상태에 따라 POV 요약 텍스트와 상태를 결정합니다.",
+   "tags": [
+    "utility",
+    "graph-core",
+    "exported"
+   ],
+   "complexity": "moderate"
+  }
+ ],
+ "edges": [
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:normalizeEvent",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:normalizeChapter",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:parseCharacterNames",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:normalizeCharacter",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:normalizeReaderArtifacts",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:normalizeProgressMetadata",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:normalizeManifestData",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:getEffectiveChapterLengthForProgress",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:getEffectiveChapterLengthForProgress",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:calculateMaxChapterFromChapters",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:calculateMaxChapterFromChapters",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:migrateLegacyManifestStorage",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:chapterLocalOffsetToLocator",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:chapterLocalCodePointFromLocator",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:pickManifestEventForChapterLocalOffset",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:resolveLocatorToEventParams",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:resolveLocatorToEventParams",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:locatorFromBookAbsoluteOffset",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:locatorFromBookAbsoluteOffset",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:chapterLocalForProgress",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:canResolveProgressMetrics",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:canResolveProgressMetrics",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:locatorFromChapterLocalOffset",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:locatorFromChapterLocalOffset",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:chapterLocalOffsetFromLocator",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:chapterLocalOffsetFromLocator",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:locatorToBookAbsoluteOffset",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:locatorToBookAbsoluteOffset",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:readingProgressPercentFromLocator",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:readingProgressPercentFromLocator",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:absoluteOffsetFromReadingProgressPercent",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:absoluteOffsetFromReadingProgressPercent",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:resolveProgressMetricsFromLocator",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:resolveProgressMetricsFromLocator",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:setManifestData",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:setManifestData",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:getManifestFromCache",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:getManifestFromCache",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:hasManifestData",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:invalidateManifest",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:invalidateManifest",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:prefetchManifest",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:prefetchManifest",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:getChapterDataFromManifest",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:getChapterDataFromManifest",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:getChapterData",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:getChapterData",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:findManifestEventInChapter",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:findManifestEventInChapter",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:getLastManifestEventInChapter",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:getLastManifestEventInChapter",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:getFirstManifestEventInChapter",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:getFirstManifestEventInChapter",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:getFirstManifestEventInBook",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:getFirstManifestEventInBook",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:getLastManifestEventInBook",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:getLastManifestEventInBook",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:listBookManifestEventIds",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:listBookManifestEventIds",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:getLastEventIdxFromChapterData",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:getLastEventIdxFromChapterData",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:resolveLastEventIdxForChapter",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:resolveLastEventIdxForChapter",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:getMaxChapter",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:getMaxChapter",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "file:Frontend-main/src/utils/api/booksApi.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "file:Frontend-main/src/utils/common/cache/cacheManager.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "file:Frontend-main/src/utils/common/valueUtils.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "target": "file:Frontend-main/src/utils/viewer/viewerCore.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:directedEdgeElementId",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:directedEdgeElementId",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:extractApiBookId",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:extractApiBookId",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:normalizeElementId",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:normalizeElementId",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:isGraphEdgeElement",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:isGraphEdgeElement",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:isGraphNodeElement",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:isGraphNodeElement",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:undirectedPairKey",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:undirectedPairKey",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:sortElementsByDataId",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:sortElementsByDataId",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:uniqueStrings",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:uniqueStrings",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:sortedUniqueJoin",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:sortedUniqueJoin",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:normalizeRelationArray",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:normalizeRelationArray",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:pickLastRelationLabel",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:pickLastRelationLabel",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:labelEventOrderHint",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:labelEventOrderHint",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:normalizeLabelHistoryMeta",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:mergeRelationLabelHistory",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:mergeRelationLabelHistory",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:appendRelationLabelHistory",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:appendRelationLabelHistory",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:indexLabelHistoryByLower",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:buildRelationTagDisplayItems",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:buildRelationTagDisplayItems",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:calculateLastEventForChapter",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:calculateLastEventForChapter",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:resolveChapterSidebarWidth",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:resolveChapterSidebarWidth",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:buildChapterSidebarItems",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:buildChapterSidebarItems",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:normalizeRelation",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:normalizeRelation",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:isSamePair",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:isSamePair",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:relationEventMetaPassthrough",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:relationEventMetaPassthrough",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:resolveManifestEventId",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:resolveManifestEventId",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:processRelations",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:processRelations",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:extractRadarChartData",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:extractRadarChartData",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:extractCharacterId",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:extractCharacterId",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:isUsableCharacterDisplayName",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:isUsableCharacterDisplayName",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:pickCharacterDisplayName",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:pickCharacterDisplayName",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:getMemoryMap",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:rememberCharacterDisplayName",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:rememberCharacterDisplayName",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:lookupRememberedCharacterDisplayName",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:lookupRememberedCharacterDisplayName",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:buildManifestCharacterNameLookup",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:buildManifestCharacterNameLookup",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:buildCharacterDisplayNameLookup",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:resolveCharacterDisplayName",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:enrichGraphCharacters",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:enrichGraphCharacters",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:applyDisplayNamesToElements",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:applyDisplayNamesToElements",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:enrichGraphPayload",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:enrichGraphPayload",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:formatGraphEventMetaLabel",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:formatGraphEventMetaLabel",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:listChapterEventIndices",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:listChapterEventIndices",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:resolveReadingEventNumForChapter",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:resolveReadingEventNumForChapter",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:resolveRelationConnectionKind",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:resolveRelationConnectionKind",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:normalizeMatchName",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:normalizeMatchName",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:collectNodeMatchNames",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:collectNodeMatchNames",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:normalizeGraphIdString",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:normalizeGraphIdString",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:buildNodeIdentityContext",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:buildNodeIdentityContext",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:isSameNodeIdentifier",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:isSameNodeIdentifier",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:collectUndirectedRelations",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:collectUndirectedRelations",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:buildProcessedNode",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:buildProcessedNode",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:readPovSpoilerUnlocked",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:readPovSpoilerUnlocked",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:unlockPovSpoilerSession",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:unlockPovSpoilerSession",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:clearPovSpoilerSession",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:clearPovSpoilerSession",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:resolvePovSummary",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "function:Frontend-main/src/utils/graph/graphCore.js:resolvePovSummary",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "file:Frontend-main/src/utils/common/cache/manifestCache.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "file:Frontend-main/src/utils/common/cache/progressCache.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "file:Frontend-main/src/utils/common/valueUtils.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/utils/graph/graphCore.js",
+   "target": "file:Frontend-main/src/utils/viewer/viewerCore.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "function:Frontend-main/src/utils/common/cache/manifestCache.js:normalizeEvent",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:toNumberOrNull",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/common/cache/manifestCache.js:normalizeChapter",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:toNumberOrNull",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/common/cache/manifestCache.js:normalizeChapter",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:sanitizeAssetUrl",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/common/cache/manifestCache.js:normalizeCharacter",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:toNumberOrNull",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/common/cache/manifestCache.js:normalizeCharacter",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:sanitizeAssetUrl",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/common/cache/manifestCache.js:normalizeReaderArtifacts",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:sanitizeAssetUrl",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/common/cache/manifestCache.js:normalizeProgressMetadata",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:toNumberOrNull",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/common/cache/manifestCache.js:normalizeManifestData",
+   "target": "function:Frontend-main/src/utils/api/booksApi.js:normalizeManifestBook",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/common/cache/manifestCache.js:getEffectiveChapterLengthForProgress",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:toNumberOrNull",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/common/cache/manifestCache.js:calculateMaxChapterFromChapters",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:toNumberOrNull",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/common/cache/manifestCache.js:chapterLocalOffsetToLocator",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:toNumberOrNull",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/common/cache/manifestCache.js:chapterLocalCodePointFromLocator",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:toNumberOrNull",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/common/cache/manifestCache.js:pickManifestEventForChapterLocalOffset",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:toNumberOrNull",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/common/cache/manifestCache.js:resolveLocatorToEventParams",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:toLocator",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/common/cache/manifestCache.js:resolveLocatorToEventParams",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:toNumberOrNull",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/common/cache/manifestCache.js:locatorFromBookAbsoluteOffset",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:toNumberOrNull",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/common/cache/manifestCache.js:chapterLocalForProgress",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:toNumberOrNull",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/common/cache/manifestCache.js:locatorToBookAbsoluteOffset",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:toLocator",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/common/cache/manifestCache.js:locatorToBookAbsoluteOffset",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:toNumberOrNull",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/common/cache/manifestCache.js:resolveProgressMetricsFromLocator",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:toLocator",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/common/cache/manifestCache.js:setManifestData",
+   "target": "function:Frontend-main/src/utils/common/cache/cacheManager.js:setCacheItem",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/common/cache/manifestCache.js:setManifestData",
+   "target": "function:Frontend-main/src/utils/common/cache/cacheManager.js:saveToStorage",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/common/cache/manifestCache.js:getManifestFromCache",
+   "target": "function:Frontend-main/src/utils/common/cache/cacheManager.js:getCacheItem",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/common/cache/manifestCache.js:getManifestFromCache",
+   "target": "function:Frontend-main/src/utils/common/cache/cacheManager.js:loadFromStorage",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/common/cache/manifestCache.js:getManifestFromCache",
+   "target": "function:Frontend-main/src/utils/common/cache/cacheManager.js:setCacheItem",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/common/cache/manifestCache.js:hasManifestData",
+   "target": "function:Frontend-main/src/utils/common/cache/cacheManager.js:getCacheItem",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/common/cache/manifestCache.js:hasManifestData",
+   "target": "function:Frontend-main/src/utils/common/cache/cacheManager.js:loadFromStorage",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/common/cache/manifestCache.js:invalidateManifest",
+   "target": "function:Frontend-main/src/utils/common/cache/cacheManager.js:removeCacheItem",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/common/cache/manifestCache.js:invalidateManifest",
+   "target": "function:Frontend-main/src/utils/common/cache/cacheManager.js:removeFromStorage",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/common/cache/manifestCache.js:getChapterDataFromManifest",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:toOneBasedChapterIndexOrNull",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/common/cache/manifestCache.js:findManifestEventInChapter",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:toNumberOrNull",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/common/cache/manifestCache.js:getFirstManifestEventInBook",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:toNumberOrNull",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/common/cache/manifestCache.js:getLastManifestEventInBook",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:toNumberOrNull",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/common/cache/manifestCache.js:listBookManifestEventIds",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:toNumberOrNull",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/common/cache/manifestCache.js:getMaxChapter",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:toPositiveInt",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/graph/graphCore.js:extractApiBookId",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:toPositiveNumberOrNull",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/graph/graphCore.js:labelEventOrderHint",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:toPositiveNumberFromId",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/graph/graphCore.js:appendRelationLabelHistory",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:toPositiveNumberFromId",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/graph/graphCore.js:appendRelationLabelHistory",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:asArray",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/graph/graphCore.js:calculateLastEventForChapter",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:resolveLastEventIdxForChapter",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/graph/graphCore.js:calculateLastEventForChapter",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:getLastEventIdxFromChapterData",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/graph/graphCore.js:buildChapterSidebarItems",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:getChapterData",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/graph/graphCore.js:buildChapterSidebarItems",
+   "target": "function:Frontend-main/src/utils/viewer/viewerCore.js:resolveChapterTitleMeta",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/graph/graphCore.js:buildChapterSidebarItems",
+   "target": "function:Frontend-main/src/utils/viewer/viewerCore.js:formatFallbackChapterLabel",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/graph/graphCore.js:buildChapterSidebarItems",
+   "target": "function:Frontend-main/src/utils/viewer/viewerCore.js:stripSharedListPrefix",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/graph/graphCore.js:buildChapterSidebarItems",
+   "target": "function:Frontend-main/src/utils/viewer/viewerCore.js:stripChapterOrdinalPrefix",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/graph/graphCore.js:normalizeRelation",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:toFiniteNumber",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/graph/graphCore.js:isSamePair",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:toFiniteNumber",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/graph/graphCore.js:resolveManifestEventId",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:toTrimmedStringOrNull",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/graph/graphCore.js:extractRadarChartData",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:toFiniteNumber",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/graph/graphCore.js:pickCharacterDisplayName",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:asArray",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/graph/graphCore.js:buildManifestCharacterNameLookup",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:getManifestFromCache",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/graph/graphCore.js:buildManifestCharacterNameLookup",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:asArray",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/graph/graphCore.js:buildCharacterDisplayNameLookup",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:asArray",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/graph/graphCore.js:enrichGraphCharacters",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:asArray",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/graph/graphCore.js:applyDisplayNamesToElements",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:asArray",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/graph/graphCore.js:listChapterEventIndices",
+   "target": "function:Frontend-main/src/utils/common/cache/manifestCache.js:getChapterData",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/graph/graphCore.js:resolveReadingEventNumForChapter",
+   "target": "function:Frontend-main/src/utils/common/cache/progressCache.js:getProgressFromCache",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/graph/graphCore.js:buildNodeIdentityContext",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:toNumberOrNull",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/graph/graphCore.js:isSameNodeIdentifier",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:toNumberOrNull",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/graph/graphCore.js:collectUndirectedRelations",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:asArray",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/graph/graphCore.js:collectUndirectedRelations",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:toFiniteNumber",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/utils/graph/graphCore.js:collectUndirectedRelations",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:clampPositivity",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  }
+ ]
+}

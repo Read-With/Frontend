@@ -3,12 +3,6 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { constrainToGraphCanvas, constrainToWindow } from '../../utils/graph/graphCy';
 
-/** {x,y} 중심점이 유효하면 그대로, 아니면 null */
-export function resolveCanvasAvoidPoint(center) {
-  if (center && Number.isFinite(center.x) && Number.isFinite(center.y)) return center;
-  return null;
-}
-
 export function useCanvasAvoidPoint(center) {
   const x = center?.x;
   const y = center?.y;

@@ -178,7 +178,7 @@ export const resolvePositiveBookId = (...candidates) => {
   return null;
 };
 
-export const isPositiveFiniteNumber = (value) => {
+const isPositiveFiniteNumber = (value) => {
   const num = toNumberOrNull(value);
   return num !== null && num > 0;
 };

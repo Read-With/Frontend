@@ -1,0 +1,24 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 0,
+  "filesSkipped": [
+    "Frontend-main/src/components/graph/relation-graph/canvas.css",
+    "Frontend-main/src/components/graph/relation-graph/modal.css",
+    "Frontend-main/src/components/graph/relation-graph/sidebar.css",
+    "Frontend-main/src/components/graph/relation-graph/tokens.css",
+    "Frontend-main/src/components/graph/relation-graph/tooltip.css"
+  ],
+  "filesUnreadable": [],
+  "analysisOutcomes": {
+    "structure": {
+      "succeeded": 0,
+      "failed": 0
+    },
+    "callGraph": {
+      "succeeded": 0,
+      "failed": 0,
+      "skipped": 0
+    }
+  },
+  "results": []
+}

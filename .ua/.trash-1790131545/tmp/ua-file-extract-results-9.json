@@ -1,0 +1,24 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 0,
+  "filesSkipped": [
+    "Frontend-main/src/components/library/BookDetailModal.css",
+    "Frontend-main/src/components/library/BookLibrary.css",
+    "Frontend-main/src/components/library/ConfirmDialog.css",
+    "Frontend-main/src/components/library/FileUpload.css",
+    "Frontend-main/src/components/library/LibraryModalChrome.css"
+  ],
+  "filesUnreadable": [],
+  "analysisOutcomes": {
+    "structure": {
+      "succeeded": 0,
+      "failed": 0
+    },
+    "callGraph": {
+      "succeeded": 0,
+      "failed": 0,
+      "skipped": 0
+    }
+  },
+  "results": []
+}

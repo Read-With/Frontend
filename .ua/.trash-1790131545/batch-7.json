@@ -1,0 +1,230 @@
+{
+ "nodes": [
+  {
+   "id": "config:Frontend-main/.env.example",
+   "type": "config",
+   "name": ".env.example",
+   "filePath": "Frontend-main/.env.example",
+   "summary": "Google OAuth 클라이언트 ID, API 베이스 URL, 개발 프록시 대상, CDN URL, 앱 origin, OAuth 리다이렉트 URI 등 Vite 환경 변수 목록을 정의한 템플릿입니다.",
+   "tags": [
+    "configuration",
+    "environment",
+    "oauth",
+    "security"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "document:Frontend-main/README.md",
+   "type": "document",
+   "name": "README.md",
+   "filePath": "Frontend-main/README.md",
+   "summary": "ReadWith 프론트엔드의 주요 기능, 기술 스택, 관계 그래프 데이터 흐름(매니페스트·관계 델타 누적), 캐시 TTL, 인증 토큰 전략, 프로젝트 구조, 라우트, 환경 변수, 배포 방법을 상세히 설명하는 개요 문서입니다.",
+   "tags": [
+    "documentation",
+    "entry-point",
+    "overview",
+    "architecture"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "file:Frontend-main/index.html",
+   "type": "file",
+   "name": "index.html",
+   "filePath": "Frontend-main/index.html",
+   "summary": "Vite SPA의 HTML 셸로, Google OAuth용 보안 meta 헤더와 Noto Serif 폰트를 설정하고 #root 요소에 src/main.jsx를 모듈 스크립트로 로드합니다.",
+   "tags": [
+    "entry-point",
+    "html",
+    "security-headers",
+    "spa"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "config:Frontend-main/jsconfig.json",
+   "type": "config",
+   "name": "jsconfig.json",
+   "filePath": "Frontend-main/jsconfig.json",
+   "summary": "ES2020·ESNext 모듈·bundler 해석·react-jsx 설정으로 src, vite 디렉터리와 vite.config.js의 에디터 IntelliSense를 구성하는 JavaScript 프로젝트 설정입니다.",
+   "tags": [
+    "configuration",
+    "build-system",
+    "editor",
+    "javascript"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "config:Frontend-main/package.json",
+   "type": "config",
+   "name": "package.json",
+   "filePath": "Frontend-main/package.json",
+   "summary": "React 19, React Router 7, TanStack Query, Cytoscape, Recharts, Tailwind 등 의존성과 Vite dev/build/lint/clean 스크립트, 보안 취약점 대응용 overrides를 정의한 npm 패키지 매니페스트입니다.",
+   "tags": [
+    "configuration",
+    "build-system",
+    "dependencies",
+    "npm"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "config:Frontend-main/vercel.json",
+   "type": "config",
+   "name": "vercel.json",
+   "filePath": "Frontend-main/vercel.json",
+   "summary": "Vercel 배포 설정으로 Vite 빌드 결과(dist)를 배포하고, /public/* 경로는 CDN(cdn.readwith.cloud)으로, 그 외 모든 경로는 SPA 라우팅을 위해 index.html로 리라이트합니다.",
+   "tags": [
+    "configuration",
+    "deployment",
+    "vercel",
+    "routing"
+   ],
+   "complexity": "simple"
+  }
+ ],
+ "edges": [
+  {
+   "source": "config:Frontend-main/.env.example",
+   "target": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "type": "configures",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "config:Frontend-main/.env.example",
+   "target": "file:Frontend-main/src/utils/api/authApi.js",
+   "type": "configures",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "config:Frontend-main/.env.example",
+   "target": "file:Frontend-main/vite.config.js",
+   "type": "configures",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "document:Frontend-main/README.md",
+   "target": "file:Frontend-main/src/main.jsx",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:Frontend-main/README.md",
+   "target": "file:Frontend-main/src/App.jsx",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:Frontend-main/README.md",
+   "target": "file:Frontend-main/src/utils/api/graphApi.js",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:Frontend-main/README.md",
+   "target": "file:Frontend-main/src/utils/graph/graphModel.js",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:Frontend-main/README.md",
+   "target": "file:Frontend-main/src/utils/common/cache/cacheManager.js",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:Frontend-main/README.md",
+   "target": "file:Frontend-main/src/utils/security/authTokenStorage.js",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:Frontend-main/README.md",
+   "target": "file:Frontend-main/src/utils/api/authApi.js",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:Frontend-main/README.md",
+   "target": "config:Frontend-main/.env.example",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:Frontend-main/README.md",
+   "target": "config:Frontend-main/vercel.json",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "file:Frontend-main/index.html",
+   "target": "file:Frontend-main/src/main.jsx",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "config:Frontend-main/jsconfig.json",
+   "target": "file:Frontend-main/vite.config.js",
+   "type": "configures",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "config:Frontend-main/jsconfig.json",
+   "target": "file:Frontend-main/src/main.jsx",
+   "type": "configures",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "config:Frontend-main/package.json",
+   "target": "file:Frontend-main/vite.config.js",
+   "type": "configures",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "config:Frontend-main/package.json",
+   "target": "file:Frontend-main/eslint.config.js",
+   "type": "configures",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "config:Frontend-main/package.json",
+   "target": "file:Frontend-main/src/main.jsx",
+   "type": "configures",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "config:Frontend-main/vercel.json",
+   "target": "file:Frontend-main/index.html",
+   "type": "configures",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "config:Frontend-main/vercel.json",
+   "target": "config:Frontend-main/package.json",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  }
+ ]
+}

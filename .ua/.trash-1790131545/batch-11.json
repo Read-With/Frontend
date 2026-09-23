@@ -1,0 +1,98 @@
+{
+ "nodes": [
+  {
+   "id": "file:Frontend-main/src/pages/AdminPage.css",
+   "type": "file",
+   "name": "AdminPage.css",
+   "filePath": "Frontend-main/src/pages/AdminPage.css",
+   "summary": "관리자 콘솔 페이지 스타일로, --brand-* 변수를 기준으로 레이아웃 셸, 카드·헤더, 폼·버튼 변형, 칩, 테이블, 도서 카드 등을 Tailwind 대신 시맨틱 클래스로 정의합니다.",
+   "tags": [
+    "stylesheet",
+    "admin",
+    "page",
+    "레이아웃"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "file:Frontend-main/src/pages/BookmarksPage.css",
+   "type": "file",
+   "name": "BookmarksPage.css",
+   "filePath": "Frontend-main/src/pages/BookmarksPage.css",
+   "summary": "북마크(독서 노트·인용 목록) 페이지 스타일로, 자체 토큰, 페이지 레이아웃, sticky 툴바, 챕터별 그룹, 메모 버튼을 정의하며 뷰어의 삭제 확인 모달에서도 공용으로 사용됩니다.",
+   "tags": [
+    "stylesheet",
+    "bookmark",
+    "page",
+    "responsive"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "file:Frontend-main/src/pages/HomePage.css",
+   "type": "file",
+   "name": "HomePage.css",
+   "filePath": "Frontend-main/src/pages/HomePage.css",
+   "summary": "랜딩(홈) 페이지 스타일로, 히어로 이미지·스크림, 로고·타이틀·리드 문구, Google 로그인 버튼과 로딩 스피너를 정의합니다.",
+   "tags": [
+    "stylesheet",
+    "landing",
+    "page",
+    "auth"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "file:Frontend-main/src/pages/MyPage.css",
+   "type": "file",
+   "name": "MyPage.css",
+   "filePath": "Frontend-main/src/pages/MyPage.css",
+   "summary": "마이페이지(내 서재) 스타일로, index.css 브랜드 팔레트 별칭 토큰, 책 그리드, 책 추가 카드, 빈 서재 환영 영역을 정의합니다.",
+   "tags": [
+    "stylesheet",
+    "page",
+    "서재",
+    "design-token",
+    "responsive"
+   ],
+   "complexity": "complex"
+  }
+ ],
+ "edges": [
+  {
+   "source": "file:Frontend-main/src/pages/AdminPage.css",
+   "target": "file:Frontend-main/src/pages/AdminPage.jsx",
+   "type": "related",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "file:Frontend-main/src/pages/BookmarksPage.css",
+   "target": "file:Frontend-main/src/components/viewer/ViewerPage.jsx",
+   "type": "related",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "file:Frontend-main/src/pages/BookmarksPage.css",
+   "target": "file:Frontend-main/src/pages/BookmarksPage.jsx",
+   "type": "related",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "file:Frontend-main/src/pages/HomePage.css",
+   "target": "file:Frontend-main/src/pages/HomePage.jsx",
+   "type": "related",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "file:Frontend-main/src/pages/MyPage.css",
+   "target": "file:Frontend-main/src/pages/MyPage.jsx",
+   "type": "related",
+   "direction": "forward",
+   "weight": 0.5
+  }
+ ]
+}

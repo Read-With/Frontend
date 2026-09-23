@@ -5,7 +5,7 @@ import { createAndStoreGoogleOAuthState, secureLog } from '../security/oauthSecu
 import { trimTrailingSlash, toOneBasedChapterIndexOrNull } from './valueUtils';
 
 export const DEFAULT_API_BASE_URL = 'https://readwith-be.onrender.com';
-export const DEFAULT_CDN_BASE_URL = 'https://cdn.readwith.cloud';
+const DEFAULT_CDN_BASE_URL = 'https://cdn.readwith.cloud';
 const DEFAULT_APP_ORIGIN = 'https://readwith-frontend.vercel.app';
 export const DEFAULT_DEV_PROXY_TARGET =
   'http://read-with-dev-env.eba-wuzcb2s6.ap-northeast-2.elasticbeanstalk.com';
@@ -92,7 +92,7 @@ export const getPostLoginHomeUrl = () => {
   return '/';
 };
 
-export const getDevBackendHintUrl = () => {
+const getDevBackendHintUrl = () => {
   const u = envString('VITE_DEV_PROXY_TARGET');
   if (u) {
     try {
@@ -127,7 +127,7 @@ function isGoogleClientIdConfigured() {
   return Boolean(clientId && !INVALID_GOOGLE_CLIENT_IDS.has(clientId));
 }
 
-export function buildGoogleOAuthAuthUrl() {
+function buildGoogleOAuthAuthUrl() {
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
   const redirectUri = getGoogleOAuthRedirectUri();
   const oauthState = createAndStoreGoogleOAuthState();
@@ -170,7 +170,7 @@ export function startGoogleOAuthLogin() {
   return { ok: true };
 }
 
-export function buildGoogleRedirectUriMismatchMessage(isLocalDev = import.meta.env.DEV) {
+function buildGoogleRedirectUriMismatchMessage(isLocalDev = import.meta.env.DEV) {
   const actualRedirectUri = getGoogleOAuthRedirectUri();
 
   if (isLocalDev) {
@@ -277,7 +277,7 @@ function routeProtectedPublicAssetForSameOriginProxy(url) {
   return url;
 }
 
-export function resolveAssetFetchUrl(url) {
+function resolveAssetFetchUrl(url) {
   if (url == null) return '';
   const s = String(url).trim();
   if (!s) return '';
@@ -572,7 +572,7 @@ export const GRAPH_IMAGE_DEFERRED_RETRY_MS = 1_500;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-export function clearAuthenticatedAssetBlobCache() {
+function clearAuthenticatedAssetBlobCache() {
   blobCacheGeneration += 1;
   for (const blobUrl of blobUrlCache.values()) {
     URL.revokeObjectURL(blobUrl);

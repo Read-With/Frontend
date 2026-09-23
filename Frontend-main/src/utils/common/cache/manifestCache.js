@@ -1,4 +1,4 @@
-import { normalizeManifestBook } from '../../api/booksApi';
+import { normalizeManifestBook } from '../bookNormalize';
 import { sanitizeAssetUrl, errorUtils } from '../urlUtils';
 import {
   toNumberOrNull,
@@ -764,48 +764,6 @@ export const getLastManifestEventInChapter = (
     const lastNum = last ? manifestEventIndex(last) : 0;
     return num >= lastNum ? event : last;
   }, null);
-};
-
-/** 챕터 manifest events 중 가장 첫(최소 인덱스) 이벤트 */
-export const getFirstManifestEventInChapter = (
-  bookId,
-  chapterIdx,
-  manifestOverride = undefined
-) => {
-  const chapterData = getChapterData(bookId, chapterIdx, manifestOverride);
-  const events = Array.isArray(chapterData?.events) ? chapterData.events : [];
-  return events.reduce((first, event) => {
-    const num = manifestEventIndex(event);
-    if (!num) return first;
-    const firstNum = first ? manifestEventIndex(first) : Infinity;
-    return num < firstNum ? event : first;
-  }, null);
-};
-
-/** 책 전체 기준 첫 이벤트 (가장 작은 chapterIdx의 첫 이벤트) */
-export const getFirstManifestEventInBook = (bookId, manifestOverride = undefined) => {
-  const manifest = manifestOverride ?? (bookId ? getManifestFromCache(bookId) : null);
-  const chapters = sortByChapterIdx(manifest?.chapters);
-  for (const chapter of chapters) {
-    const idx = toNumberOrNull(chapter?.idx);
-    if (idx == null || idx < 1) continue;
-    const first = getFirstManifestEventInChapter(bookId, idx, manifest);
-    if (first) return first;
-  }
-  return null;
-};
-
-/** 책 전체 기준 마지막 이벤트 (가장 큰 chapterIdx의 마지막 이벤트) */
-export const getLastManifestEventInBook = (bookId, manifestOverride = undefined) => {
-  const manifest = manifestOverride ?? (bookId ? getManifestFromCache(bookId) : null);
-  const chapters = sortByChapterIdx(manifest?.chapters);
-  for (let i = chapters.length - 1; i >= 0; i -= 1) {
-    const idx = toNumberOrNull(chapters[i]?.idx);
-    if (idx == null || idx < 1) continue;
-    const last = getLastManifestEventInChapter(bookId, idx, manifest);
-    if (last) return last;
-  }
-  return null;
 };
 
 /** 책 전체 eventId를 챕터·이벤트 순으로 */

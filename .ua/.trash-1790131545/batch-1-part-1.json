@@ -1,0 +1,700 @@
+{
+ "nodes": [
+  {
+   "id": "file:Frontend-main/src/App.jsx",
+   "type": "file",
+   "name": "App.jsx",
+   "filePath": "Frontend-main/src/App.jsx",
+   "summary": "React Router 라우트 트리, 인증 보호 라우트(ProtectedRoute), 에러 바운더리, 페이지 lazy 로딩을 구성하는 애플리케이션 루트 컴포넌트입니다.",
+   "tags": [
+    "entry-point",
+    "routing",
+    "component",
+    "error-boundary"
+   ],
+   "complexity": "moderate",
+   "languageNotes": "React.lazy + Suspense로 AdminPage·ViewerPage 등 무거운 페이지를 코드 스플리팅하고, class 컴포넌트 기반 ErrorBoundary를 함께 사용합니다."
+  },
+  {
+   "id": "class:Frontend-main/src/App.jsx:AppErrorBoundary",
+   "type": "class",
+   "name": "AppErrorBoundary",
+   "filePath": "Frontend-main/src/App.jsx",
+   "lineRange": [
+    34,
+    85
+   ],
+   "summary": "렌더링 에러를 포착해 로깅하고 폴백 UI를 보여주는 class 기반 에러 바운더리입니다.",
+   "tags": [
+    "entry-point",
+    "routing",
+    "internal"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:Frontend-main/src/App.jsx:ProtectedRoute",
+   "type": "function",
+   "name": "ProtectedRoute",
+   "filePath": "Frontend-main/src/App.jsx",
+   "lineRange": [
+    87,
+    114
+   ],
+   "summary": "인증 상태를 확인해 미로그인 사용자를 홈으로 리다이렉트하는 보호 라우트 래퍼입니다.",
+   "tags": [
+    "entry-point",
+    "routing",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/App.jsx:AppContent",
+   "type": "function",
+   "name": "AppContent",
+   "filePath": "Frontend-main/src/App.jsx",
+   "lineRange": [
+    116,
+    134
+   ],
+   "summary": "로그인 시 도서 목록을 prefetch하고 전체 Routes 트리를 렌더링합니다.",
+   "tags": [
+    "entry-point",
+    "routing",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/App.jsx:App",
+   "type": "function",
+   "name": "App",
+   "filePath": "Frontend-main/src/App.jsx",
+   "lineRange": [
+    136,
+    157
+   ],
+   "summary": "Router, AuthProvider, ToastContainer, 에러 바운더리로 앱을 감싸는 루트 컴포넌트입니다.",
+   "tags": [
+    "entry-point",
+    "routing",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "file:Frontend-main/src/components/auth/OAuthCallback.jsx",
+   "type": "file",
+   "name": "OAuthCallback.jsx",
+   "filePath": "Frontend-main/src/components/auth/OAuthCallback.jsx",
+   "summary": "Google OAuth 리다이렉트 콜백을 처리하여 state/PKCE를 검증하고 인가 코드를 백엔드 토큰으로 교환한 뒤 로그인 상태를 반영하는 페이지 컴포넌트입니다.",
+   "tags": [
+    "oauth",
+    "authentication",
+    "component",
+    "api-handler"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "function:Frontend-main/src/components/auth/OAuthCallback.jsx:GoogleIcon",
+   "type": "function",
+   "name": "GoogleIcon",
+   "filePath": "Frontend-main/src/components/auth/OAuthCallback.jsx",
+   "lineRange": [
+    21,
+    30
+   ],
+   "summary": "Google 로고 SVG 아이콘 컴포넌트입니다.",
+   "tags": [
+    "oauth",
+    "authentication",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/components/auth/OAuthCallback.jsx:splitIntoSentences",
+   "type": "function",
+   "name": "splitIntoSentences",
+   "filePath": "Frontend-main/src/components/auth/OAuthCallback.jsx",
+   "lineRange": [
+    45,
+    66
+   ],
+   "summary": "에러 메시지를 문장 단위로 분리합니다.",
+   "tags": [
+    "oauth",
+    "authentication",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/components/auth/OAuthCallback.jsx:SentenceLines",
+   "type": "function",
+   "name": "SentenceLines",
+   "filePath": "Frontend-main/src/components/auth/OAuthCallback.jsx",
+   "lineRange": [
+    68,
+    81
+   ],
+   "summary": "문장 배열을 줄 단위로 렌더링합니다.",
+   "tags": [
+    "oauth",
+    "authentication",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/components/auth/OAuthCallback.jsx:splitOAuthErrorDisplay",
+   "type": "function",
+   "name": "splitOAuthErrorDisplay",
+   "filePath": "Frontend-main/src/components/auth/OAuthCallback.jsx",
+   "lineRange": [
+    83,
+    104
+   ],
+   "summary": "OAuth 에러를 제목/상세 표시용으로 분리합니다.",
+   "tags": [
+    "oauth",
+    "authentication",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/components/auth/OAuthCallback.jsx:OAuthCallbackShell",
+   "type": "function",
+   "name": "OAuthCallbackShell",
+   "filePath": "Frontend-main/src/components/auth/OAuthCallback.jsx",
+   "lineRange": [
+    115,
+    126
+   ],
+   "summary": "콜백 화면의 공통 레이아웃 셸입니다.",
+   "tags": [
+    "oauth",
+    "authentication",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/components/auth/OAuthCallback.jsx:exchangeGoogleAuthCode",
+   "type": "function",
+   "name": "exchangeGoogleAuthCode",
+   "filePath": "Frontend-main/src/components/auth/OAuthCallback.jsx",
+   "lineRange": [
+    134,
+    225
+   ],
+   "summary": "인가 코드와 PKCE verifier를 백엔드에 보내 토큰·사용자 정보로 교환하고 저장합니다.",
+   "tags": [
+    "oauth",
+    "authentication",
+    "internal"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:Frontend-main/src/components/auth/OAuthCallback.jsx:OAuthCallback",
+   "type": "function",
+   "name": "OAuthCallback",
+   "filePath": "Frontend-main/src/components/auth/OAuthCallback.jsx",
+   "lineRange": [
+    236,
+    413
+   ],
+   "summary": "URL 파라미터와 state를 검증하고 코드 교환 후 로그인 처리 및 리다이렉트를 수행하는 콜백 페이지입니다.",
+   "tags": [
+    "oauth",
+    "authentication",
+    "internal"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "file:Frontend-main/src/hooks/auth/useAuth.js",
+   "type": "file",
+   "name": "useAuth.js",
+   "filePath": "Frontend-main/src/hooks/auth/useAuth.js",
+   "summary": "AuthProvider Context와 useAuth hook으로 사용자 로그인 상태, 토큰 주기적 갱신, 로그아웃 이벤트 동기화를 전역으로 제공합니다.",
+   "tags": [
+    "hook",
+    "authentication",
+    "context-provider",
+    "state-management"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:Frontend-main/src/hooks/auth/useAuth.js:AuthProvider",
+   "type": "function",
+   "name": "AuthProvider",
+   "filePath": "Frontend-main/src/hooks/auth/useAuth.js",
+   "lineRange": [
+    45,
+    205
+   ],
+   "summary": "사용자 상태 초기화, 주기적 토큰 갱신, 로그아웃/인증 해제 이벤트를 관리하는 Context Provider입니다.",
+   "tags": [
+    "hook",
+    "authentication",
+    "exported"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "file:Frontend-main/src/hooks/graph/useChapterPovSummaries.js",
+   "type": "file",
+   "name": "useChapterPovSummaries.js",
+   "filePath": "Frontend-main/src/hooks/graph/useChapterPovSummaries.js",
+   "summary": "챕터별 인물 시점(POV) 요약을 TanStack Query로 조회·캐싱하는 hook과 쿼리 키 생성기를 제공합니다.",
+   "tags": [
+    "hook",
+    "react-query",
+    "graph",
+    "data-fetching"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:Frontend-main/src/hooks/graph/useChapterPovSummaries.js:chapterPovQueryKey",
+   "type": "function",
+   "name": "chapterPovQueryKey",
+   "filePath": "Frontend-main/src/hooks/graph/useChapterPovSummaries.js",
+   "lineRange": [
+    11,
+    17
+   ],
+   "summary": "도서·챕터 기준 POV 요약 쿼리 키를 생성합니다.",
+   "tags": [
+    "hook",
+    "react-query",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/hooks/graph/useChapterPovSummaries.js:useChapterPovSummaries",
+   "type": "function",
+   "name": "useChapterPovSummaries",
+   "filePath": "Frontend-main/src/hooks/graph/useChapterPovSummaries.js",
+   "lineRange": [
+    30,
+    76
+   ],
+   "summary": "챕터 POV 요약을 조회하고 정규화된 결과를 반환하는 React Query hook입니다.",
+   "tags": [
+    "hook",
+    "react-query",
+    "exported"
+   ],
+   "complexity": "moderate"
+  }
+ ],
+ "edges": [
+  {
+   "source": "file:Frontend-main/src/App.jsx",
+   "target": "class:Frontend-main/src/App.jsx:AppErrorBoundary",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/App.jsx",
+   "target": "function:Frontend-main/src/App.jsx:ProtectedRoute",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/App.jsx",
+   "target": "function:Frontend-main/src/App.jsx:AppContent",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/App.jsx",
+   "target": "function:Frontend-main/src/App.jsx:App",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/App.jsx",
+   "target": "file:Frontend-main/src/components/auth/OAuthCallback.jsx",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/App.jsx",
+   "target": "file:Frontend-main/src/hooks/auth/useAuth.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/App.jsx",
+   "target": "file:Frontend-main/src/hooks/books/bookHooks.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/App.jsx",
+   "target": "file:Frontend-main/src/pages/HomePage.jsx",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/App.jsx",
+   "target": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/App.jsx",
+   "target": "file:Frontend-main/src/utils/styles/styles.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/components/auth/OAuthCallback.jsx",
+   "target": "function:Frontend-main/src/components/auth/OAuthCallback.jsx:GoogleIcon",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/components/auth/OAuthCallback.jsx",
+   "target": "function:Frontend-main/src/components/auth/OAuthCallback.jsx:splitIntoSentences",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/components/auth/OAuthCallback.jsx",
+   "target": "function:Frontend-main/src/components/auth/OAuthCallback.jsx:SentenceLines",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/components/auth/OAuthCallback.jsx",
+   "target": "function:Frontend-main/src/components/auth/OAuthCallback.jsx:splitOAuthErrorDisplay",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/components/auth/OAuthCallback.jsx",
+   "target": "function:Frontend-main/src/components/auth/OAuthCallback.jsx:OAuthCallbackShell",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/components/auth/OAuthCallback.jsx",
+   "target": "function:Frontend-main/src/components/auth/OAuthCallback.jsx:exchangeGoogleAuthCode",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/components/auth/OAuthCallback.jsx",
+   "target": "function:Frontend-main/src/components/auth/OAuthCallback.jsx:OAuthCallback",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/components/auth/OAuthCallback.jsx",
+   "target": "file:Frontend-main/src/components/auth/OAuthCallback.css",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/components/auth/OAuthCallback.jsx",
+   "target": "file:Frontend-main/src/hooks/auth/useAuth.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/components/auth/OAuthCallback.jsx",
+   "target": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/components/auth/OAuthCallback.jsx",
+   "target": "file:Frontend-main/src/utils/security/oauthSecurity.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/hooks/auth/useAuth.js",
+   "target": "function:Frontend-main/src/hooks/auth/useAuth.js:AuthProvider",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/hooks/auth/useAuth.js",
+   "target": "function:Frontend-main/src/hooks/auth/useAuth.js:AuthProvider",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/hooks/auth/useAuth.js",
+   "target": "file:Frontend-main/src/utils/api/authApi.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/hooks/auth/useAuth.js",
+   "target": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/hooks/auth/useAuth.js",
+   "target": "file:Frontend-main/src/utils/security/authTokenStorage.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/hooks/graph/useChapterPovSummaries.js",
+   "target": "function:Frontend-main/src/hooks/graph/useChapterPovSummaries.js:chapterPovQueryKey",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/hooks/graph/useChapterPovSummaries.js",
+   "target": "function:Frontend-main/src/hooks/graph/useChapterPovSummaries.js:chapterPovQueryKey",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/hooks/graph/useChapterPovSummaries.js",
+   "target": "function:Frontend-main/src/hooks/graph/useChapterPovSummaries.js:useChapterPovSummaries",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/hooks/graph/useChapterPovSummaries.js",
+   "target": "function:Frontend-main/src/hooks/graph/useChapterPovSummaries.js:useChapterPovSummaries",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/hooks/graph/useChapterPovSummaries.js",
+   "target": "file:Frontend-main/src/utils/api/booksApi.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/hooks/graph/useChapterPovSummaries.js",
+   "target": "file:Frontend-main/src/utils/common/valueUtils.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "function:Frontend-main/src/App.jsx:ProtectedRoute",
+   "target": "function:Frontend-main/src/hooks/books/bookHooks.js:prefetchBooks",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/components/auth/OAuthCallback.jsx:exchangeGoogleAuthCode",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:getGoogleOAuthRedirectUri",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/components/auth/OAuthCallback.jsx:exchangeGoogleAuthCode",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:getApiBaseUrl",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/components/auth/OAuthCallback.jsx:exchangeGoogleAuthCode",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:resolveOAuthHttpError",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/components/auth/OAuthCallback.jsx:exchangeGoogleAuthCode",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:resolveOAuthApiBodyError",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/components/auth/OAuthCallback.jsx:exchangeGoogleAuthCode",
+   "target": "function:Frontend-main/src/utils/security/oauthSecurity.js:validateUserData",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/components/auth/OAuthCallback.jsx:OAuthCallback",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:getOAuthErrorTip",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/hooks/auth/useAuth.js:AuthProvider",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:isOAuthCallbackRoute",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/hooks/auth/useAuth.js:AuthProvider",
+   "target": "function:Frontend-main/src/utils/security/authTokenStorage.js:getStoredGoogleUserJson",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/hooks/auth/useAuth.js:AuthProvider",
+   "target": "function:Frontend-main/src/utils/security/authTokenStorage.js:setStoredAccessToken",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/hooks/auth/useAuth.js:AuthProvider",
+   "target": "function:Frontend-main/src/utils/security/authTokenStorage.js:setStoredRefreshToken",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/hooks/auth/useAuth.js:AuthProvider",
+   "target": "function:Frontend-main/src/utils/security/authTokenStorage.js:setStoredGoogleUserJson",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/hooks/auth/useAuth.js:AuthProvider",
+   "target": "function:Frontend-main/src/utils/security/authTokenStorage.js:removeStoredGoogleUser",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/hooks/auth/useAuth.js:AuthProvider",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:ensureSessionAccessToken",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/hooks/auth/useAuth.js:AuthProvider",
+   "target": "function:Frontend-main/src/utils/security/authTokenStorage.js:getStoredAccessToken",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/hooks/auth/useAuth.js:AuthProvider",
+   "target": "function:Frontend-main/src/utils/api/authApi.js:isTokenValid",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/hooks/auth/useAuth.js:AuthProvider",
+   "target": "function:Frontend-main/src/utils/security/authTokenStorage.js:clearAuthData",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/hooks/auth/useAuth.js:AuthProvider",
+   "target": "function:Frontend-main/src/utils/common/urlUtils.js:getPostLoginHomeUrl",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/hooks/auth/useAuth.js:AuthProvider",
+   "target": "function:Frontend-main/src/utils/security/authTokenStorage.js:getStoredRefreshToken",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/hooks/graph/useChapterPovSummaries.js:useChapterPovSummaries",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:toPositiveNumberOrNull",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/hooks/graph/useChapterPovSummaries.js:useChapterPovSummaries",
+   "target": "function:Frontend-main/src/utils/common/valueUtils.js:toPositiveInt",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/hooks/graph/useChapterPovSummaries.js:useChapterPovSummaries",
+   "target": "function:Frontend-main/src/utils/api/booksApi.js:getChapterPovSummaries",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/hooks/graph/useChapterPovSummaries.js:useChapterPovSummaries",
+   "target": "function:Frontend-main/src/utils/api/booksApi.js:normalizeChapterPovSummariesResult",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/App.jsx",
+   "target": "file:Frontend-main/src/pages/AdminPage.jsx",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:Frontend-main/src/App.jsx",
+   "target": "file:Frontend-main/src/pages/MyPage.jsx",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  }
+ ]
+}

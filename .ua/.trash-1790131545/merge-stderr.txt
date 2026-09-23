@@ -1,0 +1,39 @@
+Found 25 batch files (12 logical batches, 5 multi-part):
+  batch-1-part-1.json: 18 nodes, 57 edges
+  batch-1-part-2.json: 20 nodes, 68 edges
+  batch-1-part-3.json: 87 nodes, 238 edges
+  batch-1-part-4.json: 35 nodes, 71 edges
+  batch-2-part-1.json: 4 nodes, 53 edges
+  batch-2-part-2.json: 8 nodes, 47 edges
+  batch-2-part-3.json: 25 nodes, 104 edges
+  batch-2-part-4.json: 94 nodes, 238 edges
+  batch-2-part-5.json: 101 nodes, 247 edges
+  batch-2-part-6.json: 36 nodes, 93 edges
+  batch-3-part-1.json: 31 nodes, 85 edges
+  batch-3-part-2.json: 23 nodes, 84 edges
+  batch-3-part-3.json: 96 nodes, 161 edges
+  batch-4-part-1.json: 20 nodes, 62 edges
+  batch-4-part-2.json: 82 nodes, 172 edges
+  batch-5-part-1.json: 18 nodes, 98 edges
+  batch-5-part-2.json: 49 nodes, 100 edges
+  batch-5-part-3.json: 45 nodes, 94 edges
+  batch-6.json: 3 nodes, 3 edges
+  batch-7.json: 6 nodes, 20 edges
+  batch-8.json: 5 nodes, 0 edges
+  batch-9.json: 5 nodes, 6 edges
+  batch-10.json: 3 nodes, 4 edges
+  batch-11.json: 4 nodes, 5 edges
+  batch-12.json: 11 nodes, 13 edges
+
+Input: 829 nodes, 2123 edges
+
+Could not fix (2 issues — needs agent review):
+  - Edge function:Frontend-main/src/utils/api/graphApi.js:applyDeltasToAccumulateState → function:Frontend-main/src/utils/styles/graphStyles.js:finitePositivityOrZero (calls): dropped, missing target 'function:Frontend-main/src/utils/styles/graphStyles.js:finitePositivityOrZero'
+  - Edge function:Frontend-main/src/utils/graph/graphFetch.js:fetchRelationTimelineCumulativeUncached → function:Frontend-main/src/utils/styles/graphStyles.js:finitePositivityOrZero (calls): dropped, missing target 'function:Frontend-main/src/utils/styles/graphStyles.js:finitePositivityOrZero'
+
+Output: 829 nodes, 2121 edges
+
+Imports edge recovery:
+  Recovered 0 `imports` edges from importMap (98 entries scanned)
+
+Written to /Users/yerikwon/readwith/Frontend/.ua/intermediate/assembled-graph.json (940 KB)

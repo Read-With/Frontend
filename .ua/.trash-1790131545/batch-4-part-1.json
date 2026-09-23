@@ -1,0 +1,766 @@
+{
+ "nodes": [
+  {
+   "id": "file:Frontend-main/src/components/library/BookDetailModal.jsx",
+   "type": "file",
+   "name": "BookDetailModal.jsx",
+   "filePath": "Frontend-main/src/components/library/BookDetailModal.jsx",
+   "summary": "도서 상세 정보 모달 컴포넌트로 매니페스트·읽기 진행률·챕터 목록·등장인물 정보를 보여주고 진행 기록 삭제 및 도서 삭제 확인을 처리합니다. 보호된 표지 이미지를 인증 fetch로 불러오는 AuthenticatedImage도 제공합니다.",
+   "tags": [
+    "component",
+    "modal",
+    "library",
+    "react-query",
+    "accessibility"
+   ],
+   "complexity": "complex",
+   "languageNotes": "React.memo로 감싼 화살표 컴포넌트를 default export하고, 보조 컴포넌트는 named export로 재사용합니다."
+  },
+  {
+   "id": "function:Frontend-main/src/components/library/BookDetailModal.jsx:resolveDisplaySrc",
+   "type": "function",
+   "name": "resolveDisplaySrc",
+   "filePath": "Frontend-main/src/components/library/BookDetailModal.jsx",
+   "lineRange": [
+    34,
+    48
+   ],
+   "summary": "표지 URL이 보호된 자산이면 인증된 blob URL로 변환해 표시용 src를 결정합니다.",
+   "tags": [
+    "utility",
+    "image",
+    "auth"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/components/library/BookDetailModal.jsx:AuthenticatedImage",
+   "type": "function",
+   "name": "AuthenticatedImage",
+   "filePath": "Frontend-main/src/components/library/BookDetailModal.jsx",
+   "lineRange": [
+    50,
+    97
+   ],
+   "summary": "보호된 이미지를 인증 요청으로 불러와 blob URL로 렌더링하는 이미지 컴포넌트입니다.",
+   "tags": [
+    "component",
+    "image",
+    "auth"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:Frontend-main/src/components/library/BookDetailModal.jsx:mergeBookWithManifest",
+   "type": "function",
+   "name": "mergeBookWithManifest",
+   "filePath": "Frontend-main/src/components/library/BookDetailModal.jsx",
+   "lineRange": [
+    108,
+    118
+   ],
+   "summary": "도서 객체와 매니페스트 데이터를 병합해 상세 표시용 도서 정보를 만듭니다.",
+   "tags": [
+    "utility",
+    "data-merge",
+    "manifest"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/components/library/BookDetailModal.jsx:formatChapterRowMeta",
+   "type": "function",
+   "name": "formatChapterRowMeta",
+   "filePath": "Frontend-main/src/components/library/BookDetailModal.jsx",
+   "lineRange": [
+    120,
+    140
+   ],
+   "summary": "챕터 행에 표시할 번호·제목·현재 챕터 여부 메타데이터를 구성합니다.",
+   "tags": [
+    "utility",
+    "formatting",
+    "chapter"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/components/library/BookDetailModal.jsx:CollapsiblePanelHeader",
+   "type": "function",
+   "name": "CollapsiblePanelHeader",
+   "filePath": "Frontend-main/src/components/library/BookDetailModal.jsx",
+   "lineRange": [
+    142,
+    175
+   ],
+   "summary": "접고 펼 수 있는 패널의 헤더 버튼 컴포넌트입니다.",
+   "tags": [
+    "component",
+    "accordion",
+    "accessibility"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/components/library/BookDetailModal.jsx:CharacterRow",
+   "type": "function",
+   "name": "CharacterRow",
+   "filePath": "Frontend-main/src/components/library/BookDetailModal.jsx",
+   "lineRange": [
+    177,
+    217
+   ],
+   "summary": "등장인물 한 명의 이름·설명을 표시하는 행 컴포넌트입니다.",
+   "tags": [
+    "component",
+    "character",
+    "list-item"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "file:Frontend-main/src/components/library/BookLibrary.jsx",
+   "type": "file",
+   "name": "BookLibrary.jsx",
+   "filePath": "Frontend-main/src/components/library/BookLibrary.jsx",
+   "summary": "서재 화면의 도서 목록 컴포넌트로 그리드/리스트 카드 렌더링, 즐겨찾기 토글, 상세 모달 및 삭제 확인을 담당하고 뷰어·그래프로 이동하기 전 그래프 캐시를 미리 준비합니다.",
+   "tags": [
+    "component",
+    "library",
+    "navigation",
+    "memoization"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "function:Frontend-main/src/components/library/BookLibrary.jsx:prewarmGraphBookCache",
+   "type": "function",
+   "name": "prewarmGraphBookCache",
+   "filePath": "Frontend-main/src/components/library/BookLibrary.jsx",
+   "lineRange": [
+    35,
+    51
+   ],
+   "summary": "그래프 화면 진입 전 도서의 그래프 캐시를 미리 불러와 워밍업합니다.",
+   "tags": [
+    "cache",
+    "prefetch",
+    "graph"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "file:Frontend-main/src/components/library/ConfirmDialog.jsx",
+   "type": "file",
+   "name": "ConfirmDialog.jsx",
+   "filePath": "Frontend-main/src/components/library/ConfirmDialog.jsx",
+   "summary": "포커스 트랩을 적용한 재사용 가능한 확인/취소 다이얼로그 컴포넌트입니다.",
+   "tags": [
+    "component",
+    "modal",
+    "dialog",
+    "accessibility"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:Frontend-main/src/components/library/ConfirmDialog.jsx:ConfirmDialog",
+   "type": "function",
+   "name": "ConfirmDialog",
+   "filePath": "Frontend-main/src/components/library/ConfirmDialog.jsx",
+   "lineRange": [
+    9,
+    81
+   ],
+   "summary": "제목·메시지·확인/취소 버튼을 가진 모달 확인 다이얼로그 컴포넌트입니다.",
+   "tags": [
+    "component",
+    "dialog",
+    "modal"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "file:Frontend-main/src/components/library/FileUpload.jsx",
+   "type": "file",
+   "name": "FileUpload.jsx",
+   "filePath": "Frontend-main/src/components/library/FileUpload.jsx",
+   "summary": "EPUB 파일 업로드 모달로 파일 검증, 메타데이터 추출(타임아웃 포함), 중복 도서 탐지 후 서버 업로드를 수행합니다.",
+   "tags": [
+    "component",
+    "file-upload",
+    "epub",
+    "modal",
+    "validation"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "function:Frontend-main/src/components/library/FileUpload.jsx:FileUpload",
+   "type": "function",
+   "name": "FileUpload",
+   "filePath": "Frontend-main/src/components/library/FileUpload.jsx",
+   "lineRange": [
+    37,
+    344
+   ],
+   "summary": "EPUB 선택·검증·메타데이터 추출·중복 확인·업로드 상태를 관리하는 업로드 모달 컴포넌트입니다.",
+   "tags": [
+    "component",
+    "file-upload",
+    "epub"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "file:Frontend-main/src/components/viewer/ViewerLayout.jsx",
+   "type": "file",
+   "name": "ViewerLayout.jsx",
+   "filePath": "Frontend-main/src/components/viewer/ViewerLayout.jsx",
+   "summary": "뷰어 페이지 레이아웃 컴포넌트로 툴바, 읽기 진행 바, 본문과 관계 그래프 사이의 드래그 가능한 분할 패널(비율 localStorage 저장)을 구성합니다.",
+   "tags": [
+    "component",
+    "layout",
+    "viewer",
+    "split-pane"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "function:Frontend-main/src/components/viewer/ViewerLayout.jsx:readStoredSplitPercent",
+   "type": "function",
+   "name": "readStoredSplitPercent",
+   "filePath": "Frontend-main/src/components/viewer/ViewerLayout.jsx",
+   "lineRange": [
+    15,
+    23
+   ],
+   "summary": "localStorage에 저장된 분할 패널 비율을 읽어 유효 범위로 보정합니다.",
+   "tags": [
+    "utility",
+    "local-storage",
+    "layout"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/components/viewer/ViewerLayout.jsx:ViewerLayout",
+   "type": "function",
+   "name": "ViewerLayout",
+   "filePath": "Frontend-main/src/components/viewer/ViewerLayout.jsx",
+   "lineRange": [
+    81,
+    363
+   ],
+   "summary": "툴바·진행 바·본문·그래프 패널과 드래그 분할을 조합하는 뷰어 레이아웃 컴포넌트입니다.",
+   "tags": [
+    "component",
+    "layout",
+    "viewer"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "file:Frontend-main/src/components/viewer/ViewerToolbar.jsx",
+   "type": "file",
+   "name": "ViewerToolbar.jsx",
+   "filePath": "Frontend-main/src/components/viewer/ViewerToolbar.jsx",
+   "summary": "EPUB 뷰어 상단 툴바로 이전/다음 이동, 북마크, 설정, 그래프 화면 모드 토글과 좁은 화면용 메뉴 및 세션 힌트를 제공합니다.",
+   "tags": [
+    "component",
+    "toolbar",
+    "viewer",
+    "navigation",
+    "responsive"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "function:Frontend-main/src/components/viewer/ViewerToolbar.jsx:ToolbarButton",
+   "type": "function",
+   "name": "ToolbarButton",
+   "filePath": "Frontend-main/src/components/viewer/ViewerToolbar.jsx",
+   "lineRange": [
+    27,
+    47
+   ],
+   "summary": "아이콘과 접근성 라벨을 가진 툴바 버튼 컴포넌트입니다.",
+   "tags": [
+    "component",
+    "button",
+    "accessibility"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:Frontend-main/src/components/viewer/ViewerToolbar.jsx:ScreenModeToggle",
+   "type": "function",
+   "name": "ScreenModeToggle",
+   "filePath": "Frontend-main/src/components/viewer/ViewerToolbar.jsx",
+   "lineRange": [
+    74,
+    132
+   ],
+   "summary": "그래프 표시 화면 모드를 전환하고 첫 사용 힌트를 보여주는 토글 컴포넌트입니다.",
+   "tags": [
+    "component",
+    "toggle",
+    "hint"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:Frontend-main/src/components/viewer/ViewerToolbar.jsx:ViewerToolbar",
+   "type": "function",
+   "name": "ViewerToolbar",
+   "filePath": "Frontend-main/src/components/viewer/ViewerToolbar.jsx",
+   "lineRange": [
+    146,
+    444
+   ],
+   "summary": "뷰어 이동·북마크·설정·그래프 토글·모바일 메뉴를 제공하는 툴바 컴포넌트입니다.",
+   "tags": [
+    "component",
+    "toolbar",
+    "viewer"
+   ],
+   "complexity": "complex"
+  }
+ ],
+ "edges": [
+  {
+   "source": "file:Frontend-main/src/components/library/BookDetailModal.jsx",
+   "target": "function:Frontend-main/src/components/library/BookDetailModal.jsx:resolveDisplaySrc",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/components/library/BookDetailModal.jsx",
+   "target": "function:Frontend-main/src/components/library/BookDetailModal.jsx:AuthenticatedImage",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/components/library/BookDetailModal.jsx",
+   "target": "function:Frontend-main/src/components/library/BookDetailModal.jsx:AuthenticatedImage",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:Frontend-main/src/components/library/BookDetailModal.jsx",
+   "target": "function:Frontend-main/src/components/library/BookDetailModal.jsx:mergeBookWithManifest",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/components/library/BookDetailModal.jsx",
+   "target": "function:Frontend-main/src/components/library/BookDetailModal.jsx:formatChapterRowMeta",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/components/library/BookDetailModal.jsx",
+   "target": "function:Frontend-main/src/components/library/BookDetailModal.jsx:CollapsiblePanelHeader",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/components/library/BookDetailModal.jsx",
+   "target": "function:Frontend-main/src/components/library/BookDetailModal.jsx:CharacterRow",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/components/library/BookDetailModal.jsx",
+   "target": "file:Frontend-main/src/components/library/BookDetailModal.css",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/components/library/BookDetailModal.jsx",
+   "target": "file:Frontend-main/src/components/library/ConfirmDialog.jsx",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/components/library/BookDetailModal.jsx",
+   "target": "file:Frontend-main/src/hooks/books/bookHooks.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/components/library/BookDetailModal.jsx",
+   "target": "file:Frontend-main/src/hooks/common/hooksShared.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/components/library/BookDetailModal.jsx",
+   "target": "file:Frontend-main/src/utils/api/booksApi.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/components/library/BookDetailModal.jsx",
+   "target": "file:Frontend-main/src/utils/common/cache/progressCache.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/components/library/BookDetailModal.jsx",
+   "target": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/components/library/BookDetailModal.jsx",
+   "target": "file:Frontend-main/src/utils/common/valueUtils.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/components/library/BookDetailModal.jsx",
+   "target": "file:Frontend-main/src/utils/library/libraryUtils.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/components/library/BookDetailModal.jsx",
+   "target": "file:Frontend-main/src/utils/viewer/viewerCore.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/components/library/BookLibrary.jsx",
+   "target": "function:Frontend-main/src/components/library/BookLibrary.jsx:prewarmGraphBookCache",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/components/library/BookLibrary.jsx",
+   "target": "file:Frontend-main/src/components/library/BookDetailModal.jsx",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/components/library/BookLibrary.jsx",
+   "target": "file:Frontend-main/src/components/library/BookLibrary.css",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/components/library/BookLibrary.jsx",
+   "target": "file:Frontend-main/src/components/library/ConfirmDialog.jsx",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/components/library/BookLibrary.jsx",
+   "target": "file:Frontend-main/src/hooks/common/hooksShared.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/components/library/BookLibrary.jsx",
+   "target": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/components/library/BookLibrary.jsx",
+   "target": "file:Frontend-main/src/utils/library/libraryUtils.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/components/library/BookLibrary.jsx",
+   "target": "file:Frontend-main/src/utils/viewer/viewerCore.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/components/library/ConfirmDialog.jsx",
+   "target": "function:Frontend-main/src/components/library/ConfirmDialog.jsx:ConfirmDialog",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/components/library/ConfirmDialog.jsx",
+   "target": "file:Frontend-main/src/components/library/ConfirmDialog.css",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/components/library/ConfirmDialog.jsx",
+   "target": "file:Frontend-main/src/hooks/common/hooksShared.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/components/library/ConfirmDialog.jsx",
+   "target": "file:Frontend-main/src/utils/library/libraryUtils.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/components/library/FileUpload.jsx",
+   "target": "function:Frontend-main/src/components/library/FileUpload.jsx:FileUpload",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/components/library/FileUpload.jsx",
+   "target": "file:Frontend-main/src/components/library/FileUpload.css",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/components/library/FileUpload.jsx",
+   "target": "file:Frontend-main/src/components/library/LibraryModalChrome.css",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/components/library/FileUpload.jsx",
+   "target": "file:Frontend-main/src/hooks/books/bookHooks.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/components/library/FileUpload.jsx",
+   "target": "file:Frontend-main/src/hooks/common/hooksShared.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/components/library/FileUpload.jsx",
+   "target": "file:Frontend-main/src/utils/api/booksApi.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/components/library/FileUpload.jsx",
+   "target": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/components/library/FileUpload.jsx",
+   "target": "file:Frontend-main/src/utils/common/valueUtils.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/components/library/FileUpload.jsx",
+   "target": "file:Frontend-main/src/utils/library/libraryUtils.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/components/viewer/ViewerLayout.jsx",
+   "target": "function:Frontend-main/src/components/viewer/ViewerLayout.jsx:readStoredSplitPercent",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/components/viewer/ViewerLayout.jsx",
+   "target": "function:Frontend-main/src/components/viewer/ViewerLayout.jsx:ViewerLayout",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/components/viewer/ViewerLayout.jsx",
+   "target": "file:Frontend-main/src/components/viewer/ViewerToolbar.css",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/components/viewer/ViewerLayout.jsx",
+   "target": "file:Frontend-main/src/components/viewer/ViewerToolbar.jsx",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/components/viewer/ViewerLayout.jsx",
+   "target": "file:Frontend-main/src/hooks/common/hooksShared.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/components/viewer/ViewerToolbar.jsx",
+   "target": "function:Frontend-main/src/components/viewer/ViewerToolbar.jsx:ToolbarButton",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/components/viewer/ViewerToolbar.jsx",
+   "target": "function:Frontend-main/src/components/viewer/ViewerToolbar.jsx:ScreenModeToggle",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/components/viewer/ViewerToolbar.jsx",
+   "target": "function:Frontend-main/src/components/viewer/ViewerToolbar.jsx:ViewerToolbar",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:Frontend-main/src/components/viewer/ViewerToolbar.jsx",
+   "target": "file:Frontend-main/src/components/viewer/ViewerToolbar.css",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/components/viewer/ViewerToolbar.jsx",
+   "target": "file:Frontend-main/src/hooks/common/hooksShared.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/components/viewer/ViewerToolbar.jsx",
+   "target": "file:Frontend-main/src/hooks/ui/tooltipHooks.jsx",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/components/viewer/ViewerToolbar.jsx",
+   "target": "file:Frontend-main/src/utils/common/urlUtils.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:Frontend-main/src/components/viewer/ViewerToolbar.jsx",
+   "target": "file:Frontend-main/src/utils/viewer/viewerSession.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "function:Frontend-main/src/components/library/FileUpload.jsx:FileUpload",
+   "target": "function:Frontend-main/src/utils/api/booksApi.js:uploadBook",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/components/library/FileUpload.jsx:FileUpload",
+   "target": "function:Frontend-main/src/utils/api/booksApi.js:getBooksArray",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/components/library/FileUpload.jsx:FileUpload",
+   "target": "function:Frontend-main/src/utils/library/libraryUtils.js:extractEpubFileMetadata",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/components/library/FileUpload.jsx:FileUpload",
+   "target": "function:Frontend-main/src/utils/library/libraryUtils.js:validateEpubFile",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/components/library/FileUpload.jsx:FileUpload",
+   "target": "function:Frontend-main/src/hooks/books/bookHooks.js:findCanonicalBook",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/components/library/FileUpload.jsx:FileUpload",
+   "target": "function:Frontend-main/src/hooks/common/hooksShared.js:useModalFocusTrap",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/components/viewer/ViewerLayout.jsx:ViewerLayout",
+   "target": "function:Frontend-main/src/components/viewer/ViewerToolbar.jsx:ViewerToolbar",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/components/viewer/ViewerToolbar.jsx:ViewerToolbar",
+   "target": "function:Frontend-main/src/hooks/common/hooksShared.js:useIsNarrowViewport",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/components/viewer/ViewerToolbar.jsx:ViewerToolbar",
+   "target": "function:Frontend-main/src/hooks/common/hooksShared.js:useSessionHint",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/components/library/ConfirmDialog.jsx:ConfirmDialog",
+   "target": "function:Frontend-main/src/hooks/common/hooksShared.js:useModalFocusTrap",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:Frontend-main/src/components/viewer/ViewerLayout.jsx:ViewerLayout",
+   "target": "function:Frontend-main/src/hooks/common/hooksShared.js:useIsNarrowViewport",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  }
+ ]
+}

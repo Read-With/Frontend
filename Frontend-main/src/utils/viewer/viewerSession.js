@@ -427,7 +427,7 @@ export function resolveMetricsFromReadingLocatorKey(bookKey, readingLocatorKey, 
   return resolveMetricsFromLocator(bookKey, start, options);
 }
 
-export function progressRowToTopBar(row, bookId = null) {
+function progressRowToTopBar(row, bookId = null) {
   if (!row || typeof row !== 'object') return emptyTopBar();
 
   const explicit = Number(row.eventNum);

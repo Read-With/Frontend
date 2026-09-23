@@ -34,7 +34,7 @@ import {
 } from './manifestCache';
 
 /** POST progress — 서버 blockIndex 검증에 맞게 paragraphStarts 축으로 재매핑 */
-export const normalizeLocatorForServerProgress = (bookId, locator, manifestOverride = undefined) => {
+const normalizeLocatorForServerProgress = (bookId, locator, manifestOverride = undefined) => {
   const loc = toLocator(locator);
   if (!loc) return null;
   const chapter = getChapterData(bookId, loc.chapterIndex, manifestOverride);
@@ -420,7 +420,7 @@ export const getCachedReaderProgress = (bookKey) => {
 };
 
 /** legacy reader_progress_{id}만 조회 (마이그레이션 폴백용) */
-export const getLegacyReaderProgress = (bookKey) => {
+const getLegacyReaderProgress = (bookKey) => {
   try {
     const storageKey = getReaderProgressStorageKey(bookKey);
     if (!storageKey) return null;

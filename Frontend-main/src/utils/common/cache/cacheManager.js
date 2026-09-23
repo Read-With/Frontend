@@ -256,7 +256,7 @@ export function registerCache(name, cache, options = {}) {
   }
 }
 
-export function recordCacheAccess(name) {
+function recordCacheAccess(name) {
   try {
     const cacheInfo = cacheRegistry.get(name);
     if (cacheInfo) {

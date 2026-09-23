@@ -1,0 +1,23 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 0,
+  "filesSkipped": [
+    "Frontend-main/src/pages/AdminPage.css",
+    "Frontend-main/src/pages/BookmarksPage.css",
+    "Frontend-main/src/pages/HomePage.css",
+    "Frontend-main/src/pages/MyPage.css"
+  ],
+  "filesUnreadable": [],
+  "analysisOutcomes": {
+    "structure": {
+      "succeeded": 0,
+      "failed": 0
+    },
+    "callGraph": {
+      "succeeded": 0,
+      "failed": 0,
+      "skipped": 0
+    }
+  },
+  "results": []
+}

@@ -770,7 +770,7 @@ export function useGraphTooltipSelection({
   return { onShowNodeTooltip, onShowEdgeTooltip };
 }
 
-export const GRAPH_CANVAS_ARIA_LABEL =
+const GRAPH_CANVAS_ARIA_LABEL =
   '관계 그래프. 화살표로 인물 이동, Enter로 상세, 선택 후 좌우로 관계, 더하기 빼기 영으로 확대 축소 맞춤, Escape로 해제';
 
 /**

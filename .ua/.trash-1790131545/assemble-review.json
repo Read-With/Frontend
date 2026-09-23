@@ -1,0 +1,16 @@
+{
+  "fixedSectionOk": true,
+  "nodesRecovered": 1,
+  "edgesRestored": 2,
+  "crossBatchEdgesAdded": 6,
+  "typesRemapped": 0,
+  "complexityRemapped": 0,
+  "notes": [
+    "merge 스크립트의 Fixed 섹션에는 ID 보정 항목이 없고 입출력 노드 수(829)가 같아 정상으로 판단함",
+    "graphStyles.js의 finitePositivityOrZero(clampPositivity 별칭, 213행)가 batch에서 누락되어 function 노드로 복구하고 contains/exports 엣지와 누락된 calls 엣지 2개를 되살림",
+    "scan importMap은 CSS @import와 re-export를 잡지 못함: RelationGraph.css→relation-graph/*.css 5개, relationStyles.js→graphStyles.js imports 엣지를 소스 확인 후 추가함",
+    "importMap에 있는 import 관계는 모두 그래프에 반영되어 있음 (누락 0)",
+    "UnifiedNodeInfo.jsx도 finitePositivityOrZero를 호출하지만 batch에 calls 엣지가 없음. 추측성 엣지라 추가하지 않음",
+    "const/memo/forwardRef로 정의된 default-export 컴포넌트(BookLibrary 등)의 function 노드는 필수가 아니어서 추가하지 않음"
+  ]
+}

@@ -1,0 +1,122 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 3,
+  "filesSkipped": [],
+  "filesUnreadable": [],
+  "analysisOutcomes": {
+    "structure": {
+      "succeeded": 3,
+      "failed": 0
+    },
+    "callGraph": {
+      "succeeded": 0,
+      "failed": 0,
+      "skipped": 3
+    }
+  },
+  "results": [
+    {
+      "path": ".github/ISSUE_TEMPLATE/bug_report.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 31,
+      "nonEmptyLines": 21,
+      "sections": [
+        {
+          "heading": "어떤 버그인가요?",
+          "level": 2,
+          "line": 19
+        },
+        {
+          "heading": "어떤 상황에서 발생한 버그인가요?",
+          "level": 2,
+          "line": 23
+        },
+        {
+          "heading": "예상 결과",
+          "level": 2,
+          "line": 27
+        },
+        {
+          "heading": "참고할만한 자료(선택)",
+          "level": 2,
+          "line": 31
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 4
+      }
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/feature_request.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 31,
+      "nonEmptyLines": 23,
+      "sections": [
+        {
+          "heading": "어떤 기능인가요?",
+          "level": 2,
+          "line": 19
+        },
+        {
+          "heading": "작업 상세 내용",
+          "level": 2,
+          "line": 23
+        },
+        {
+          "heading": "참고할만한 자료(선택)",
+          "level": 2,
+          "line": 29
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 3
+      }
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/fix_report.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 31,
+      "nonEmptyLines": 21,
+      "sections": [
+        {
+          "heading": "어떤 문제인가요?",
+          "level": 2,
+          "line": 19
+        },
+        {
+          "heading": "문제 발생 상황?",
+          "level": 2,
+          "line": 23
+        },
+        {
+          "heading": "예상 결과",
+          "level": 2,
+          "line": 27
+        },
+        {
+          "heading": "참고할만한 자료(선택)",
+          "level": 2,
+          "line": 31
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 4
+      }
+    }
+  ]
+}
