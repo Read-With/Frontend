@@ -6,6 +6,7 @@ import './index.css'
 import App from './App.jsx'
 import { errorUtils } from './utils/common/valueUtils.js'
 import { getApiBaseUrl } from './utils/common/urlUtils.js'
+import { AUTH_CLEARED_EVENT } from './utils/security/authTokenStorage.js'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -17,6 +18,9 @@ const queryClient = new QueryClient({
     },
   },
 })
+
+// 로그아웃·계정 전환 시 이전 사용자 데이터(책·북마크) 노출 방지
+window.addEventListener(AUTH_CLEARED_EVENT, () => queryClient.clear())
 
 if (import.meta.env.DEV) {
   import('./utils/security/oauthSecurity.js');

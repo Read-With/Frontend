@@ -6,7 +6,7 @@ import {
 import {Radar,RadarChart,PolarGrid,PolarAngleAxis,PolarRadiusAxis,ResponsiveContainer,} from 'recharts';
 import { getPositivityDisplay, clampPositivity, GRAPH_COLORS, brandAlpha } from '../../utils/styles/graphStyles.js';
 import { truncateWithEllipsis, cycleIndex } from '../../utils/common/valueUtils.js';
-import { joinClasses } from '../../utils/styles/styles.js';
+import { joinClasses, lockBodyScroll } from '../../utils/styles/styles.js';
 import { NodeProfileAvatar } from './GraphControls';
 import './RelationGraph.css';
 
@@ -401,11 +401,11 @@ function RelationAnalysisModalImpl({
     };
 
     document.addEventListener('keydown', onKeyDown, true);
-    document.body.style.overflow = 'hidden';
+    const unlockScroll = lockBodyScroll();
 
     return () => {
       document.removeEventListener('keydown', onKeyDown, true);
-      document.body.style.overflow = '';
+      unlockScroll();
       if (previouslyFocused && typeof previouslyFocused.focus === 'function') {
         previouslyFocused.focus();
       }

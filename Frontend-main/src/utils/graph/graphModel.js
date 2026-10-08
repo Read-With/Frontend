@@ -468,45 +468,39 @@ function finalizeDirectedEdges(edgeMap) {
 
   const out = [];
   for (const [, group] of buckets) {
-    if (group.length === 1) {
-      out.push(cloneEdgeData(group[0]));
-      continue;
-    }
-    if (group.length !== 2) {
+    const [e0, e1] = group;
+    // directed 키가 유일하므로 버킷은 단방향 1개 또는 역쌍 2개 — 그 외는 방어적으로 그대로 둠
+    const isReversePair =
+      group.length === 2 &&
+      e0.data.source === e1.data.target &&
+      e0.data.target === e1.data.source;
+    if (!isReversePair) {
       group.forEach((el) => out.push(cloneEdgeData(el)));
       continue;
     }
-    const e0 = group[0];
-    const e1 = group[1];
     const s0 = e0.data.source;
     const t0 = e0.data.target;
-    const s1 = e1.data.source;
-    const t1 = e1.data.target;
-    if (s0 === t1 && t0 === s1) {
-      if (relationPayloadEquivalent(e0.data, e1.data)) {
-        const [a, b] = String(s0) <= String(t0) ? [s0, t0] : [t0, s0];
-        const pos = positivityToken(e0.data);
-        const merged = mergeEdgeLabelFields(e0.data, e1.data);
-        const baseData = {
-          id: `${a}-${b}`,
-          source: a,
-          target: b,
-          bidirectional: true,
-          ...merged,
-          label: resolveMostRecentRelationLabel(
-            merged.labelHistory,
-            merged.latestLabels,
-            e1.data.label || e0.data.label
-          ),
-          snapshotEventId: e0.data.snapshotEventId ?? e1.data.snapshotEventId ?? null,
-        };
-        if (pos !== null) baseData.positivity = pos;
-        out.push({ data: baseData });
-      } else {
-        group.forEach((el) => out.push(cloneEdgeData(el, { reciprocalPair: true })));
-      }
+    if (relationPayloadEquivalent(e0.data, e1.data)) {
+      const [a, b] = String(s0) <= String(t0) ? [s0, t0] : [t0, s0];
+      const pos = positivityToken(e0.data);
+      const merged = mergeEdgeLabelFields(e0.data, e1.data);
+      const baseData = {
+        id: `${a}-${b}`,
+        source: a,
+        target: b,
+        bidirectional: true,
+        ...merged,
+        label: resolveMostRecentRelationLabel(
+          merged.labelHistory,
+          merged.latestLabels,
+          e1.data.label || e0.data.label
+        ),
+        snapshotEventId: e0.data.snapshotEventId ?? e1.data.snapshotEventId ?? null,
+      };
+      if (pos !== null) baseData.positivity = pos;
+      out.push({ data: baseData });
     } else {
-      group.forEach((el) => out.push(cloneEdgeData(el)));
+      group.forEach((el) => out.push(cloneEdgeData(el, { reciprocalPair: true })));
     }
   }
   return out;
@@ -1070,8 +1064,6 @@ export const OVERLAP_RESOLVE = Object.freeze({
   OVERLAP_TOLERANCE: 3,
   /** 이 깊이(px) 이상이면 완전한 여유 간격까지 강하게 분리 */
   SEVERE_OVERLAP: 12,
-  /** spatial hash로 검사하므로 일반적인 책 그래프는 전량 검사 */
-  MAX_NODES: 2000,
 });
 
 export const OVERLAP_PROFILES = Object.freeze({
@@ -1091,82 +1083,6 @@ export const OVERLAP_PROFILES = Object.freeze({
     severeOverlap: 1,
   }),
 });
-
-/**
- * 겹침 해결 대상 선정. MAX_NODES 이하면 visible(없으면 전체).
- * 초과 시 movable → selected → movable 근처 → visible 균등 샘플.
- */
-function collectOverlapCandidateNodes(cy, movableIdSet, maxNodes, nodeSize, padding) {
-  let pool = cy.nodes(':visible').toArray();
-  if (pool.length === 0) pool = cy.nodes().toArray();
-  if (pool.length <= maxNodes) return pool;
-
-  const chosen = new Map();
-  const addNode = (n) => {
-    if (!n || (typeof n.length === 'number' && n.length === 0)) return;
-    const id = String(typeof n.id === 'function' ? n.id() : '');
-    if (!id || chosen.has(id)) return;
-    chosen.set(id, n);
-  };
-
-  if (movableIdSet) {
-    for (const id of movableIdSet) {
-      addNode(cy.getElementById(id));
-    }
-  }
-
-  cy.nodes(':selected').toArray().forEach(addNode);
-
-  if (movableIdSet && movableIdSet.size > 0 && chosen.size < maxNodes) {
-    const anchors = [];
-    for (const id of movableIdSet) {
-      const n = chosen.get(id);
-      if (!n) continue;
-      anchors.push({ pos: n.position(), radius: readNodeRadius(n, nodeSize) });
-    }
-    const scored = [];
-    for (const n of pool) {
-      const id = String(n.id());
-      if (chosen.has(id)) continue;
-      const pos = n.position();
-      const r = readNodeRadius(n, nodeSize);
-      let minD = Infinity;
-      for (const a of anchors) {
-        const dx = pos.x - a.pos.x;
-        const dy = pos.y - a.pos.y;
-        const d = Math.sqrt(dx * dx + dy * dy);
-        if (d < minD) minD = d;
-      }
-      const neighborhood = anchors.reduce(
-        (m, a) => Math.max(m, a.radius + r + padding * 4),
-        0,
-      );
-      scored.push({ n, minD, near: minD <= neighborhood * 2 });
-    }
-    scored.sort((a, b) => {
-      if (a.near !== b.near) return a.near ? -1 : 1;
-      return a.minD - b.minD;
-    });
-    for (let i = 0; i < scored.length && chosen.size < maxNodes; i += 1) {
-      addNode(scored[i].n);
-    }
-  }
-
-  if (chosen.size < maxNodes) {
-    const remaining = pool.filter((n) => !chosen.has(String(n.id())));
-    const need = maxNodes - chosen.size;
-    if (remaining.length <= need) {
-      remaining.forEach(addNode);
-    } else {
-      const step = remaining.length / need;
-      for (let i = 0; i < need; i += 1) {
-        addNode(remaining[Math.floor(i * step)]);
-      }
-    }
-  }
-
-  return Array.from(chosen.values());
-}
 
 function collectNearbyPairIndexes(nodePositions, padding) {
   const maxRadius = nodePositions.reduce((max, item) => Math.max(max, item.radius), 1);
@@ -1312,14 +1228,10 @@ function parseOverlapOptions(nodeSize, options = {}) {
   };
 }
 
-function buildOverlapNodePositions(cy, movableIdSet, nodeSize, padding) {
-  const nodes = collectOverlapCandidateNodes(
-    cy,
-    movableIdSet,
-    OVERLAP_RESOLVE.MAX_NODES,
-    nodeSize,
-    padding,
-  );
+function buildOverlapNodePositions(cy, nodeSize) {
+  // spatial hash로 O(n) 검사라 노드 수 상한 없이 전량 대상
+  let nodes = cy.nodes(':visible').toArray();
+  if (nodes.length === 0) nodes = cy.nodes().toArray();
   if (nodes.length < 2) return null;
   return nodes.map((node) => ({
     node,
@@ -1363,7 +1275,7 @@ export function detectAndResolveOverlap(
     return false;
   }
 
-  const nodePositions = buildOverlapNodePositions(cy, movableIdSet, size, padding);
+  const nodePositions = buildOverlapNodePositions(cy, size);
   if (!nodePositions) {
     return false;
   }
@@ -1405,7 +1317,6 @@ export function detectAndResolveOverlap(
   ) {
     errorUtils.logDebug('detectAndResolveOverlap', 'residual overlaps remain', {
       candidates: nodePositions.length,
-      maxNodes: OVERLAP_RESOLVE.MAX_NODES,
     });
   }
 
@@ -1425,7 +1336,7 @@ export function hasOverlappingNodes(
   const { movableIdSet, padding, tolerance, nodeSize: size } = parseOverlapOptions(nodeSize, options);
   if (movableIdSet && movableIdSet.size === 0) return false;
 
-  const nodePositions = buildOverlapNodePositions(cy, movableIdSet, size, padding);
+  const nodePositions = buildOverlapNodePositions(cy, size);
   if (!nodePositions) return false;
   return pairStillOverlaps(nodePositions, movableIdSet, padding, tolerance);
 }
@@ -1790,6 +1701,7 @@ export const ensureGraphBookCache = async (bookId, { signal } = {}) => {
     )].sort((a, b) => a - b);
 
     const chapterSummaries = [];
+    let hasFailedChapter = false;
 
     for (const chapterIdx of normalizedChapterIndices) {
       if (signals.every((s) => s?.aborted)) {
@@ -1802,8 +1714,9 @@ export const ensureGraphBookCache = async (bookId, { signal } = {}) => {
           chapterCache = await discoverChapterEvents(numericId, chapterIdx, false);
         } catch (error) {
           if (error?.name === 'AbortError') throw error;
-          // 실패 챕터는 요약에서 제외 (기존 동작 유지)
+          // 실패 챕터는 요약에서 제외
           chapterCache = null;
+          hasFailedChapter = true;
         }
       }
 
@@ -1817,12 +1730,14 @@ export const ensureGraphBookCache = async (bookId, { signal } = {}) => {
       }
     }
 
-    return writeGraphBookCache(numericId, {
+    const summary = {
       bookId: numericId,
       chapters: chapterSummaries,
       maxChapter: calculateMaxChapterFromChapters(chapters),
       builtAt: Date.now(),
-    });
+    };
+    // 실패 챕터가 있으면 캐시하지 않음 — TTL 동안 재시도가 막히지 않도록
+    return hasFailedChapter ? summary : writeGraphBookCache(numericId, summary);
   })();
 
   return awaitTracked(graphBuildPromises, numericId, buildPromise, { promise: buildPromise, signals });
@@ -1857,11 +1772,9 @@ const normalizeEventFromDeltasGraphResult = (
   const hasCharacters = Array.isArray(characters) && characters.length > 0;
   const hasRelations = Array.isArray(relations) && relations.length > 0;
   const resolvedChapterIdx = resolveChapterIndex(safe) ?? chapterIdx;
-  const ord = nestedEvent ? eventUtils.resolveEventOrdinal(nestedEvent) : null;
+  // walker event는 { eventId, chapterIndex }뿐 — ordinal을 뽑으면 eventId 끝자리 숫자가 되므로 캐시 키(eventIdx) 기준 유지
   const resolvedEventNum =
-    Number.isFinite(ord) && ord > 0
-      ? ord
-      : Number(manifestStructure?.eventNum ?? manifestStructure?.eventIdx ?? eventIdx);
+    Number(manifestStructure?.eventNum ?? manifestStructure?.eventIdx ?? eventIdx) || eventIdx;
   const resolvedEventId =
     safe.eventId ??
     eventUtils.resolveEventId(nestedEvent) ??
@@ -1933,7 +1846,9 @@ const setCachedChapterEvents = (bookId, chapterIdx, eventData) => {
     };
 
     setBounded(chapterEventMemoryCache, cacheKey, cacheData, CHAPTER_EVENT_MEMORY_MAX);
-    if (!saveToStorage(cacheKey, cacheData, 'localStorage')) {
+    // rawEvents(이벤트별 누적 스냅샷 전체)는 discover 이어받기용 메모리 전용 — 스토리지에 넣으면 용량 초과로 저장 자체가 실패함
+    const { rawEvents: _rawEvents, ...storedData } = cacheData;
+    if (!saveToStorage(cacheKey, storedData, 'localStorage')) {
       // 용량 초과 등: 이전 세션의 낡은 항목이 남아 다음 로드에 쓰이지 않도록 제거 (현재 세션은 메모리로 표시)
       removeFromStorage(cacheKey, 'localStorage');
     }
@@ -2319,6 +2234,8 @@ export const hasUsableChapterCacheThrough = (bookId, chapterIdx, throughEventIdx
   if (cached.partial) {
     return asArray(cached.events).some((e) => Number(e?.eventIdx) === through);
   }
+  // capped 아닌 캐시는 챕터 전체 — through가 챕터 끝을 넘어도 충족 (isCompleteThrough와 동일 기준)
+  if (!cached.capped) return true;
   const cachedMax = Number(cached.maxEventIdx) || 0;
   return cachedMax >= through;
 };

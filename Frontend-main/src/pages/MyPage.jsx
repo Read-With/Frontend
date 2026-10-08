@@ -7,7 +7,7 @@ import BookLibrary from '../components/library/BookLibrary';
 import FileUpload from '../components/library/FileUpload';
 import { useBooks } from '../hooks/books/bookHooks';
 import useAuth from '../hooks/auth/useAuth';
-import { useModalFocusTrap } from '../hooks/common/hooksShared';
+import { useModalFocusTrap, useBodyScrollLock } from '../hooks/common/hooksShared';
 import { EPUB_FILE_CONSTRAINTS } from '../utils/library/libraryUtils';
 import './MyPage.css';
 
@@ -54,14 +54,7 @@ function LogoutConfirmDialog({ open, onConfirm, onCancel }) {
   const dialogRef = useRef(null);
 
   useModalFocusTrap(open, dialogRef, onCancel);
-
-  useEffect(() => {
-    if (!open) return undefined;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [open]);
+  useBodyScrollLock(open);
 
   if (!open) return null;
 

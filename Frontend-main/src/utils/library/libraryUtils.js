@@ -2,6 +2,7 @@
 
 import { getProgressFromCache } from '../common/cache/progressCache';
 import { clampPercent } from '../common/valueUtils';
+import { lockBodyScroll } from '../styles/styles';
 
 /** 서재 숨기기 — 카드 메뉴(BookLibrary)와 상세 모달(BookDetailModal) 공용 문구 */
 export const HIDE_BOOK_COPY = {
@@ -47,10 +48,10 @@ export function attachLibraryModalChrome({
     else onClose?.();
   };
   document.addEventListener('keydown', handleEscape);
-  document.body.style.overflow = 'hidden';
+  const unlockScroll = lockBodyScroll();
   return () => {
     document.removeEventListener('keydown', handleEscape);
-    document.body.style.overflow = 'unset';
+    unlockScroll();
   };
 }
 

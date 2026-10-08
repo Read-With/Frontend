@@ -16,6 +16,7 @@ import {
 import { userViewerPath, userViewerBookmarksPath, userViewerReadingPath } from '../utils/common/urlUtils';
 import { resolveChapterIndex, errorUtils } from '../utils/common/valueUtils';
 import { formatFallbackChapterLabel } from '../utils/viewer/viewerCore';
+import BookmarkDeleteConfirm from '../components/viewer/BookmarkDeleteConfirm';
 import './BookmarksPage.css';
 
 const sameId = (a, b) => String(a) === String(b);
@@ -187,15 +188,6 @@ const BookmarksPage = () => {
     await removeBookmark(bookmarkId);
     setDeleteConfirmId(null);
   };
-
-  useEffect(() => {
-    if (!deleteConfirmId) return undefined;
-    const onKey = (e) => {
-      if (e.key === 'Escape') setDeleteConfirmId(null);
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [deleteConfirmId]);
 
   useLayoutEffect(() => {
     const page = pageRef.current;
@@ -679,44 +671,13 @@ const BookmarksPage = () => {
         )}
       </div>
 
-      {deleteConfirmId != null ? (
-        <div className="bm-confirm-overlay" role="presentation" onClick={() => setDeleteConfirmId(null)}>
-          <div
-            className="bm-confirm-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="bookmark-delete-title"
-            aria-describedby="bookmark-delete-desc"
-            onClick={stopRow}
-          >
-            <p id="bookmark-delete-title" className="bm-confirm-title">
-              북마크를 삭제할까요?
-            </p>
-            <p id="bookmark-delete-desc" className="bm-confirm-desc">
-              메모가 있다면 함께 삭제되며, 되돌릴 수 없습니다.
-            </p>
-            <div className="bm-confirm-actions">
-              <button
-                type="button"
-                className="bm-btn bm-btn-ghost"
-                onClick={() => setDeleteConfirmId(null)}
-                disabled={isMutating}
-              >
-                취소
-              </button>
-              <button
-                type="button"
-                className="bm-btn bm-btn-confirm-delete"
-                onClick={() => handleDeleteBookmark(deleteConfirmId)}
-                disabled={isMutating}
-                autoFocus
-              >
-                {isMutating ? '삭제 중…' : '삭제'}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <BookmarkDeleteConfirm
+        open={deleteConfirmId != null}
+        busy={isMutating}
+        onCancel={() => setDeleteConfirmId(null)}
+        onConfirm={() => handleDeleteBookmark(deleteConfirmId)}
+        description="메모가 있다면 함께 삭제되며, 되돌릴 수 없습니다."
+      />
     </div>
   );
 };

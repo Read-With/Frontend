@@ -5,6 +5,12 @@ import { getBookManifest } from '../../utils/api/booksApi';
 import { getManifestFromCache } from '../../utils/common/cache/manifestCache';
 import { toPositiveNumberOrNull, errorUtils } from '../../utils/common/valueUtils';
 import { resolveServerBookId } from '../../utils/viewer/viewerCore';
+import { lockBodyScroll } from '../../utils/styles/styles';
+
+/** body 스크롤 잠금 (중첩 안전 — lockBodyScroll 참고) */
+export function useBodyScrollLock(active = true) {
+  useEffect(() => (active ? lockBodyScroll() : undefined), [active]);
+}
 
 export function useLatestRef(value) {
   const ref = useRef(value);

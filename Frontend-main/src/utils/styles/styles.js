@@ -44,3 +44,18 @@ export const unifiedNodeAnimations = {
       'none',
     ),
 };
+
+let bodyScrollLockCount = 0;
+
+/** body 스크롤 잠금 — 카운트 기반이라 중첩(뷰어 + 다이얼로그 등)돼도 마지막 해제 시에만 복원. 해제 함수 반환. */
+export function lockBodyScroll() {
+  bodyScrollLockCount += 1;
+  document.body.style.overflow = 'hidden';
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    bodyScrollLockCount -= 1;
+    if (bodyScrollLockCount === 0) document.body.style.overflow = '';
+  };
+}

@@ -131,6 +131,12 @@ function getBookmarkPositionSortKey(bookmark, bookId = null) {
   return Number.isFinite(o) ? `o_${String(o).padStart(12, '0')}` : '';
 }
 
+const getCreatedTs = (bookmark) => {
+  const raw = bookmark?.createdAt || bookmark?.created_at;
+  const t = raw ? Date.parse(raw) : NaN;
+  return Number.isFinite(t) ? t : 0;
+};
+
 const sortBookmarks = (bookmarks, sortOrder, bookId = null) => {
   if (!bookmarks?.length) return [];
   if (sortOrder === 'position') {
@@ -138,11 +144,6 @@ const sortBookmarks = (bookmarks, sortOrder, bookId = null) => {
       getBookmarkPositionSortKey(a, bookId).localeCompare(getBookmarkPositionSortKey(b, bookId))
     );
   }
-  const getCreatedTs = (bookmark) => {
-    const raw = bookmark?.createdAt || bookmark?.created_at;
-    const t = raw ? Date.parse(raw) : NaN;
-    return Number.isFinite(t) ? t : 0;
-  };
   if (sortOrder === 'oldest') {
     return [...bookmarks].sort((a, b) => getCreatedTs(a) - getCreatedTs(b));
   }
@@ -187,11 +188,6 @@ export const groupBookmarksByChapter = (bookmarks, sortOrder = 'recent', bookId 
   }
 
   const groups = [...map.values()];
-  const getCreatedTs = (bookmark) => {
-    const raw = bookmark?.createdAt || bookmark?.created_at;
-    const t = raw ? Date.parse(raw) : NaN;
-    return Number.isFinite(t) ? t : 0;
-  };
 
   if (sortOrder === 'position') {
     groups.sort((a, b) => {

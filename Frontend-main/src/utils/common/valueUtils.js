@@ -99,11 +99,11 @@ export function truncateWithEllipsis(text, maxLen) {
   return `${s.slice(0, maxLen - 1)}…`;
 }
 
-/** 순환 인덱스 (화살표·형제 전환) */
+/** 순환 인덱스 (화살표·형제 전환). 미선택(index < 0)이면 앞으로는 처음, 뒤로는 마지막. */
 export function cycleIndex(index, length, delta = 1) {
   if (!length || length < 1) return 0;
-  const base = Number.isFinite(index) && index >= 0 ? Math.trunc(index) : 0;
-  return (base + delta + length) % length;
+  if (!Number.isFinite(index) || index < 0) return delta >= 0 ? 0 : length - 1;
+  return (((Math.trunc(index) + delta) % length) + length) % length;
 }
 
 export const toStringOrNull = (value) => (value == null ? null : String(value));

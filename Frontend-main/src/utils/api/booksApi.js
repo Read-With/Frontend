@@ -40,6 +40,12 @@ import {
 
 const BOOK_LIST_SORT_VALUES = new Set(['updatedAt', 'title']);
 
+/** 성공 응답의 단건 result를 정규화 (data를 그대로 반환) */
+const withNormalizedResult = (data, normalize) => {
+  if (data?.isSuccess && data.result) data.result = normalize(data.result);
+  return data;
+};
+
 /** v2 books 응답 정규화 (목록·상세) */
 const normalizeV2Book = (book) => {
   if (!book || typeof book !== 'object') return book;
@@ -116,10 +122,7 @@ export const getBook = async (bookId) => {
       notFoundMessage: '도서를 찾을 수 없거나 아직 노출 가능한 상태가 아닙니다.',
     });
     if (softFail) return softFail;
-    if (data?.isSuccess && data.result) {
-      data.result = normalizeV2Book(data.result);
-    }
-    return data;
+    return withNormalizedResult(data, normalizeV2Book);
   } catch (error) {
     if (isNotFoundError(error)) {
       return makeSilentError('NOT_FOUND', '도서를 찾을 수 없거나 아직 노출 가능한 상태가 아닙니다.');
@@ -319,10 +322,7 @@ export const createBookmark = async (bookmarkData) => {
       method: 'POST',
       body: JSON.stringify(dataToSend),
     });
-    if (data?.isSuccess && data.result) {
-      data.result = normalizeBookmarkDto(data.result);
-    }
-    return data;
+    return withNormalizedResult(data, normalizeBookmarkDto);
   } catch (error) {
     errorUtils.logError('createBookmark', error);
     throw error;
@@ -342,10 +342,7 @@ export const updateBookmark = async (bookmarkId, updateData) => {
       method: 'PATCH',
       body: JSON.stringify(body),
     });
-    if (data?.isSuccess && data.result) {
-      data.result = normalizeBookmarkDto(data.result);
-    }
-    return data;
+    return withNormalizedResult(data, normalizeBookmarkDto);
   } catch (error) {
     errorUtils.logError('updateBookmark', error);
     throw error;

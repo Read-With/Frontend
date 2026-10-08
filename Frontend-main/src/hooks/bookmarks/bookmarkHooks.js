@@ -1,6 +1,7 @@
 /** 북마크 CRUD·뷰어 추가·정렬 */
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { createBookmark, updateBookmark, deleteBookmark, loadBookmarks as loadBookmarksFromApi } from '../../utils/api/booksApi';
 import {
@@ -13,23 +14,6 @@ import { toPositiveNumberOrNull, errorUtils } from '../../utils/common/valueUtil
 import { resolveReadingLocators } from '../../utils/viewer/viewerSession';
 
 const LOG = 'bookmarkHooks';
-
-const bookmarkListSignature = (items) =>
-  JSON.stringify((items || []).map((bookmark) => [
-    bookmark?.id,
-    bookmark?.updatedAt ?? bookmark?.updated_at,
-    bookmark?.createdAt ?? bookmark?.created_at,
-    bookmark?.color,
-    bookmark?.memo,
-    bookmark?.highlightText,
-    bookmark?.textSnippet,
-    bookmark?.chapterTitle,
-    bookmark?.startLocator,
-    bookmark?.endLocator,
-  ]));
-
-const reuseUnchangedBookmarkList = (previous, next) =>
-  bookmarkListSignature(previous) === bookmarkListSignature(next) ? previous : next;
 
 const friendlyError = (err, fallback) => {
   if (!err) return fallback;
@@ -52,18 +36,54 @@ export const useBookmarks = (bookId, options = {}) => {
   const apiBookId = useMemo(() => toPositiveNumberOrNull(bookId), [bookId]);
   const apiSort = clientSortToApiSort(sortOrder);
 
-  const [bookmarks, setBookmarks] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [loadError, setLoadError] = useState(null);
-  const [isMutating, setIsMutating] = useState(false);
-  const bookmarksRef = useRef(bookmarks);
-  const mutatingRef = useRef(false);
-  const fetchRequestRef = useRef({ generation: 0, bookId: null, active: false });
-  const loadedBookIdRef = useRef(null);
+  const queryClient = useQueryClient();
+  const queryKey = useMemo(() => ['bookmarks', apiBookId, apiSort], [apiBookId, apiSort]);
+  const query = useQuery({
+    queryKey,
+    enabled: apiBookId != null,
+    queryFn: async () => {
+      try {
+        return await loadBookmarksFromApi(apiBookId, apiSort);
+      } catch (err) {
+        errorUtils.logWarning(LOG, friendlyError(err, '북마크 목록을 불러오지 못했습니다.'), {
+          action: 'fetch',
+          bookId: apiBookId,
+          sort: apiSort,
+          message: err?.message,
+          status: err?.status ?? err?.statusCode,
+        });
+        throw err;
+      }
+    },
+    // 목록↔뷰어 전환·탭 복귀 시 재동기화 (전역 기본값보다 우선)
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    retry: false,
+  });
+  const { refetch } = query;
+  const bookmarks = useMemo(() => (apiBookId == null ? [] : query.data ?? []), [apiBookId, query.data]);
+  // 이미 목록이 있으면 백그라운드 재조회 실패는 숨김
+  const loadError =
+    apiBookId == null
+      ? (bookId ? '유효한 책 ID가 없어 북마크를 불러올 수 없습니다.' : null)
+      : query.error && !query.data
+        ? friendlyError(query.error, '북마크 목록을 불러오지 못했습니다.')
+        : null;
 
-  useEffect(() => {
-    bookmarksRef.current = bookmarks;
-  }, [bookmarks]);
+  const setBookmarks = useCallback(
+    (updater) => {
+      // 첫 로딩 전(또는 취소로 비어 있음)이면 일부만 채우지 말고 서버 목록을 다시 받음
+      if (queryClient.getQueryData(queryKey) === undefined) {
+        void queryClient.invalidateQueries({ queryKey });
+        return;
+      }
+      queryClient.setQueryData(queryKey, updater);
+    },
+    [queryClient, queryKey]
+  );
+
+  const [isMutating, setIsMutating] = useState(false);
+  const mutatingRef = useRef(false);
 
   const runMutation = useCallback(async (request, onSuccess, messages) => {
     if (mutatingRef.current) {
@@ -84,7 +104,14 @@ export const useBookmarks = (bookId, options = {}) => {
         toast.error(msg);
         return { success: false, message: msg };
       }
+      // 진행 중인 재조회가 늦게 도착해 이번 변경을 덮어쓰지 않도록 취소
+      await queryClient.cancelQueries({ queryKey });
       const result = onSuccess(response);
+      // 다른 정렬 키 캐시는 이번 변경이 빠져 있으므로 제거 (재진입 시 삭제된 북마크 노출·중복 판정 오류 방지)
+      queryClient.removeQueries({
+        queryKey: ['bookmarks', apiBookId],
+        predicate: (q) => q.queryKey[2] !== apiSort,
+      });
       toast.success(messages.success, {
         autoClose: messages.autoClose ?? 2800,
         className: messages.toastClassName,
@@ -105,63 +132,7 @@ export const useBookmarks = (bookId, options = {}) => {
       mutatingRef.current = false;
       setIsMutating(false);
     }
-  }, [apiBookId]);
-
-  const fetchBookmarks = useCallback(async ({ silent = false } = {}) => {
-    if (apiBookId == null) {
-      fetchRequestRef.current = {
-        generation: fetchRequestRef.current.generation + 1,
-        bookId: null,
-        active: false,
-      };
-      loadedBookIdRef.current = null;
-      setBookmarks([]);
-      setLoadError(bookId ? '유효한 책 ID가 없어 북마크를 불러올 수 없습니다.' : null);
-      return;
-    }
-    if (
-      fetchRequestRef.current.active &&
-      fetchRequestRef.current.bookId === apiBookId
-    ) {
-      return;
-    }
-    const generation = fetchRequestRef.current.generation + 1;
-    fetchRequestRef.current = { generation, bookId: apiBookId, active: true };
-    const isSameLoadedBook = loadedBookIdRef.current === apiBookId;
-    const hasExistingBookmarks = isSameLoadedBook && bookmarksRef.current.length > 0;
-    const showBlockingLoading = !silent && !hasExistingBookmarks;
-    if (!isSameLoadedBook) {
-      bookmarksRef.current = [];
-      setBookmarks([]);
-    }
-    if (showBlockingLoading) setLoading(true);
-    if (!silent) setLoadError(null);
-    try {
-      const next = await loadBookmarksFromApi(apiBookId, apiSort);
-      if (fetchRequestRef.current.generation !== generation) return;
-      loadedBookIdRef.current = apiBookId;
-      setBookmarks((previous) => reuseUnchangedBookmarkList(previous, next));
-      setLoadError(null);
-    } catch (err) {
-      const msg = friendlyError(err, '북마크 목록을 불러오지 못했습니다.');
-      errorUtils.logWarning(LOG, msg, {
-        action: 'fetch',
-        bookId: apiBookId,
-        sort: apiSort,
-        message: err?.message,
-        status: err?.status ?? err?.statusCode,
-      });
-      if (fetchRequestRef.current.generation === generation && !hasExistingBookmarks) {
-        setBookmarks([]);
-        setLoadError(msg);
-      }
-    } finally {
-      if (fetchRequestRef.current.generation === generation) {
-        fetchRequestRef.current = { generation, bookId: apiBookId, active: false };
-        if (showBlockingLoading) setLoading(false);
-      }
-    }
-  }, [apiBookId, apiSort, bookId]);
+  }, [apiBookId, apiSort, queryClient, queryKey]);
 
   const addBookmark = useCallback(
     (bookmarkData) =>
@@ -180,7 +151,7 @@ export const useBookmarks = (bookId, options = {}) => {
           error: '북마크 생성 중 오류가 발생했습니다.',
         }
       ),
-    [runMutation, apiSort]
+    [runMutation, apiSort, setBookmarks]
   );
 
   const patchBookmark = useCallback(
@@ -201,7 +172,7 @@ export const useBookmarks = (bookId, options = {}) => {
           error: '북마크 수정 중 오류가 발생했습니다.',
         }
       ),
-    [runMutation]
+    [runMutation, setBookmarks]
   );
 
   const removeBookmark = useCallback(
@@ -222,7 +193,7 @@ export const useBookmarks = (bookId, options = {}) => {
           toastClassName: 'bm-toast-delete',
         }
       ),
-    [runMutation]
+    [runMutation, setBookmarks]
   );
 
   const handleAddBookmark = useCallback(async () => {
@@ -306,7 +277,10 @@ export const useBookmarks = (bookId, options = {}) => {
       return { success: false };
     }
 
-    const existing = bookmarksRef.current.find((b) =>
+    // 목록 로딩 전이면 받아온 뒤 중복 확인 (빈 목록 기준 확인으로 중복 생성 방지)
+    let current = queryClient.getQueryData(queryKey);
+    if (current === undefined) current = (await refetch()).data ?? [];
+    const existing = current.find((b) =>
       isSameBookmarkPosition(b, {
         startLocator: bookmarkData.startLocator,
         endLocator: bookmarkData.endLocator ?? bookmarkData.startLocator,
@@ -317,41 +291,25 @@ export const useBookmarks = (bookId, options = {}) => {
     }
 
     return addBookmark(bookmarkData);
-  }, [apiBookId, viewerRef, setFailCount, addBookmark]);
+  }, [apiBookId, viewerRef, setFailCount, addBookmark, queryClient, queryKey, refetch]);
 
-  useEffect(() => {
-    if (apiBookId == null) {
-      setBookmarks([]);
-      setLoadError(bookId ? '유효한 책 ID가 없어 북마크를 불러올 수 없습니다.' : null);
-      return;
-    }
-    fetchBookmarks();
-  }, [apiBookId, bookId, fetchBookmarks]);
-
-  // 목록↔뷰어 전환·bfcache·탭 복귀 시 재동기화 (마운트 시 pageshow는 제외)
+  // bfcache 복원 시 재동기화 (visibilitychange는 refetchOnWindowFocus가 처리)
   useEffect(() => {
     if (apiBookId == null) return undefined;
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') fetchBookmarks({ silent: true });
-    };
     const onPageShow = (event) => {
-      if (event.persisted) fetchBookmarks({ silent: true });
+      if (event.persisted) refetch();
     };
-    document.addEventListener('visibilitychange', onVisibility);
     window.addEventListener('pageshow', onPageShow);
-    return () => {
-      document.removeEventListener('visibilitychange', onVisibility);
-      window.removeEventListener('pageshow', onPageShow);
-    };
-  }, [apiBookId, fetchBookmarks]);
+    return () => window.removeEventListener('pageshow', onPageShow);
+  }, [apiBookId, refetch]);
 
   return {
     bookmarks,
-    loading,
+    loading: query.isLoading,
     loadError,
     isMutating,
     apiBookId,
-    fetchBookmarks,
+    fetchBookmarks: refetch,
     removeBookmark,
     patchBookmark,
     handleAddBookmark: viewerRef ? handleAddBookmark : undefined,

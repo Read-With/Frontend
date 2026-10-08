@@ -6,7 +6,7 @@ import { toast } from 'react-toastify';
 import { useServerBookMatching } from '../books/bookHooks';
 import { useViewerProgress, useProgressAutoSave } from './useViewerProgress';
 import { useViewerGraphState, useViewerGraphPipeline } from './useViewerGraph';
-import { useManifestLoaded, useLatestRef, resolveServerBookIdOrFallback } from '../common/hooksShared';
+import { useManifestLoaded, useLatestRef, useBodyScrollLock, resolveServerBookIdOrFallback } from '../common/hooksShared';
 import { bookUtils, resolveViewerBookKey } from '../../utils/viewer/viewerCore';
 import {
   loadSettings,
@@ -396,12 +396,7 @@ export function useViewerPage() {
     isMutating: isBookmarkMutating,
   } = useBookmarks(bookmarkBookId, { viewerRef, setFailCount });
 
-  useEffect(() => {
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = 'auto';
-    };
-  }, []);
+  useBodyScrollLock();
 
   const handleApplySettings = useCallback(
     (newSettings) => {

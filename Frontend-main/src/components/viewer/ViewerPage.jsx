@@ -1,11 +1,10 @@
 import { useRef, useEffect, useCallback, useMemo, useState } from 'react';
-import PropTypes from 'prop-types';
 import { toast } from 'react-toastify';
 import ViewerLayout from './ViewerLayout';
 import XhtmlViewer from './XhtmlViewer';
 import ViewerSettings from './ViewerSettings';
 import { useViewerPage } from '../../hooks/viewer/useViewerPage';
-import { useModalFocusTrap, useLatestRef } from '../../hooks/common/hooksShared';
+import { useLatestRef } from '../../hooks/common/hooksShared';
 import { useTooltipState } from '../../hooks/ui/tooltipHooks';
 import { anchorToLocators, resolveChapterIndex, errorUtils } from '../../utils/common/valueUtils';
 import {
@@ -15,88 +14,10 @@ import {
 } from '../../utils/viewer/viewerSession';
 import { isSameBookmarkPosition, normalizeBookmarkLocators } from '../../utils/bookmarks/bookmarkUtils';
 import GraphSplitArea from './GraphSplitArea';
+import BookmarkDeleteConfirm from './BookmarkDeleteConfirm';
 import '../../pages/BookmarksPage.css';
 
 const TOOLBAR_REVEAL_ZONE_PX = 72;
-
-function BookmarkDeleteConfirm({
-  open,
-  busy,
-  onCancel,
-  onConfirm,
-}) {
-  const dialogRef = useRef(null);
-  const busyRef = useLatestRef(busy);
-  const onCancelRef = useLatestRef(onCancel);
-  // busy/onCancel을 ref로 안정화 — useModalFocusTrap의 onClose 참조가 busy 토글마다 바뀌면
-  // effect가 재실행되며 (버튼이 disabled된) 다이얼로그로 포커스가 불필요하게 튐
-  const handleClose = useCallback(() => {
-    if (!busyRef.current) onCancelRef.current?.();
-  }, [busyRef, onCancelRef]);
-
-  useModalFocusTrap(open, dialogRef, handleClose);
-
-  useEffect(() => {
-    if (!open) return undefined;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = 'unset';
-    };
-  }, [open]);
-
-  if (!open) return null;
-
-  return (
-    <div
-      className="bm-confirm-overlay"
-      role="presentation"
-      onClick={busy ? undefined : onCancel}
-    >
-      <div
-        ref={dialogRef}
-        className="bm-confirm-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="viewer-bookmark-delete-title"
-        aria-describedby="viewer-bookmark-delete-desc"
-        tabIndex={-1}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <p id="viewer-bookmark-delete-title" className="bm-confirm-title">
-          북마크를 삭제할까요?
-        </p>
-        <p id="viewer-bookmark-delete-desc" className="bm-confirm-desc">
-          현재 위치에 표시된 북마크가 제거됩니다.
-        </p>
-        <div className="bm-confirm-actions">
-          <button
-            type="button"
-            className="bm-btn bm-btn-ghost"
-            onClick={onCancel}
-            disabled={busy}
-          >
-            취소
-          </button>
-          <button
-            type="button"
-            className="bm-btn bm-btn-confirm-delete"
-            onClick={onConfirm}
-            disabled={busy}
-          >
-            {busy ? '삭제 중…' : '삭제'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-BookmarkDeleteConfirm.propTypes = {
-  open: PropTypes.bool.isRequired,
-  busy: PropTypes.bool,
-  onCancel: PropTypes.func.isRequired,
-  onConfirm: PropTypes.func.isRequired,
-};
 
 const ViewerPage = () => {
   const {
@@ -306,7 +227,6 @@ const ViewerPage = () => {
       setCurrentEvent,
       applyReadingLocator,
       setProgressTopBar,
-      readingChapterRef,
     ]
   );
 
@@ -428,6 +348,7 @@ const ViewerPage = () => {
         busy={isBookmarkMutating}
         onCancel={dismissDeleteConfirm}
         onConfirm={confirmToolbarDelete}
+        description="현재 위치에 표시된 북마크가 제거됩니다."
       />
     </div>
   );

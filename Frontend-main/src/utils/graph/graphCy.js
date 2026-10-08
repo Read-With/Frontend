@@ -7,7 +7,7 @@ import {
   resolveCoseBilkentLayout,
   estimateNodeSizePx,
 } from '../styles/graphStyles.js';
-import { clampPositivity, errorUtils } from '../common/valueUtils';
+import { clampPositivity, cycleIndex, errorUtils } from '../common/valueUtils';
 import {
   undirectedPairKey,
   GRAPH_ZOOM,
@@ -706,12 +706,6 @@ function setKeyboardFocusElement(cy, element) {
   }
 }
 
-function cycleIndex(length, current, delta) {
-  if (length <= 0) return -1;
-  if (current < 0) return delta >= 0 ? 0 : length - 1;
-  return (current + delta + length * 10) % length;
-}
-
 function commitKeyboardFocus(cy, focusRef, kind, ele) {
   setKeyboardFocusElement(cy, ele);
   if (!focusRef) return;
@@ -744,7 +738,7 @@ function moveKeyboardFocus(cy, {
   if (idx < 0 && fallbackId != null) {
     idx = list.findIndex((el) => String(el.id()) === String(fallbackId));
   }
-  idx = cycleIndex(list.length, idx, delta);
+  idx = cycleIndex(idx, list.length, delta);
   const ele = list[idx];
   commitKeyboardFocus(cy, focusRef, kind, ele);
   if (center) {
