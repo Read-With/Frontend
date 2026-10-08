@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
+import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import useAuth from '../hooks/auth/useAuth';
-import { startGoogleOAuthLogin, errorUtils } from '../utils/common/urlUtils';
+import { startGoogleOAuthLogin } from '../utils/common/urlUtils';
+import { errorUtils } from '../utils/common/valueUtils';
 import landingHero from '../assets/landing-hero-book.jpg';
 import './HomePage.css';
 
@@ -16,6 +18,10 @@ function GoogleIcon({ className, ...props }) {
     </svg>
   );
 }
+
+GoogleIcon.propTypes = {
+  className: PropTypes.string,
+};
 
 export default function HomePage() {
   const navigate = useNavigate();

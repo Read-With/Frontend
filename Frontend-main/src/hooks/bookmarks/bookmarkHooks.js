@@ -9,8 +9,7 @@ import {
   waitForBookmarkAxisReady,
   clientSortToApiSort,
 } from '../../utils/bookmarks/bookmarkUtils';
-import { toPositiveNumberOrNull } from '../../utils/common/valueUtils';
-import { errorUtils } from '../../utils/common/urlUtils';
+import { toPositiveNumberOrNull, errorUtils } from '../../utils/common/valueUtils';
 import { resolveReadingLocators } from '../../utils/viewer/viewerSession';
 
 const LOG = 'bookmarkHooks';

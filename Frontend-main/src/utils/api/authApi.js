@@ -1,6 +1,7 @@
 /** 인증·토큰 갱신·authenticatedFetch */
 
-import { getApiBaseUrl, errorUtils } from '../common/urlUtils';
+import { getApiBaseUrl } from '../common/urlUtils';
+import { errorUtils } from '../common/valueUtils';
 import {
   getStoredAccessToken,
   setStoredAccessToken,

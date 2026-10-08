@@ -1,10 +1,7 @@
 /** 뷰어 그래프 파이프라인: API/캐시 조회·변환·타깃 계산 */
 
 import {
-  buildNodeWeights,
-  createCharacterMaps,
   aggregateCharactersFromEvents,
-  convertRelationsToElements,
   buildElementsFromGraphPayload,
   getGraphEventState,
   getCachedChapterEvents,
@@ -23,12 +20,6 @@ import { resolveChapterIndex, toPositiveInt, toPositiveNumberOrNull, asArray } f
 import { cacheKeyUtils, eventUtils, ELEMENTS_TO_RELATIONS_OPTS, formatChapterOrdinalLabel } from './viewerCore';
 import { resolveServerEventMatch } from './viewerSession';
 import { getChapterData } from '../common/cache/manifestCache.js';
-
-export const DEFAULT_GRAPH_TRANSFORM_DEPS = {
-  createCharacterMaps,
-  buildNodeWeights,
-  convertRelationsToElements,
-};
 
 /** elements 설정 + 프로필 이미지 비동기 resolve (stale guard 지원) */
 export function commitVisibleGraphElements(setElements, nextElements, { applyTokenRef } = {}) {
@@ -167,7 +158,6 @@ export function convertGraphSourceToElements(
   source,
   chapter,
   eventIdx,
-  deps = DEFAULT_GRAPH_TRANSFORM_DEPS,
   previousNodeWeights = null,
   options = null
 ) {
@@ -179,7 +169,6 @@ export function convertGraphSourceToElements(
   const elements = graphDataTransformUtils.convertToElements(
     { characters, relations, event: eventMeta },
     normalizedEvent,
-    deps,
     previousNodeWeights,
     { bookId }
   );
@@ -207,8 +196,7 @@ function getCachedGraphSnapshot(bookId, chapter, eventIdx, getGraphEventStateFn)
 export function resolveCumulativeGraphForDisplay(
   bookId,
   chapter,
-  eventIdx,
-  deps = DEFAULT_GRAPH_TRANSFORM_DEPS
+  eventIdx
 ) {
   const cached = getCachedGraphSnapshot(bookId, chapter, eventIdx, getGraphEventState);
   if (!cached) return null;
@@ -230,7 +218,7 @@ export function resolveCumulativeGraphForDisplay(
     };
   }
 
-  return convertGraphSourceToElements(cached, chapter, eventIdx, deps, null, { bookId });
+  return convertGraphSourceToElements(cached, chapter, eventIdx, null, { bookId });
 }
 
 export const graphDataTransformUtils = {
@@ -252,7 +240,7 @@ export const graphDataTransformUtils = {
     };
   },
 
-  convertToElements: (resultData, normalizedEvent, deps, previousNodeWeights = null, options = null) => {
+  convertToElements: (resultData, normalizedEvent, previousNodeWeights = null, options = null) => {
     const bookId = options?.bookId ?? resultData?.bookId ?? null;
     const { elements } = buildElementsFromGraphPayload({
       characters: resultData?.characters,
@@ -260,7 +248,6 @@ export const graphDataTransformUtils = {
       eventData: normalizedEvent,
       previousNodeWeights,
       bookId,
-      deps,
     });
     return elements;
   },

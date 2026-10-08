@@ -3,8 +3,7 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { getBookManifest } from '../../utils/api/booksApi';
 import { getManifestFromCache } from '../../utils/common/cache/manifestCache';
-import { toPositiveNumberOrNull } from '../../utils/common/valueUtils';
-import { errorUtils } from '../../utils/common/urlUtils';
+import { toPositiveNumberOrNull, errorUtils } from '../../utils/common/valueUtils';
 import { resolveServerBookId } from '../../utils/viewer/viewerCore';
 
 export function useLatestRef(value) {

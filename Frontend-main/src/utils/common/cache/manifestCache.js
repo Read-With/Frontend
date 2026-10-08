@@ -1,21 +1,20 @@
 import { normalizeManifestBook } from '../bookNormalize';
-import { sanitizeAssetUrl, errorUtils } from '../urlUtils';
+import { sanitizeAssetUrl } from '../urlUtils';
 import {
   toNumberOrNull,
   toOneBasedChapterIndexOrNull,
   toPositiveInt,
   clampPercent,
   toLocator,
+  errorUtils,
 } from '../valueUtils';
 import { eventUtils } from '../../viewer/viewerCore';
 import {
   registerCache,
   getCacheItem,
   setCacheItem,
-  removeCacheItem,
   loadFromStorage,
   saveToStorage,
-  removeFromStorage,
   MANIFEST_CACHE_PREFIX,
   MANIFEST_TTL_MS,
 } from './cacheManager';
@@ -643,18 +642,6 @@ const hasManifestData = (bookId) => {
   const cacheKey = getManifestCacheKey(bookId);
   const fromStorage = loadFromStorage(cacheKey, 'localStorage');
   return !!(fromStorage && !isExpired(fromStorage.timestamp) && fromStorage.data);
-};
-
-export const invalidateManifest = (bookId) => {
-  if (!bookId) return;
-  const key = String(bookId);
-  removeCacheItem('manifestCache', key);
-  const cacheKey = getManifestCacheKey(bookId);
-  removeFromStorage(cacheKey, 'localStorage');
-  // viewerLocator imports manifestCache — dynamic import로 순환 방지
-  void import('../../viewer/viewerLocator')
-    .then((m) => m.invalidateCachedXhtml(bookId))
-    .catch(() => {});
 };
 
 export const prefetchManifest = async (bookId, fetcher) => {

@@ -1,7 +1,7 @@
 /** XHTML 본문·locator·페이지 매핑 */
 
-import { resolveChapterIndex } from '../common/valueUtils';
-import { errorUtils, resolveApiArtifactUrl } from '../common/urlUtils';
+import { resolveChapterIndex, errorUtils } from '../common/valueUtils';
+import { resolveApiArtifactUrl } from '../common/urlUtils';
 import { authenticatedFetch } from '../api/authApi';
 import { getBookManifest } from '../api/booksApi';
 import DOMPurify from 'isomorphic-dompurify';
@@ -35,7 +35,6 @@ const CSS_SANITIZE_RULES = [
 ];
 
 const XHTML_LOAD_CACHE_VERSION = 'v4';
-export const XHTML_CACHE_INVALIDATED_EVENT = 'readwith:xhtml-cache-invalidated';
 const MAX_CACHED_BOOKS = 5;
 
 const xhtmlLoadCache = new LRUCache({ max: MAX_CACHED_BOOKS });
@@ -71,21 +70,6 @@ function collectSanitizedStyleCssFromDocument(doc) {
 function sanitizeXhtmlBodyHtml(html) {
   if (!html || typeof html !== 'string') return '';
   return DOMPurify.sanitize(html, XHTML_SANITIZE_CONFIG);
-}
-
-/** bookId에 해당하는 XHTML 로드 캐시를 제거하고, 갱신 이벤트를 broadcast한다. */
-export function invalidateCachedXhtml(bid) {
-  const bookId = resolveXhtmlBookId(bid);
-  const cacheKey = getXhtmlLoadCacheKey(bookId);
-  if (!cacheKey) return false;
-  const existed = xhtmlLoadCache.has(cacheKey);
-  xhtmlLoadCache.delete(cacheKey);
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(
-      new CustomEvent(XHTML_CACHE_INVALIDATED_EVENT, { detail: { bookId } })
-    );
-  }
-  return existed;
 }
 
 /**

@@ -1,7 +1,8 @@
 import { createElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
-import { getApiBaseUrl, errorUtils } from "../utils/common/urlUtils";
+import { getApiBaseUrl } from "../utils/common/urlUtils";
+import { errorUtils } from "../utils/common/valueUtils";
 import { getStoredAccessToken } from "../utils/security/authTokenStorage";
 import { ensureSessionAccessToken } from "../utils/api/authApi";
 import { AuthenticatedImage } from "../components/library/BookDetailModal";

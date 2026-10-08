@@ -2,7 +2,6 @@
 
 import { PanelsTopLeft, FileText } from 'lucide-react';
 import { toast } from 'react-toastify';
-import { errorUtils } from '../common/urlUtils';
 import { storageUtils } from '../common/cache/cacheManager';
 import {
   toLocator,
@@ -14,6 +13,7 @@ import {
   clampPercent,
   resolveChapterIndex,
   toPositiveNumberOrNull,
+  errorUtils,
 } from '../common/valueUtils';
 import {
   findManifestEventInChapter,
@@ -38,6 +38,10 @@ export const defaultSettings = {
   fontFamily: 'Noto Serif KR',
   showGraph: false,
 };
+
+/** 본문·설정 미리보기 공용 글꼴 스택 */
+export const viewerFontStack = (fontFamily) =>
+  `${fontFamily || defaultSettings.fontFamily}, 'Noto Serif', Georgia, serif`;
 
 export const SETTINGS_STORAGE_KEY = 'xhtml_viewer_settings';
 

@@ -5,7 +5,7 @@ import {
   getChapterData,
   getLastManifestEventInChapter,
 } from '../common/cache/manifestCache';
-import { toNumberOrNull, toTrimmedStringOrNull, asArray, errorUtils } from '../common/valueUtils';
+import { toNumberOrNull, toTrimmedStringOrNull, asArray, errorUtils, clampPositivity } from '../common/valueUtils';
 import {
   authenticatedRequest,
   SOFT_FAIL_403_404,
@@ -21,7 +21,6 @@ import {
   appendRelationLabelHistory,
   directedEdgeElementId,
 } from '../graph/graphCore';
-import { finitePositivityOrZero } from '../styles/graphStyles';
 
 /** API/캐시 로드 결과 계약 — UI 뷰 상태(no-data 등)와 분리 */
 export const FETCH_STATUS = Object.freeze({
@@ -207,7 +206,7 @@ const applyDeltasToAccumulateState = (state, deltas) => {
           : 1;
       const positivity = readFiniteNumber(
         item.positivity,
-        finitePositivityOrZero(prev?.positivity)
+        clampPositivity(prev?.positivity)
       );
 
       state.relationMap.set(key, {

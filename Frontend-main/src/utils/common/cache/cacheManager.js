@@ -117,12 +117,14 @@ export function loadFromStorage(storageKey, storageType = 'localStorage') {
 
 export function saveToStorage(storageKey, data, storageType = 'localStorage') {
   const storage = getStorage(storageType);
-  if (!storage) return;
-  
+  if (!storage) return false;
+
   try {
     storage.setItem(storageKey, JSON.stringify(data));
+    return true;
   } catch (error) {
     errorUtils.logDebug('cacheManager', `스토리지 저장 실패 (${storageKey})`, { message: error?.message });
+    return false;
   }
 }
 

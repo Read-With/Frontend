@@ -145,6 +145,31 @@ function buildGoogleOAuthAuthUrl() {
   );
 }
 
+const POST_LOGIN_PATH_KEY = 'post_login_path';
+
+/** 로그인 필요 페이지에서 튕겨나갈 때 경로를 기억 — OAuth 왕복 후 같은 탭에서 복귀 */
+export function rememberPostLoginPath() {
+  try {
+    sessionStorage.setItem(POST_LOGIN_PATH_KEY, `${window.location.pathname}${window.location.search}`);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** 기억한 경로를 꺼내고 지운다. 같은 출처 내부 경로만 허용(오픈 리다이렉트 방지) */
+export function takePostLoginPath() {
+  try {
+    const path = sessionStorage.getItem(POST_LOGIN_PATH_KEY);
+    sessionStorage.removeItem(POST_LOGIN_PATH_KEY);
+    if (path && path.startsWith('/') && !path.startsWith('//') && !path.startsWith('/\\')) {
+      return path;
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
 export function startGoogleOAuthLogin() {
   if (!isGoogleClientIdConfigured()) {
     return {
@@ -806,6 +831,3 @@ export async function resolveGraphElementsProfileImages(elements, options = {}) 
   const { force = false } = options;
   return Promise.all(elements.map((el) => resolveOneGraphProfileImage(el, { force })));
 }
-
-/* ─── 공통 에러 로깅 (valueUtils — 순환 참조 방지) ─── */
-export { errorUtils } from './valueUtils';

@@ -158,6 +158,8 @@
 }
 
 .relation-modal-avatar {
+  width: 2.5rem;
+  height: 2.5rem;
   flex-shrink: 0;
   border-radius: var(--rg-radius-pill);
   overflow: hidden;
@@ -276,6 +278,23 @@
 .relation-radar-dot circle:focus,
 .relation-radar-dot circle:focus-visible {
   outline: none;
+}
+
+.relation-radar-dot circle {
+  pointer-events: none;
+}
+
+.relation-radar-dot .relation-radar-dot-hit {
+  pointer-events: all;
+  cursor: pointer;
+}
+
+.relation-radar-tick {
+  cursor: default;
+}
+
+.relation-radar-tick.is-clickable {
+  cursor: pointer;
 }
 
 .relation-modal-side {

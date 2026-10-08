@@ -34,7 +34,7 @@ const ViewerProgressBar = memo(function ViewerProgressBar({
   const hasProgress = progress != null && Number.isFinite(Number(progress));
   const clamped = hasProgress ? Math.max(0, Math.min(Number(progress), 100)) : 0;
   const percentLabel =
-    progressMetricsReady && hasProgress ? `${Math.round(clamped)}%` : '계산중';
+    progressMetricsReady && hasProgress ? `${Math.round(clamped)}%` : '계산 중';
   const chapterLabel = `챕터 ${Math.max(1, Math.trunc(Number(currentChapter) || 1))}`;
 
   const onChange = (e) => {
@@ -60,6 +60,11 @@ const ViewerProgressBar = memo(function ViewerProgressBar({
         onChange={onChange}
         disabled={!progressMetricsReady}
         aria-label="진행률 슬라이더"
+        aria-valuetext={
+          progressMetricsReady && hasProgress
+            ? `${chapterLabel}, ${Math.round(clamped)}%`
+            : '진행률 계산 중'
+        }
         aria-busy={!progressMetricsReady}
         className="progressbar-slider"
       />

@@ -42,7 +42,7 @@ import {
 } from '../../hooks/graph/useGraphCy.js';
 import { useRefSlot } from '../../hooks/common/hooksShared.js';
 import { eventUtils } from "../../utils/viewer/viewerCore";
-import { errorUtils } from "../../utils/common/urlUtils";
+import { errorUtils } from "../../utils/common/valueUtils";
 
 const ZOOM_CONTROL_BUTTONS = [
   { factor: GRAPH_ZOOM.STEP, label: '그래프 확대', title: '확대', text: '+' },

@@ -45,7 +45,7 @@ import {
   GRAPH_ZOOM,
   GRAPH_CHARACTER_FILTER_STAGE_OPTIONS,
 } from '../../utils/graph/graphCore.js';
-import { errorUtils } from '../../utils/common/urlUtils';
+import { errorUtils } from '../../utils/common/valueUtils';
 import { useLatestRef } from '../common/hooksShared';
 
 function toCyId(value) {

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import PropTypes from 'prop-types';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import useAuth from '../../hooks/auth/useAuth';
 import {
@@ -14,8 +15,9 @@ import {
   resolveOAuthHttpError,
   normalizeOAuthFetchError,
   getOAuthErrorTip,
-  errorUtils,
+  takePostLoginPath,
 } from '../../utils/common/urlUtils';
+import { errorUtils } from '../../utils/common/valueUtils';
 import './OAuthCallback.css';
 
 function GoogleIcon({ className, ...props }) {
@@ -28,6 +30,10 @@ function GoogleIcon({ className, ...props }) {
     </svg>
   );
 }
+
+GoogleIcon.propTypes = {
+  className: PropTypes.string,
+};
 
 const LOADING_PHASES = [
   { title: 'Google 로그인 처리 중', detail: '계정 정보를 확인하고 있어요.' },
@@ -80,6 +86,11 @@ function SentenceLines({ text, className }) {
   );
 }
 
+SentenceLines.propTypes = {
+  text: PropTypes.string,
+  className: PropTypes.string,
+};
+
 function splitOAuthErrorDisplay(error) {
   const cleaned = String(error || '')
     .replace(/^로그인 실패:\s*/i, '')
@@ -124,6 +135,14 @@ function OAuthCallbackShell({ variant = '', role, ariaLive, ariaBusy, children }
     </div>
   );
 }
+
+OAuthCallbackShell.propTypes = {
+  variant: PropTypes.string,
+  role: PropTypes.string,
+  ariaLive: PropTypes.string,
+  ariaBusy: PropTypes.oneOfType([PropTypes.bool, PropTypes.string]),
+  children: PropTypes.node,
+};
 
 function tagOAuthError(error, tags = {}) {
   const err = error instanceof Error ? error : new Error(String(error ?? 'OAuth 오류'));
@@ -326,7 +345,7 @@ const OAuthCallback = () => {
         if (cancelled) return;
         login(frontendUserData);
         clearOAuthAttemptArtifacts();
-        navigate('/mypage', { replace: true });
+        navigate(takePostLoginPath() || '/mypage', { replace: true });
       } catch (err) {
         finishError(normalizeOAuthFetchError(err), {
           error: err,

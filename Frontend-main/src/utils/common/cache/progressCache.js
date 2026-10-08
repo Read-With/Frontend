@@ -1,6 +1,5 @@
 /** progress/reader 캐시 + 서버 locator 정규화 */
 
-import { errorUtils } from '../urlUtils';
 import {
   resolveChapterIndex,
   clampPercent,
@@ -11,6 +10,7 @@ import {
   resolveProgressLocator,
   progressPayloadFromData,
   progressResultToViewerAnchor,
+  errorUtils,
 } from '../valueUtils';
 import {
   registerCache,

@@ -18,8 +18,9 @@ import {
   progressPayloadFromData,
   resolveProgressLocator,
   locatorsEqual,
+  errorUtils,
 } from '../common/valueUtils';
-import { getApiBaseUrl, errorUtils } from '../common/urlUtils';
+import { getApiBaseUrl } from '../common/urlUtils';
 import {
   normalizeStartEndLocatorsForServer,
   withNormalizedProgressLocators,

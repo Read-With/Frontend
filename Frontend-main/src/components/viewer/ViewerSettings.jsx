@@ -5,6 +5,7 @@ import {
   defaultSettings,
   normalizeSettings,
   VIEWER_MODE_OPTIONS,
+  viewerFontStack,
 } from '../../utils/viewer/viewerSession';
 import { useModalFocusTrap } from '../../hooks/common/hooksShared';
 import './ViewerSettings.css';
@@ -193,6 +194,21 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, settings }) => {
             </span>
           </div>
         </div>
+
+        <p
+          className="viewer-settings-preview"
+          style={{
+            fontSize: `${draft.fontSize}%`,
+            lineHeight: draft.lineHeight,
+            fontFamily: viewerFontStack(draft.fontFamily),
+          }}
+        >
+          그는 창가에 앉아 오래된 책장을 넘겼다. 바람이 불 때마다 종이 냄새가 방 안에 번졌다.
+        </p>
+
+        <p className="viewer-settings-shortcuts">
+          단축키: ← → 페이지 이동 · T 툴바 표시/숨김
+        </p>
 
         <div className="viewer-settings-actions">
           <button type="button" className="viewer-settings-outline-btn" onClick={handleReset}>

@@ -21,7 +21,7 @@ import { hasGraphPayload } from "../../utils/api/graphApi.js";
 import { useTooltipPosition, useClickOutside, useCanvasAvoidPoint } from "../../hooks/ui/tooltipHooks";
 import { getUnifiedEventInfoForTooltip } from "../../utils/viewer/viewerSession";
 import { USER_GRAPH_PREFIX } from "../../utils/common/urlUtils";
-import { finitePositivityOrZero } from "../../utils/styles/graphStyles";
+import { clampPositivity } from "../../utils/common/valueUtils";
 import {
   COLORS,
   mergeRefs,
@@ -146,7 +146,7 @@ function buildRadarChartData({
         id2: el.data.target,
         relation: el.data.relation || ['관계'],
         count: el.data.count || el.data.strength || 1,
-        positivity: finitePositivityOrZero(el.data.positivity),
+        positivity: clampPositivity(el.data.positivity),
       }));
 
     if (edgeRels.length > 0) {

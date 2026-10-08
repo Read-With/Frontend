@@ -1,4 +1,6 @@
 import { useState, useMemo, useCallback, useEffect, useId, useRef } from 'react';
+import PropTypes from 'prop-types';
+import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
 import { Book, Plus, Library, Heart, AlertCircle, Grid3X3, List, Upload, LogOut } from 'lucide-react';
 import BookLibrary from '../components/library/BookLibrary';
@@ -42,6 +44,10 @@ function HeaderBrand({ userName = null }) {
     </div>
   );
 }
+
+HeaderBrand.propTypes = {
+  userName: PropTypes.string,
+};
 
 function LogoutConfirmDialog({ open, onConfirm, onCancel }) {
   const titleId = useId();
@@ -140,6 +146,12 @@ function LogoutConfirmDialog({ open, onConfirm, onCancel }) {
   );
 }
 
+LogoutConfirmDialog.propTypes = {
+  open: PropTypes.bool.isRequired,
+  onConfirm: PropTypes.func.isRequired,
+  onCancel: PropTypes.func.isRequired,
+};
+
 function Header({ userNickname }) {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
@@ -174,6 +186,10 @@ function Header({ userNickname }) {
   );
 }
 
+Header.propTypes = {
+  userNickname: PropTypes.string,
+};
+
 function compareBooks(a, b, sortBy) {
   switch (sortBy) {
     case 'title':
@@ -195,7 +211,7 @@ function compareBooks(a, b, sortBy) {
 
 export default function MyPage() {
   const navigate = useNavigate();
-  const { books, loading, error, refetch, addBook, toggleFavorite, removeBook } = useBooks();
+  const { books, loading, error, needsAuth, refetch, addBook, toggleFavorite, removeBook, restoreBook } = useBooks();
   const { user } = useAuth();
   const [showUpload, setShowUpload] = useState(false);
   const [activeTab, setActiveTab] = useState('all');
@@ -223,10 +239,10 @@ export default function MyPage() {
   const displayName = user?.name || '사용자';
 
   useEffect(() => {
-    if (error && (error.includes('인증이 필요합니다') || error.includes('인증'))) {
-      navigate('/', { replace: true });
-    }
-  }, [error, navigate]);
+    if (!needsAuth) return;
+    toast.info('로그인이 만료되었습니다. 다시 로그인해 주세요.', { toastId: 'auth-expired' });
+    navigate('/', { replace: true });
+  }, [needsAuth, navigate]);
 
   const stats = useMemo(() => {
     const list = books || [];
@@ -454,6 +470,7 @@ export default function MyPage() {
                       books={filteredBooks}
                       onToggleFavorite={toggleFavorite}
                       onBookDelete={removeBook}
+                      onBookRestore={restoreBook}
                       viewMode={viewMode}
                     />
                     <button

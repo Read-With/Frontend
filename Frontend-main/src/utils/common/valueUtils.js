@@ -131,6 +131,11 @@ export const toFiniteNumber = (value) => {
   return Number.isFinite(converted) ? converted : NaN;
 };
 
+/** number 리터럴이면서 양의 유한수인지 (문자열 강제 변환 없음) */
+export function isPositiveFiniteNumberLiteral(n) {
+  return typeof n === 'number' && Number.isFinite(n) && n > 0;
+}
+
 /** 관계 긍정도 −1~+1. 비유한 값은 0 */
 export function clampPositivity(positivity) {
   const value = Number(positivity);

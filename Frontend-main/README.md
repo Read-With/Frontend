@@ -15,7 +15,7 @@
 
 - **프레임워크**: React 19, React Router 7, Vite 6
 - **상태/데이터**: TanStack Query (React Query)
-- **스타일**: Tailwind CSS
+- **스타일**: 컴포넌트/페이지별 CSS + `src/index.css` 디자인 토큰 (Tailwind는 base 리셋용으로만 유지)
 - **시각화**: Cytoscape.js (+ cose-bilkent), Recharts
 - **기타**: Axios, JSZip(EPUB 파싱), isomorphic-dompurify(XHTML sanitize)
 - **배포**: Vercel
@@ -183,6 +183,12 @@ npm run dev:clean   # 캐시 정리 후 개발 서버 실행
 - **커밋 메시지**: `<타입> : <설명>` 형식 — 예: `fix : AdminPage.jsx 중복 컴포넌트 제거로 빌드 오류 해결`, `refactor : viewer 개선`. 타입은 `fix`, `refactor` 등이 사용됨
 - **워크플로**: GitHub([Read-With/Frontend](https://github.com/Read-With/Frontend))에서 기능 브랜치를 만들어 PR로 `main`에 병합
 - JS/JSX 코드 스타일은 `eslint.config.js`로 강제되며, PR 전 `npm run lint`(ESLint)로 확인하는 것을 권장합니다.
+- **prop-types**: TS 전환 계획이 없으므로, props를 받는 컴포넌트는 정의 바로 아래에 `Component.propTypes = {...}`를 둡니다.
+- **스타일 규칙 (새 코드부터 적용)**:
+  - 스타일은 컴포넌트/페이지 옆 CSS 파일에 클래스로 작성합니다. 새 Tailwind 유틸리티 클래스는 쓰지 않습니다.
+  - 색·폰트·반경 등은 `src/index.css`의 `:root` 토큰(`var(--brand-*)` 등)을 사용하고 hex를 새로 하드코딩하지 않습니다.
+  - 인라인 `style={{}}`은 런타임 계산 값(예: `--pos-color`, `left: pct%`)에만 씁니다.
+  - 기존 Tailwind 사용처 중 `App.jsx` 로딩 스피너는 해당 파일을 수정할 때 CSS로 옮깁니다. `AdminPage.jsx`는 이 규칙에서 제외하며 수정하지 않습니다.
 
 ## 브라우저 지원 & 접근성
 

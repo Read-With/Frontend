@@ -12,8 +12,7 @@ import {
   getCachedReaderProgress,
   setCachedReaderProgress,
 } from '../../utils/common/cache/progressCache';
-import { viewerResumeAnchorKey, clampPercent } from '../../utils/common/valueUtils';
-import { errorUtils } from '../../utils/common/urlUtils';
+import { viewerResumeAnchorKey, clampPercent, errorUtils } from '../../utils/common/valueUtils';
 import {
   delay,
   waitForPaint,
@@ -49,11 +48,21 @@ function applyRefState(ref, setState, value) {
   return value;
 }
 
+const NOT_READY = Symbol('notReady');
+
+/** bookKey에 묶인 state — 책이 바뀌면 리셋 effect 없이 같은 렌더에서 initial로 보인다 */
+function useBookScopedState(bookKey, bookKeyRef, initial) {
+  const [entry, setEntry] = useState({ key: bookKey, value: initial });
+  const value = entry.key === bookKey ? entry.value : initial;
+  const setValue = useCallback((next) => {
+    setEntry({ key: bookKeyRef.current, value: next });
+  }, [bookKeyRef]);
+  return [value, setValue];
+}
+
 export function useViewerProgress({
   bookKey,
   manifestLoaded,
-  progress,
-  setProgress,
   setReloadKey,
   viewerRef,
   reloadKey,
@@ -65,13 +74,22 @@ export function useViewerProgress({
   const [readingLocatorKey, setReadingLocatorKey] = useState('');
   const [liveChapterProgress, setLiveChapterProgress] = useState(null);
   const [serverResumeAnchor, setServerResumeAnchor] = useState(null);
-  const [isViewerPageReady, setIsViewerPageReady] = useState(false);
+  const bookKeyRef = useLatestRef(bookKey);
+  const [progress, setProgress] = useBookScopedState(bookKey, bookKeyRef, null);
+  // ready는 그 시점의 bookKey로 기록 → 책이 바뀌면 같은 렌더에서 false
+  const [readyBookKey, setReadyBookKey] = useState(NOT_READY);
+  const readyBookKeyRef = useRef(NOT_READY);
+  const isViewerPageReady = readyBookKey === bookKey;
+  const isViewerPageReadyRef = useMemo(() => ({
+    get current() {
+      return readyBookKeyRef.current === bookKeyRef.current;
+    },
+  }), [bookKeyRef]);
 
   const readingLocatorKeyRef = useRef('');
   const liveChapterProgressRef = useRef(null);
   const serverResumeAppliedKeyRef = useRef(null);
   const reloadKeyBumpedForBookRef = useRef(null);
-  const isViewerPageReadyRef = useRef(false);
   const resumePendingRef = useRef(false);
   const [isResumePending, setIsResumePendingState] = useState(false);
   const manifestLocatorSyncedRef = useRef(false);
@@ -87,7 +105,7 @@ export function useViewerProgress({
   }, []);
 
   const setViewerPageNotReady = useCallback(() => {
-    applyRefState(isViewerPageReadyRef, setIsViewerPageReady, false);
+    applyRefState(readyBookKeyRef, setReadyBookKey, NOT_READY);
   }, []);
 
   const applyReadingLocatorKey = useCallback((nextKey) => {
@@ -105,10 +123,10 @@ export function useViewerProgress({
   const markReady = useCallback(() => {
     setResumePending(false);
     if (!isViewerPageReadyRef.current) {
-      applyRefState(isViewerPageReadyRef, setIsViewerPageReady, true);
+      applyRefState(readyBookKeyRef, setReadyBookKey, bookKeyRef.current);
     }
     invalidateResumeRun();
-  }, [invalidateResumeRun, setResumePending]);
+  }, [invalidateResumeRun, setResumePending, isViewerPageReadyRef, bookKeyRef]);
 
   const clearPreferredResume = useCallback(() => {
     if (!preferredResumeRef.current) return;
@@ -161,12 +179,7 @@ export function useViewerProgress({
     if (isViewerPageReadyRef.current) return;
     if (isViewerResumeBlocking(resumePendingRef.current, preferredResumeRef.current)) return;
     markReady();
-  }, [markReady]);
-
-  useEffect(() => {
-    setViewerPageNotReady();
-    setResumePending(Boolean(bookKey));
-  }, [bookKey, setViewerPageNotReady, setResumePending]);
+  }, [markReady, isViewerPageReadyRef]);
 
   useEffect(() => {
     preferredResumeRef.current = preferredResumeAnchor;
@@ -233,7 +246,7 @@ export function useViewerProgress({
     if (cp != null) {
       applyLiveChapterProgress(cp);
     }
-  }, [setProgress, applyReadingLocatorKey, applyLiveChapterProgress, setResumePending]);
+  }, [setProgress, applyReadingLocatorKey, applyLiveChapterProgress, setResumePending, isViewerPageReadyRef]);
 
   const syncProgressFromCache = useCallback((idStr, options = {}) => {
     const row = getProgressFromCache(idStr);
@@ -242,6 +255,9 @@ export function useViewerProgress({
   }, [applyProgressSnapshot]);
 
   useEffect(() => {
+    // 같은 ViewerPage 인스턴스에서 A→B→A 복귀 시 이전 ready/progress 재사용 방지
+    setViewerPageNotReady();
+    setProgress(null);
     serverResumeAppliedKeyRef.current = null;
     applyReadingLocatorKey('');
     applyLiveChapterProgress(null);
@@ -322,6 +338,8 @@ export function useViewerProgress({
     syncProgressFromCache,
     applyProgressSnapshot,
     setResumePending,
+    setViewerPageNotReady,
+    setProgress,
   ]);
 
   useEffect(() => {
@@ -441,6 +459,8 @@ export function useViewerProgress({
   );
 
   return {
+    progress,
+    setProgress,
     progressTopBar,
     setProgressTopBar,
     progressMetricsReady,

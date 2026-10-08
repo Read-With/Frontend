@@ -6,7 +6,7 @@ import { toast } from 'react-toastify';
 import { useServerBookMatching } from '../books/bookHooks';
 import { useViewerProgress, useProgressAutoSave } from './useViewerProgress';
 import { useViewerGraphState, useViewerGraphPipeline } from './useViewerGraph';
-import { useManifestLoaded, resolveServerBookIdOrFallback } from '../common/hooksShared';
+import { useManifestLoaded, useLatestRef, resolveServerBookIdOrFallback } from '../common/hooksShared';
 import { bookUtils, resolveViewerBookKey } from '../../utils/viewer/viewerCore';
 import {
   loadSettings,
@@ -17,7 +17,7 @@ import {
   runViewerPaging,
   restoreViewerPosition,
 } from '../../utils/viewer/viewerSession';
-import { toViewerResumeAnchor, resolveChapterIndex } from '../../utils/common/valueUtils';
+import { toViewerResumeAnchor, resolveChapterIndex, errorUtils } from '../../utils/common/valueUtils';
 import { useBookmarks } from '../bookmarks/bookmarkHooks';
 import { resolveBookmarkApiBookId } from '../../utils/bookmarks/bookmarkUtils';
 import {
@@ -25,7 +25,6 @@ import {
   resolveViewerReadingPosition,
   userViewerReadingPath,
   userViewerBookmarksPath,
-  errorUtils,
 } from '../../utils/common/urlUtils';
 
 const EVENT_TRANSITION_FALLBACK_MS = 50;
@@ -52,11 +51,8 @@ function resolveResumeChapter(resumeAnchor) {
 }
 
 /** URL: `/user/viewer/:id/c/:chapter/p/:page` 동기화 */
-function useViewerUrlParams(options = {}) {
-  const { skipHistoryMutationsRef, urlSyncEnabled = true } = options;
+function useViewerUrlParams() {
   const { filename, '*': splat } = useParams();
-  const navigate = useNavigate();
-  const location = useLocation();
 
   const parsedPath = useMemo(() => parseViewerReaderSplat(splat), [splat]);
   const readingPosition = useMemo(
@@ -96,16 +92,36 @@ function useViewerUrlParams(options = {}) {
     if (readingPosition.page !== page) setCurrentPage(readingPosition.page);
   }, [filename, readingPosition]);
 
-  const targetReadingPath = useMemo(() => {
-    if (!filename) return null;
-    return userViewerReadingPath(filename, currentChapter, currentPage);
-  }, [filename, currentChapter, currentPage]);
+  return {
+    bookId: filename,
+    currentPage,
+    setCurrentPage,
+    currentChapter,
+    setCurrentChapter,
+    internalNavigationRef,
+  };
+}
 
-  // chapter/page → URL (replace). resume·mypage 이탈 중에는 생략
+/** chapter/page → URL (replace). resume 완료 전·mypage 이탈 중에는 생략 */
+function useViewerUrlWrite({
+  bookId,
+  currentChapter,
+  currentPage,
+  enabled,
+  skipHistoryMutationsRef,
+  internalNavigationRef,
+}) {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const targetReadingPath = useMemo(() => {
+    if (!bookId) return null;
+    return userViewerReadingPath(bookId, currentChapter, currentPage);
+  }, [bookId, currentChapter, currentPage]);
+
   useEffect(() => {
-    if (!targetReadingPath || !filename) return;
-    if (!urlSyncEnabled) return;
-    if (skipHistoryMutationsRef?.current) return;
+    if (!targetReadingPath || !enabled) return;
+    if (skipHistoryMutationsRef.current) return;
     if (location.pathname === targetReadingPath) return;
     internalNavigationRef.current = true;
     navigate(targetReadingPath, { replace: true });
@@ -113,25 +129,17 @@ function useViewerUrlParams(options = {}) {
     targetReadingPath,
     location.pathname,
     navigate,
-    filename,
+    enabled,
     skipHistoryMutationsRef,
-    urlSyncEnabled,
+    internalNavigationRef,
   ]);
-
-  return {
-    bookId: filename,
-    currentPage,
-    setCurrentPage,
-    currentChapter,
-    setCurrentChapter,
-  };
 }
 
 /** 챕터/이벤트 전환 상태 */
 function useViewerTransition({ currentEvent, currentChapter, isDataReady }) {
   const [transitionState, setTransitionState] = useState(IDLE_TRANSITION);
   const prevEventRef = useRef(null);
-  const prevChapterRef = useRef(null);
+  const [prevChapter, setPrevChapter] = useState(currentChapter);
 
   const resetTransition = useCallback(() => {
     resetTransitionState(setTransitionState);
@@ -157,22 +165,17 @@ function useViewerTransition({ currentEvent, currentChapter, isDataReady }) {
     };
   }, [currentEvent, resetTransition]);
 
-  useEffect(() => {
-    if (prevChapterRef.current !== null && prevChapterRef.current !== currentChapter) {
-      setTransitionState({ type: 'chapter', inProgress: true });
-    }
-    prevChapterRef.current = currentChapter;
-  }, [currentChapter]);
-
-  useEffect(() => {
-    if (
-      isDataReady &&
-      transitionState.inProgress &&
-      (transitionState.type === 'event' || transitionState.type === 'chapter')
-    ) {
-      resetTransition();
-    }
-  }, [isDataReady, transitionState.type, transitionState.inProgress, resetTransition]);
+  // 렌더 중 조정: 챕터 전환 시작 / 데이터 준비 시 종료
+  if (prevChapter !== currentChapter) {
+    setPrevChapter(currentChapter);
+    if (prevChapter != null) setTransitionState({ type: 'chapter', inProgress: true });
+  } else if (
+    isDataReady &&
+    transitionState.inProgress &&
+    (transitionState.type === 'event' || transitionState.type === 'chapter')
+  ) {
+    setTransitionState(IDLE_TRANSITION);
+  }
 
   return { transitionState, resetTransition };
 }
@@ -219,22 +222,17 @@ export function useViewerPage() {
   const skipViewerHistoryMutationRef = useRef(false);
   const viewerRef = useRef(null);
 
-  const [urlSyncEnabled, setUrlSyncEnabled] = useState(false);
-
   const {
     bookId,
     currentPage,
     setCurrentPage,
     currentChapter,
     setCurrentChapter,
-  } = useViewerUrlParams({
-    skipHistoryMutationsRef: skipViewerHistoryMutationRef,
-    urlSyncEnabled,
-  });
+    internalNavigationRef,
+  } = useViewerUrlParams();
 
   useEffect(() => {
     skipViewerHistoryMutationRef.current = false;
-    setUrlSyncEnabled(false);
   }, [bookId]);
 
   const previousPage = location.state?.from || null;
@@ -247,13 +245,16 @@ export function useViewerPage() {
   } = useServerBookMatching(bookId, { skipBookIdRedirectRef: skipViewerHistoryMutationRef });
 
   const [reloadKey, setReloadKey] = useState(0);
-  const [failCount, setFailCount] = useState(0);
+  const failCountRef = useRef(0);
+  const setFailCount = useCallback((value) => {
+    failCountRef.current = typeof value === 'function' ? value(failCountRef.current) : value;
+    if (failCountRef.current >= 2) {
+      toast.info('계속 실패하면 브라우저를 새로고침해 주세요.');
+    }
+  }, []);
   const [totalPages, setTotalPages] = useState(1);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showToolbar, setShowToolbar] = useState(true);
-  const [progress, setProgress] = useState(null);
-  const progressRef = useRef(progress);
-  progressRef.current = progress;
   const [settings, setSettings] = usePersistedViewerSettings();
 
   const book = useMemo(
@@ -273,19 +274,12 @@ export function useViewerPage() {
     [book, bookId]
   );
 
-  useEffect(() => {
-    setProgress(null);
-  }, [bookKey]);
-
   const {
     currentEvent,
     setCurrentEvent,
     setEvents,
     setElements,
-    setIsDataReady,
-    setIsGraphLoading,
-    setEventGraphLoading,
-    setAppliedGraphKey,
+    dispatchGraphLoad,
     graphState,
     graphActions,
     graphViewerState,
@@ -318,6 +312,8 @@ export function useViewerPage() {
   }, [location.pathname, location.search, location.state, navigate]);
 
   const {
+    progress,
+    setProgress,
     progressTopBar,
     setProgressTopBar,
     progressMetricsReady,
@@ -330,8 +326,6 @@ export function useViewerPage() {
   } = useViewerProgress({
     bookKey,
     manifestLoaded,
-    progress,
-    setProgress,
     setReloadKey,
     viewerRef,
     reloadKey,
@@ -343,6 +337,7 @@ export function useViewerPage() {
     ),
   });
 
+  const progressRef = useLatestRef(progress);
   const resumeAnchor = preferredResumeAnchor ?? serverResumeAnchor;
 
   // resume 완료 전 URL 챕터를 앵커 기준으로 시드 (urlSync 켜질 때 c/1로 튕기지 않도록)
@@ -353,9 +348,14 @@ export function useViewerPage() {
     setCurrentChapter((prev) => (prev === chapter ? prev : chapter));
   }, [resumeAnchor, isViewerPageReady, setCurrentChapter]);
 
-  useEffect(() => {
-    setUrlSyncEnabled(isViewerPageReady);
-  }, [isViewerPageReady]);
+  useViewerUrlWrite({
+    bookId,
+    currentChapter,
+    currentPage,
+    enabled: isViewerPageReady,
+    skipHistoryMutationsRef: skipViewerHistoryMutationRef,
+    internalNavigationRef,
+  });
 
   const { transitionState, resetTransition } = useViewerTransition({
     currentEvent,
@@ -367,16 +367,12 @@ export function useViewerPage() {
     book,
     currentChapter,
     currentEvent,
-    setIsDataEmpty: graphActions.setIsDataEmpty,
     manifestLoaded: manifestReady,
     isViewerPageReady,
     resetTransition,
     setElements,
     setEvents,
-    setIsGraphLoading,
-    setEventGraphLoading,
-    setIsDataReady,
-    setAppliedGraphKey,
+    dispatchGraphLoad,
   });
 
   const { cachedLocation, flushProgressAsync } = useProgressAutoSave({
@@ -399,12 +395,6 @@ export function useViewerPage() {
     removeBookmark,
     isMutating: isBookmarkMutating,
   } = useBookmarks(bookmarkBookId, { viewerRef, setFailCount });
-
-  useEffect(() => {
-    if (failCount >= 2) {
-      toast.info('계속 실패하면 브라우저를 새로고침해 주세요.');
-    }
-  }, [failCount]);
 
   useEffect(() => {
     document.body.style.overflow = 'hidden';
@@ -442,7 +432,7 @@ export function useViewerPage() {
       });
       return false;
     }
-  }, []);
+  }, [progressRef]);
 
   const toggleGraph = useCallback(async () => {
     const result = setSettings((prev) => ({ ...prev, showGraph: !prev.showGraph }));
@@ -466,7 +456,7 @@ export function useViewerPage() {
         value,
       });
     }
-  }, []);
+  }, [setProgress]);
 
   const onToggleBookmarkList = useCallback(() => {
     const apiId = resolveBookmarkApiBookId(book, bookKey || bookId);

@@ -234,14 +234,14 @@ function ViewerToolbar({
           <div className="viewer-toolbar-mobile-nav">
             <ToolbarButton
               onClick={onPrev}
-              title="이전 페이지"
+              title="이전 페이지 (←)"
               className="xhtml-toolbar-btn xhtml-toolbar-btn--compact"
             >
               <ArrowLeft size={ICON_SM} aria-hidden />
             </ToolbarButton>
             <ToolbarButton
               onClick={onNext}
-              title="다음 페이지"
+              title="다음 페이지 (→)"
               className="xhtml-toolbar-btn xhtml-toolbar-btn--compact"
             >
               <ArrowRight size={ICON_SM} aria-hidden />
@@ -266,10 +266,10 @@ function ViewerToolbar({
         <div className="viewer-toolbar-group-wrap">
           <div className="viewer-toolbar-group-left">
             <div className="toolbar-group toolbar-group--nav">
-              <ToolbarButton onClick={onPrev} title="이전 페이지로 이동" ariaLabel="이전 페이지">
+              <ToolbarButton onClick={onPrev} title="이전 페이지로 이동 (←)" ariaLabel="이전 페이지">
                 <IconLabel icon={ArrowLeft} label="이전" />
               </ToolbarButton>
-              <ToolbarButton onClick={onNext} title="다음 페이지로 이동" ariaLabel="다음 페이지">
+              <ToolbarButton onClick={onNext} title="다음 페이지로 이동 (→)" ariaLabel="다음 페이지">
                 <span className="viewer-toolbar-label">
                   다음
                   <ArrowRight size={ICON_SM} aria-hidden />

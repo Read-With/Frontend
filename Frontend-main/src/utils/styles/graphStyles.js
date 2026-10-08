@@ -1,7 +1,6 @@
 /** Cytoscape 스타일시트·레이아웃·노드 크기·긍정성 색/라벨 */
 
-import { isValidNodeWeight } from '../graph/graphModel.js';
-import { clampPositivity } from '../common/valueUtils';
+import { clampPositivity, isPositiveFiniteNumberLiteral } from '../common/valueUtils';
 
 // styles.js가 이 모듈을 re-export하므로 styles.js를 import하지 않는다.
 
@@ -81,13 +80,13 @@ export function getResponsiveNodeSizeRange(containerWidth) {
 }
 
 function computeWeightRange(weights) {
-  const valid = (Array.isArray(weights) ? weights : []).filter(isValidNodeWeight);
+  const valid = (Array.isArray(weights) ? weights : []).filter(isPositiveFiniteNumberLiteral);
   if (valid.length === 0) return { min: 0, max: 0 };
   return { min: Math.min(...valid), max: Math.max(...valid) };
 }
 
 function normalizeWeightToUnit(weight, minWeight, maxWeight) {
-  if (!isValidNodeWeight(weight)) return 0;
+  if (!isPositiveFiniteNumberLiteral(weight)) return 0;
   if (typeof minWeight !== 'number' || typeof maxWeight !== 'number') return 0;
   if (minWeight >= maxWeight) return 1;
   return (weight - minWeight) / (maxWeight - minWeight);
@@ -210,8 +209,6 @@ export const getEdgeStyle = (context = 'default') => ({
 /* ─── 긍정성 (−1~+1) 색·라벨 ─── */
 
 /** 관계 존재 구간의 긍정도. 없/비정상이면 0. UI에서 null(정보 없음)과 구분할 때는 쓰지 말 것. */
-export const finitePositivityOrZero = clampPositivity;
-
 export const getRelationColor = (positivity) => {
   const value = clampPositivity(positivity);
   const normalized = (value + 1) / 2;
