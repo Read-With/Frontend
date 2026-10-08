@@ -301,6 +301,7 @@ const ViewerPage = () => {
       book,
       bookKey,
       markViewerPageReady,
+      readingChapterRef,
       setCurrentChapter,
       setCurrentEvent,
       applyReadingLocator,

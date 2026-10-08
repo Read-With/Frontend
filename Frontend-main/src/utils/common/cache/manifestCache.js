@@ -10,9 +10,13 @@ import {
 } from '../valueUtils';
 import { eventUtils } from '../../viewer/viewerCore';
 import {
+<<<<<<< HEAD
   registerCache,
   getCacheItem,
   setCacheItem,
+=======
+  setBounded,
+>>>>>>> 46a2335b612ff4470875b0baffc822c13b7f1804
   loadFromStorage,
   saveToStorage,
   MANIFEST_CACHE_PREFIX,
@@ -274,11 +278,7 @@ function migrateLegacyManifestStorage() {
 migrateLegacyManifestStorage();
 
 const manifestCache = new Map();
-registerCache('manifestCache', manifestCache, {
-  maxSize: 100,
-  ttl: MANIFEST_TTL_MS,
-  cleanupInterval: 300000,
-});
+const MANIFEST_MEMORY_MAX = 100;
 
 const prefetchPromises = new Map();
 
@@ -600,7 +600,7 @@ export const setManifestData = (bookId, manifestData, { persist = true } = {}) =
       timestamp: Date.now(),
     };
 
-    setCacheItem('manifestCache', String(bookId), payload);
+    setBounded(manifestCache, String(bookId), payload, MANIFEST_MEMORY_MAX);
 
     if (persist) {
       saveToStorage(cacheKey, payload, 'localStorage');
@@ -617,7 +617,7 @@ export const getManifestFromCache = (bookId) => {
   if (!bookId) return null;
 
   const key = String(bookId);
-  const cachedInMemory = getCacheItem('manifestCache', key);
+  const cachedInMemory = manifestCache.get(key);
   if (cachedInMemory && !isExpired(cachedInMemory.timestamp)) {
     return normalizeManifestData(cachedInMemory.data);
   }
@@ -625,7 +625,7 @@ export const getManifestFromCache = (bookId) => {
   const cacheKey = getManifestCacheKey(bookId);
   const fromStorage = loadFromStorage(cacheKey, 'localStorage');
   if (fromStorage && !isExpired(fromStorage.timestamp)) {
-    setCacheItem('manifestCache', key, fromStorage);
+    setBounded(manifestCache, key, fromStorage, MANIFEST_MEMORY_MAX);
     return normalizeManifestData(fromStorage.data);
   }
 
@@ -634,7 +634,7 @@ export const getManifestFromCache = (bookId) => {
 
 const hasManifestData = (bookId) => {
   const key = String(bookId);
-  const cachedInMemory = getCacheItem('manifestCache', key);
+  const cachedInMemory = manifestCache.get(key);
   if (cachedInMemory && !isExpired(cachedInMemory.timestamp)) {
     return true;
   }

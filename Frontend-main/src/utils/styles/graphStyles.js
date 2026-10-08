@@ -2,7 +2,7 @@
 
 import { clampPositivity, isPositiveFiniteNumberLiteral } from '../common/valueUtils';
 
-// styles.js가 이 모듈을 re-export하므로 styles.js를 import하지 않는다.
+// styles.js가 이 모듈을 import하므로 styles.js를 import하지 않는다 (순환 방지).
 
 export { clampPositivity };
 
@@ -12,7 +12,7 @@ export const STYLE_DURATION = {
 };
 
 /** --rg-* / --brand-* 와 동일 hex (Cytoscape는 CSS var 미지원) */
-export const BRAND_RGB = '62, 79, 47';
+const BRAND_RGB = '62, 79, 47';
 
 export function brandAlpha(alpha) {
   return `rgba(${BRAND_RGB}, ${alpha})`;
@@ -149,7 +149,7 @@ export const PRESET_LAYOUT = Object.freeze({
 /** 최초 로딩·전체 재배치용. animate:false로 동기 완료
  *  노드 반지름이 최대 40px(NODE_SIZE_MAX/2)까지 나오므로, 인접 노드가 맞닿아 보이지 않도록
  *  idealEdgeLength·nodeRepulsion·tilingPadding을 노드 크기 대비 여유 있게 잡는다. */
-export const COSE_BILKENT_LAYOUT = Object.freeze({
+const COSE_BILKENT_LAYOUT = Object.freeze({
   name: 'cose-bilkent',
   fit: false,
   animate: false,

@@ -1,5 +1,4 @@
 import { memo, useState, useEffect, useCallback, useMemo, useRef } from "react";
-import PropTypes from "prop-types";
 import {
   GRAPH_LAYOUT_CONSTANTS,
   RELATION_CONNECTION_KIND,
@@ -665,26 +664,6 @@ function RelationAnalysisModalImpl({
     </div>
   );
 }
-
-RelationAnalysisModalImpl.propTypes = {
-  node: PropTypes.object,
-  radarChartData: PropTypes.arrayOf(
-    PropTypes.shape({
-      id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-      name: PropTypes.string,
-      positivity: PropTypes.number,
-      normalizedValue: PropTypes.number,
-      relationTags: PropTypes.arrayOf(PropTypes.string),
-    }),
-  ),
-  connectionKind: PropTypes.oneOf(Object.values(RELATION_CONNECTION_KIND)),
-  loadError: PropTypes.string,
-  onClose: PropTypes.func.isRequired,
-  onSelectRelatedNode: PropTypes.func,
-  returnFocusRef: PropTypes.shape({ current: PropTypes.any }),
-  chapterRailWidth: PropTypes.number,
-  reserveRight: PropTypes.number,
-};
 
 const RelationAnalysisModal = memo(RelationAnalysisModalImpl);
 

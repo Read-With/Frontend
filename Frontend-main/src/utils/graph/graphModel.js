@@ -64,13 +64,15 @@ import {
   listBookManifestEventIds,
 } from '../common/cache/manifestCache';
 import {
-  registerCache,
-  getCacheItem,
-  setCacheItem,
+  setBounded,
+  loadFromStorage,
   loadTtlStorage,
   saveTtlStorage,
+<<<<<<< HEAD
   saveToStorage,
   removeFromStorage,
+=======
+>>>>>>> 46a2335b612ff4470875b0baffc822c13b7f1804
   GRAPH_BOOK_CACHE_PREFIX,
   CHAPTER_EVENT_CACHE_MAX_AGE_MS,
   CHAPTER_EVENT_CACHE_PREFIX,
@@ -200,6 +202,7 @@ function validateAndNormalizeProfileImageUrl(profileImage) {
  * 2. Node weights
  * ═══════════════════════════════════════════════════════════════════════════ */
 
+<<<<<<< HEAD
 /** 노드 weight·count 공통 검사: 양의 유한수 */
 const isValidNodeMetric = isPositiveFiniteNumberLiteral;
 
@@ -208,6 +211,13 @@ function isNodeWeightEntryVisible(entry) {
     entry &&
     isValidNodeMetric(entry.weight) &&
     isValidNodeMetric(entry.count)
+=======
+function isNodeWeightEntryVisible(entry) {
+  return Boolean(
+    entry &&
+    isPositiveFiniteNumberLiteral(entry.weight) &&
+    isPositiveFiniteNumberLiteral(entry.count)
+>>>>>>> 46a2335b612ff4470875b0baffc822c13b7f1804
   );
 }
 
@@ -216,6 +226,7 @@ function resolveNodeWeightAndCount(char, previousEntry = null) {
   const hasCountField = typeof char?.count === 'number';
   const rawCount = hasCountField ? char.count : null;
 
+<<<<<<< HEAD
   const weight = isValidNodeMetric(rawWeight)
     ? rawWeight
     : (previousEntry && isValidNodeMetric(previousEntry.weight) ? previousEntry.weight : null);
@@ -224,6 +235,16 @@ function resolveNodeWeightAndCount(char, previousEntry = null) {
   if (hasCountField) {
     count = isValidNodeMetric(rawCount) ? rawCount : null;
   } else if (previousEntry && isValidNodeMetric(previousEntry.count)) {
+=======
+  const weight = isPositiveFiniteNumberLiteral(rawWeight)
+    ? rawWeight
+    : (previousEntry && isPositiveFiniteNumberLiteral(previousEntry.weight) ? previousEntry.weight : null);
+
+  let count = null;
+  if (hasCountField) {
+    count = isPositiveFiniteNumberLiteral(rawCount) ? rawCount : null;
+  } else if (previousEntry && isPositiveFiniteNumberLiteral(previousEntry.count)) {
+>>>>>>> 46a2335b612ff4470875b0baffc822c13b7f1804
     count = previousEntry.count;
   }
 
@@ -247,13 +268,21 @@ function mergeCharacterRecord(prev, char) {
   const merged = { ...prev, ...filled };
   const { weight, count } = resolveNodeWeightAndCount(merged, prev);
 
+<<<<<<< HEAD
   if (isValidNodeMetric(weight)) {
+=======
+  if (isPositiveFiniteNumberLiteral(weight)) {
+>>>>>>> 46a2335b612ff4470875b0baffc822c13b7f1804
     merged.weight = weight;
   } else {
     delete merged.weight;
   }
 
+<<<<<<< HEAD
   if (isValidNodeMetric(count)) {
+=======
+  if (isPositiveFiniteNumberLiteral(count)) {
+>>>>>>> 46a2335b612ff4470875b0baffc822c13b7f1804
     merged.count = count;
   } else if (typeof merged.count !== 'number') {
     delete merged.count;
@@ -335,7 +364,11 @@ function buildNodeWeights(characters, previousNodeWeights = null) {
     const previousEntry = nodeWeights[id] ?? null;
     const { weight, count } = resolveNodeWeightAndCount(char, previousEntry);
 
+<<<<<<< HEAD
     if (isValidNodeMetric(weight) && isValidNodeMetric(count)) {
+=======
+    if (isPositiveFiniteNumberLiteral(weight) && isPositiveFiniteNumberLiteral(count)) {
+>>>>>>> 46a2335b612ff4470875b0baffc822c13b7f1804
       nodeWeights[id] = { weight, count };
     } else {
       delete nodeWeights[id];
@@ -1694,11 +1727,7 @@ export const reconstructChapterGraphState = (cachePayload, targetEventIdx) => {
 };
 
 const graphBookMemoryCache = new Map();
-registerCache('graphBookCache', graphBookMemoryCache, {
-  maxSize: 50,
-  ttl: null,
-  cleanupInterval: 3600000,
-});
+const GRAPH_BOOK_MEMORY_MAX = 50;
 
 const chapterEventMemoryCache = new Map();
 registerCache('chapterEventCache', chapterEventMemoryCache, {
@@ -1724,6 +1753,7 @@ const getGraphBookCacheKey = (bookId) => {
  */
 const readTtlCache = (cacheName, key, label) => {
   if (!key) return null;
+<<<<<<< HEAD
   try {
     const cached = getCacheItem(cacheName, key);
     if (cached && Date.now() - (Number(cached.timestamp) || 0) <= CHAPTER_EVENT_CACHE_MAX_AGE_MS) {
@@ -1731,6 +1761,15 @@ const readTtlCache = (cacheName, key, label) => {
     }
     const stored = loadTtlStorage(key, CHAPTER_EVENT_CACHE_MAX_AGE_MS, 'localStorage');
     if (stored) setCacheItem(cacheName, key, stored);
+=======
+
+  const cached = graphBookMemoryCache.get(key);
+  if (cached) return cached;
+
+  try {
+    const stored = loadFromStorage(key, 'localStorage');
+    if (stored) setBounded(graphBookMemoryCache, key, stored, GRAPH_BOOK_MEMORY_MAX);
+>>>>>>> 46a2335b612ff4470875b0baffc822c13b7f1804
     return stored;
   } catch (error) {
     errorUtils.logDebug('graphModel', `${label} 로드 실패`, { message: error?.message });
@@ -1763,7 +1802,7 @@ const writeGraphBookCache = (bookId, payload) => {
     timestamp: Date.now(),
   };
 
-  setCacheItem('graphBookCache', key, normalized);
+  setBounded(graphBookMemoryCache, key, normalized, GRAPH_BOOK_MEMORY_MAX);
   saveTtlStorage(key, normalized, 'localStorage');
 
   return normalized;

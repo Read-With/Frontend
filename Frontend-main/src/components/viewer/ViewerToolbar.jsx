@@ -1,5 +1,4 @@
 import { createElement, useState, useEffect, useMemo, useCallback } from 'react';
-import PropTypes from 'prop-types';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -46,14 +45,6 @@ function ToolbarButton({
   );
 }
 
-ToolbarButton.propTypes = {
-  onClick: PropTypes.func,
-  title: PropTypes.string,
-  ariaLabel: PropTypes.string,
-  className: PropTypes.string,
-  children: PropTypes.node,
-};
-
 function IconLabel({ icon: Icon, label, center = false, strokeWidth = 2 }) {
   return (
     <span className={`viewer-toolbar-label${center ? ' is-centered' : ''}`}>
@@ -62,13 +53,6 @@ function IconLabel({ icon: Icon, label, center = false, strokeWidth = 2 }) {
     </span>
   );
 }
-
-IconLabel.propTypes = {
-  icon: PropTypes.elementType.isRequired,
-  label: PropTypes.node,
-  center: PropTypes.bool,
-  strokeWidth: PropTypes.number,
-};
 
 /** 본문만 ↔ 본문+그래프 토글 + 세션 1회 힌트 */
 function ScreenModeToggle({
@@ -130,18 +114,6 @@ function ScreenModeToggle({
     </div>
   );
 }
-
-ScreenModeToggle.propTypes = {
-  showGraph: PropTypes.bool,
-  onToggleGraph: PropTypes.func,
-  title: PropTypes.string,
-  className: PropTypes.string,
-  message: PropTypes.string,
-  hintSeen: PropTypes.bool,
-  open: PropTypes.bool,
-  onDismissHint: PropTypes.func.isRequired,
-  menu: PropTypes.bool,
-};
 
 function ViewerToolbar({
   showToolbar,
@@ -442,21 +414,5 @@ function ViewerToolbar({
     </div>
   );
 }
-
-ViewerToolbar.propTypes = {
-  showToolbar: PropTypes.bool.isRequired,
-  currentChapter: PropTypes.number,
-  onPrev: PropTypes.func,
-  onNext: PropTypes.func,
-  isBookmarked: PropTypes.bool,
-  onAddBookmark: PropTypes.func,
-  onToggleBookmarkList: PropTypes.func,
-  onOpenSettings: PropTypes.func,
-  onToggleGraph: PropTypes.func,
-  showGraph: PropTypes.bool,
-  isFromLibrary: PropTypes.bool,
-  previousPage: PropTypes.object,
-  onExitToMypage: PropTypes.func,
-};
 
 export default ViewerToolbar;

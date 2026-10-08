@@ -1,6 +1,6 @@
 /** 환경 URL·OAuth·공개 자산·에러 로깅·뷰어/그래프 경로 */
 
-import { AUTH_CLEARED_EVENT, clearAuthData } from '../security/authTokenStorage';
+import { AUTH_CLEARED_EVENT } from '../security/authTokenStorage';
 import { createAndStoreGoogleOAuthState, secureLog } from '../security/oauthSecurity';
 import { trimTrailingSlash, toOneBasedChapterIndexOrNull } from './valueUtils';
 
@@ -107,8 +107,6 @@ const getDevBackendHintUrl = () => {
     return DEFAULT_DEV_PROXY_TARGET;
   }
 };
-
-export { clearAuthData };
 
 export const isOAuthCallbackRoute = () => {
   if (typeof window === 'undefined') return false;
@@ -595,7 +593,7 @@ const ASSET_FETCH_MAX_ATTEMPTS = 3;
 const ASSET_FETCH_RETRY_BASE_MS = 400;
 export const GRAPH_IMAGE_DEFERRED_RETRY_MS = 1_500;
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function clearAuthenticatedAssetBlobCache() {
   blobCacheGeneration += 1;

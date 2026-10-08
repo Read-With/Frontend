@@ -3,6 +3,7 @@ import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import useAuth from '../hooks/auth/useAuth';
+<<<<<<< HEAD
 import { startGoogleOAuthLogin } from '../utils/common/urlUtils';
 import { errorUtils } from '../utils/common/valueUtils';
 import landingHero from '../assets/landing-hero-book.jpg';
@@ -23,6 +24,13 @@ GoogleIcon.propTypes = {
   className: PropTypes.string,
 };
 
+=======
+import { GoogleIcon } from '../components/auth/OAuthCallback';
+import { startGoogleOAuthLogin, errorUtils } from '../utils/common/urlUtils';
+import landingHero from '../assets/landing-hero-book.jpg';
+import './HomePage.css';
+
+>>>>>>> 46a2335b612ff4470875b0baffc822c13b7f1804
 export default function HomePage() {
   const navigate = useNavigate();
   const { user } = useAuth();

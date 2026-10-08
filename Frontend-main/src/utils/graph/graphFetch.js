@@ -5,10 +5,7 @@ import {
   loadFromStorage,
   saveToStorage,
   removeFromStorage,
-  registerCache,
-  getCacheItem,
-  setCacheItem,
-  enforceCacheSizeLimit,
+  setBounded,
   isUnusableChapterGraphCacheSource,
 } from '../common/cache/cacheManager';
 import { eventUtils, cacheKeyUtils, MACRO_GRAPH_STORAGE_KEY_RE, ELEMENTS_TO_RELATIONS_OPTS } from '../viewer/viewerCore';
@@ -365,12 +362,6 @@ const CACHE_PREFIX = 'relation-timeline-';
 const MAX_CACHE_SIZE = 50;
 
 const relationTimelineCache = new Map();
-registerCache('relationTimelineCache', relationTimelineCache, {
-  maxSize: MAX_CACHE_SIZE,
-  ttl: CACHE_DURATION,
-  cleanupInterval: 300000,
-  storageType: 'sessionStorage',
-});
 
 function buildGraphResponseFromDeltas(
   bookId,
@@ -413,15 +404,13 @@ function getRelationTimelineCacheKey(bookId, chapterNum, id1, id2) {
 }
 
 function getCachedRelationTimeline(cacheKey) {
-  return getCacheItem('relationTimelineCache', cacheKey)?.result ?? null;
+  const cached = relationTimelineCache.get(cacheKey);
+  if (!cached || Date.now() - cached.timestamp > CACHE_DURATION) return null;
+  return cached.result;
 }
 
 function setCachedRelationTimeline(cacheKey, result) {
-  setCacheItem('relationTimelineCache', cacheKey, {
-    result,
-    timestamp: Date.now(),
-  });
-  enforceCacheSizeLimit('relationTimelineCache');
+  setBounded(relationTimelineCache, cacheKey, { result, timestamp: Date.now() }, MAX_CACHE_SIZE);
 }
 
 function findRelationInResult(relations, id1, id2) {

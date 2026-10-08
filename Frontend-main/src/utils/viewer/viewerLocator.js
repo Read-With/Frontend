@@ -4,8 +4,7 @@ import { resolveChapterIndex, errorUtils } from '../common/valueUtils';
 import { resolveApiArtifactUrl } from '../common/urlUtils';
 import { authenticatedFetch } from '../api/authApi';
 import { getBookManifest } from '../api/booksApi';
-import DOMPurify from 'isomorphic-dompurify';
-import { LRUCache } from 'lru-cache';
+import DOMPurify from 'dompurify';
 import {
   getChapterDataFromManifest,
   getEffectiveChapterLengthForProgress,
@@ -37,7 +36,7 @@ const CSS_SANITIZE_RULES = [
 const XHTML_LOAD_CACHE_VERSION = 'v4';
 const MAX_CACHED_BOOKS = 5;
 
-const xhtmlLoadCache = new LRUCache({ max: MAX_CACHED_BOOKS });
+const xhtmlLoadCache = new Map(); // 삽입 순서 = 오래된 순
 
 function resolveXhtmlBookId(bid) {
   return String(bid ?? '').trim();
@@ -83,7 +82,11 @@ export function loadCachedXhtmlContent(bid, loader, parse) {
   }
 
   const cached = xhtmlLoadCache.get(cacheKey);
-  if (cached) return cached;
+  if (cached) {
+    xhtmlLoadCache.delete(cacheKey);
+    xhtmlLoadCache.set(cacheKey, cached);
+    return cached;
+  }
 
   const loadPromise = Promise.resolve()
     .then(() => loader(bid))
@@ -94,6 +97,9 @@ export function loadCachedXhtmlContent(bid, loader, parse) {
     });
 
   xhtmlLoadCache.set(cacheKey, loadPromise);
+  if (xhtmlLoadCache.size > MAX_CACHED_BOOKS) {
+    xhtmlLoadCache.delete(xhtmlLoadCache.keys().next().value);
+  }
   return loadPromise;
 }
 
