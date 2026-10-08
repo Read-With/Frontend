@@ -46,11 +46,12 @@ export default defineConfig(({ mode }) => {
       minify: 'esbuild',
       rollupOptions: {
         output: {
-          manualChunks: {
-            'react-vendor': ['react', 'react-dom', 'react-router-dom'],
-            query: ['@tanstack/react-query'],
-            charts: ['recharts'],
-            graph: ['cytoscape', 'cytoscape-cose-bilkent'],
+          // 함수형: 'react-dom/client' 같은 서브패스까지 잡기 위함
+          manualChunks(id) {
+            if (/node_modules\/(react|react-dom|react-router|react-router-dom|scheduler)\//.test(id)) return 'react-vendor';
+            if (id.includes('node_modules/@tanstack/react-query/')) return 'query';
+            if (id.includes('node_modules/recharts/')) return 'charts';
+            if (id.includes('node_modules/cytoscape')) return 'graph';
           },
         },
       },

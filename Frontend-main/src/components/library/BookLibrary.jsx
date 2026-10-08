@@ -12,6 +12,7 @@ import {
   makeOpeningTargetKey,
   getOpeningMode,
 } from '../../utils/library/libraryUtils';
+import { ensureGraphBookCache } from '../../utils/graph/graphModel';
 import { useMountedRef, useLatestRef } from '../../hooks/common/hooksShared';
 
 const COVER_PLACEHOLDER_SVG = (
@@ -36,7 +37,6 @@ async function prewarmGraphBookCache(book, options = {}) {
   if (!bookId) return null;
 
   try {
-    const { ensureGraphBookCache } = await import('../../utils/graph/graphModel');
     return await ensureGraphBookCache(bookId, options);
   } catch (error) {
     if (error?.name !== 'AbortError') {

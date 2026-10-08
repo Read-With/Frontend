@@ -1,7 +1,9 @@
 /** Cytoscape 스타일시트·레이아웃·노드 크기·긍정성 색/라벨 */
 
-import { isValidNodeWeight } from '../graph/graphModel.js';
 import { clampPositivity } from '../common/valueUtils';
+
+// graphModel.isValidNodeWeight와 동일. import하면 graphModel 전체가 메인 번들에 실려 복제함.
+const isValidNodeWeight = (w) => typeof w === 'number' && Number.isFinite(w) && w > 0;
 
 // styles.js가 이 모듈을 re-export하므로 styles.js를 import하지 않는다.
 

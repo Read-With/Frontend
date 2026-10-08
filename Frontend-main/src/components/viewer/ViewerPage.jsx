@@ -180,7 +180,7 @@ const ViewerPage = () => {
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('touchstart', onTouchStart);
     };
-  }, [setShowToolbar]);
+  }, [setShowToolbar, showToolbarRef]);
 
   const toggleToolbar = useCallback(() => {
     setShowToolbar((prev) => !prev);
@@ -294,6 +294,7 @@ const ViewerPage = () => {
       book,
       bookKey,
       markViewerPageReady,
+      readingChapterRef,
       setCurrentChapter,
       setCurrentEvent,
       applyReadingLocator,
