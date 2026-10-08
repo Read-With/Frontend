@@ -2,12 +2,7 @@
 
 import { PanelsTopLeft, FileText } from 'lucide-react';
 import { toast } from 'react-toastify';
-<<<<<<< HEAD
-import { storageUtils } from '../common/cache/cacheManager';
-=======
-import { errorUtils } from '../common/urlUtils';
 import { loadFromStorage, saveToStorage } from '../common/cache/cacheManager';
->>>>>>> 46a2335b612ff4470875b0baffc822c13b7f1804
 import {
   toLocator,
   progressResultToViewerAnchor,

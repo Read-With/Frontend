@@ -311,31 +311,7 @@ const BookCard = memo(({ book, onToggleFavorite, onOpenBook, onBookDetailClick, 
 
 BookCard.displayName = 'BookCard';
 
-<<<<<<< HEAD
-const bookShape = PropTypes.shape({
-  id: PropTypes.oneOfType([PropTypes.number, PropTypes.string]).isRequired,
-  title: PropTypes.string.isRequired,
-  author: PropTypes.string.isRequired,
-  coverImgUrl: PropTypes.string,
-  isFavorite: PropTypes.bool,
-  progress: PropTypes.number,
-  updatedAt: PropTypes.string
-});
-
-BookCard.propTypes = {
-  book: bookShape.isRequired,
-  onToggleFavorite: PropTypes.func,
-  onOpenBook: PropTypes.func,
-  onBookDetailClick: PropTypes.func,
-  onShowDeleteModal: PropTypes.func,
-  viewMode: PropTypes.oneOf(['grid', 'list']),
-  openingMode: PropTypes.oneOf(['viewer', 'graph'])
-};
-
 const BookLibrary = memo(({ books, onToggleFavorite, onBookDelete, onBookRestore, viewMode = 'grid' }) => {
-=======
-const BookLibrary = memo(({ books, onToggleFavorite, onBookDelete, viewMode = 'grid' }) => {
->>>>>>> 46a2335b612ff4470875b0baffc822c13b7f1804
   const navigate = useNavigate();
   const [selectedBook, setSelectedBook] = useState(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -525,17 +501,6 @@ const BookLibrary = memo(({ books, onToggleFavorite, onBookDelete, viewMode = 'g
   );
 });
 
-<<<<<<< HEAD
-BookLibrary.propTypes = {
-  books: PropTypes.arrayOf(bookShape).isRequired,
-  onToggleFavorite: PropTypes.func,
-  onBookDelete: PropTypes.func,
-  onBookRestore: PropTypes.func.isRequired,
-  viewMode: PropTypes.oneOf(['grid', 'list'])
-};
-
-=======
->>>>>>> 46a2335b612ff4470875b0baffc822c13b7f1804
 BookLibrary.displayName = 'BookLibrary';
 
 export default BookLibrary;

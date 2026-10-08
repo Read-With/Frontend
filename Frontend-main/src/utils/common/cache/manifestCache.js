@@ -10,13 +10,7 @@ import {
 } from '../valueUtils';
 import { eventUtils } from '../../viewer/viewerCore';
 import {
-<<<<<<< HEAD
-  registerCache,
-  getCacheItem,
-  setCacheItem,
-=======
   setBounded,
->>>>>>> 46a2335b612ff4470875b0baffc822c13b7f1804
   loadFromStorage,
   saveToStorage,
   MANIFEST_CACHE_PREFIX,

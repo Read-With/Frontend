@@ -8,12 +8,7 @@ import {
   useCallback,
   useMemo,
 } from 'react';
-<<<<<<< HEAD
-import PropTypes from 'prop-types';
 import { errorUtils } from '../../utils/common/valueUtils';
-=======
-import { errorUtils } from '../../utils/common/urlUtils';
->>>>>>> 46a2335b612ff4470875b0baffc822c13b7f1804
 import {
   absoluteOffsetFromReadingProgressPercent,
   locatorFromBookAbsoluteOffset,
@@ -118,12 +113,8 @@ const XhtmlViewer = forwardRef(
 
     const currentSnap = useMemo(
       () => getSnappedOffsetAndHeight(safePageIndex, pageHeight || 1),
-<<<<<<< HEAD
-      // eslint-disable-next-line react-hooks/exhaustive-deps -- lineBoundsRef 갱신 트리거
-=======
       // lineBoundsVersion: getSnappedOffsetAndHeight가 ref로 읽는 줄 경계가 바뀌면 재계산
       // eslint-disable-next-line react-hooks/exhaustive-deps
->>>>>>> 46a2335b612ff4470875b0baffc822c13b7f1804
       [getSnappedOffsetAndHeight, safePageIndex, pageHeight, lineBoundsVersion]
     );
 

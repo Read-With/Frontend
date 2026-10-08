@@ -65,14 +65,10 @@ import {
 } from '../common/cache/manifestCache';
 import {
   setBounded,
-  loadFromStorage,
   loadTtlStorage,
   saveTtlStorage,
-<<<<<<< HEAD
   saveToStorage,
   removeFromStorage,
-=======
->>>>>>> 46a2335b612ff4470875b0baffc822c13b7f1804
   GRAPH_BOOK_CACHE_PREFIX,
   CHAPTER_EVENT_CACHE_MAX_AGE_MS,
   CHAPTER_EVENT_CACHE_PREFIX,
@@ -202,22 +198,11 @@ function validateAndNormalizeProfileImageUrl(profileImage) {
  * 2. Node weights
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-<<<<<<< HEAD
-/** 노드 weight·count 공통 검사: 양의 유한수 */
-const isValidNodeMetric = isPositiveFiniteNumberLiteral;
-
-function isNodeWeightEntryVisible(entry) {
-  return Boolean(
-    entry &&
-    isValidNodeMetric(entry.weight) &&
-    isValidNodeMetric(entry.count)
-=======
 function isNodeWeightEntryVisible(entry) {
   return Boolean(
     entry &&
     isPositiveFiniteNumberLiteral(entry.weight) &&
     isPositiveFiniteNumberLiteral(entry.count)
->>>>>>> 46a2335b612ff4470875b0baffc822c13b7f1804
   );
 }
 
@@ -226,16 +211,6 @@ function resolveNodeWeightAndCount(char, previousEntry = null) {
   const hasCountField = typeof char?.count === 'number';
   const rawCount = hasCountField ? char.count : null;
 
-<<<<<<< HEAD
-  const weight = isValidNodeMetric(rawWeight)
-    ? rawWeight
-    : (previousEntry && isValidNodeMetric(previousEntry.weight) ? previousEntry.weight : null);
-
-  let count = null;
-  if (hasCountField) {
-    count = isValidNodeMetric(rawCount) ? rawCount : null;
-  } else if (previousEntry && isValidNodeMetric(previousEntry.count)) {
-=======
   const weight = isPositiveFiniteNumberLiteral(rawWeight)
     ? rawWeight
     : (previousEntry && isPositiveFiniteNumberLiteral(previousEntry.weight) ? previousEntry.weight : null);
@@ -244,7 +219,6 @@ function resolveNodeWeightAndCount(char, previousEntry = null) {
   if (hasCountField) {
     count = isPositiveFiniteNumberLiteral(rawCount) ? rawCount : null;
   } else if (previousEntry && isPositiveFiniteNumberLiteral(previousEntry.count)) {
->>>>>>> 46a2335b612ff4470875b0baffc822c13b7f1804
     count = previousEntry.count;
   }
 
@@ -268,21 +242,13 @@ function mergeCharacterRecord(prev, char) {
   const merged = { ...prev, ...filled };
   const { weight, count } = resolveNodeWeightAndCount(merged, prev);
 
-<<<<<<< HEAD
-  if (isValidNodeMetric(weight)) {
-=======
   if (isPositiveFiniteNumberLiteral(weight)) {
->>>>>>> 46a2335b612ff4470875b0baffc822c13b7f1804
     merged.weight = weight;
   } else {
     delete merged.weight;
   }
 
-<<<<<<< HEAD
-  if (isValidNodeMetric(count)) {
-=======
   if (isPositiveFiniteNumberLiteral(count)) {
->>>>>>> 46a2335b612ff4470875b0baffc822c13b7f1804
     merged.count = count;
   } else if (typeof merged.count !== 'number') {
     delete merged.count;
@@ -364,11 +330,7 @@ function buildNodeWeights(characters, previousNodeWeights = null) {
     const previousEntry = nodeWeights[id] ?? null;
     const { weight, count } = resolveNodeWeightAndCount(char, previousEntry);
 
-<<<<<<< HEAD
-    if (isValidNodeMetric(weight) && isValidNodeMetric(count)) {
-=======
     if (isPositiveFiniteNumberLiteral(weight) && isPositiveFiniteNumberLiteral(count)) {
->>>>>>> 46a2335b612ff4470875b0baffc822c13b7f1804
       nodeWeights[id] = { weight, count };
     } else {
       delete nodeWeights[id];
@@ -1730,11 +1692,7 @@ const graphBookMemoryCache = new Map();
 const GRAPH_BOOK_MEMORY_MAX = 50;
 
 const chapterEventMemoryCache = new Map();
-registerCache('chapterEventCache', chapterEventMemoryCache, {
-  maxSize: 30,
-  ttl: CHAPTER_EVENT_CACHE_MAX_AGE_MS,
-  cleanupInterval: 60000,
-});
+const CHAPTER_EVENT_MEMORY_MAX = 30;
 
 const graphBuildPromises = new Map();
 const chapterDiscoverPromises = new Map();
@@ -1751,25 +1709,15 @@ const getGraphBookCacheKey = (bookId) => {
  * 메모리 우선 → localStorage(TTL) 순 조회, 스토리지 적중 시 메모리 재적재.
  * 메모리 우선: discover 폴링이 매 tick 전체 JSON을 파싱하지 않도록, 스토리지 저장 실패 시에도 표시 가능하도록
  */
-const readTtlCache = (cacheName, key, label) => {
+const readTtlCache = (memoryCache, maxSize, key, label) => {
   if (!key) return null;
-<<<<<<< HEAD
   try {
-    const cached = getCacheItem(cacheName, key);
+    const cached = memoryCache.get(key);
     if (cached && Date.now() - (Number(cached.timestamp) || 0) <= CHAPTER_EVENT_CACHE_MAX_AGE_MS) {
       return cached;
     }
     const stored = loadTtlStorage(key, CHAPTER_EVENT_CACHE_MAX_AGE_MS, 'localStorage');
-    if (stored) setCacheItem(cacheName, key, stored);
-=======
-
-  const cached = graphBookMemoryCache.get(key);
-  if (cached) return cached;
-
-  try {
-    const stored = loadFromStorage(key, 'localStorage');
-    if (stored) setBounded(graphBookMemoryCache, key, stored, GRAPH_BOOK_MEMORY_MAX);
->>>>>>> 46a2335b612ff4470875b0baffc822c13b7f1804
+    if (stored) setBounded(memoryCache, key, stored, maxSize);
     return stored;
   } catch (error) {
     errorUtils.logDebug('graphModel', `${label} 로드 실패`, { message: error?.message });
@@ -1789,7 +1737,7 @@ const awaitTracked = async (map, key, promise, entry = promise) => {
 
 // 챕터 캐시와 같은 TTL — 챕터 캐시 만료 후에도 prewarm이 영구 생략되지 않도록
 const readGraphBookCache = (bookId) =>
-  readTtlCache('graphBookCache', getGraphBookCacheKey(bookId), '그래프 책 캐시');
+  readTtlCache(graphBookMemoryCache, GRAPH_BOOK_MEMORY_MAX, getGraphBookCacheKey(bookId), '그래프 책 캐시');
 
 const writeGraphBookCache = (bookId, payload) => {
   const key = getGraphBookCacheKey(bookId);
@@ -1962,7 +1910,7 @@ const getChapterEventCacheKey = (bookId, chapterIdx) => {
  * @returns {Object|null}
  */
 export const getCachedChapterEvents = (bookId, chapterIdx) =>
-  readTtlCache('chapterEventCache', getChapterEventCacheKey(bookId, chapterIdx), '챕터 이벤트 캐시');
+  readTtlCache(chapterEventMemoryCache, CHAPTER_EVENT_MEMORY_MAX, getChapterEventCacheKey(bookId, chapterIdx), '챕터 이벤트 캐시');
 
 const setCachedChapterEvents = (bookId, chapterIdx, eventData) => {
   try {
@@ -1984,7 +1932,7 @@ const setCachedChapterEvents = (bookId, chapterIdx, eventData) => {
       capped: eventData.capped === true,
     };
 
-    setCacheItem('chapterEventCache', cacheKey, cacheData);
+    setBounded(chapterEventMemoryCache, cacheKey, cacheData, CHAPTER_EVENT_MEMORY_MAX);
     if (!saveToStorage(cacheKey, cacheData, 'localStorage')) {
       // 용량 초과 등: 이전 세션의 낡은 항목이 남아 다음 로드에 쓰이지 않도록 제거 (현재 세션은 메모리로 표시)
       removeFromStorage(cacheKey, 'localStorage');

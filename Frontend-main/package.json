@@ -14,20 +14,12 @@
   },
   "dependencies": {
     "@tanstack/react-query": "^5.90.16",
-<<<<<<< HEAD
-    "@tanstack/react-query-devtools": "^5.91.2",
-    "@vercel/speed-insights": "^1.2.0",
-    "axios": "^1.13.5",
-    "cytoscape": "^3.32.0",
-    "cytoscape-cose-bilkent": "^4.1.0",
-    "isomorphic-dompurify": "^3.18.0",
-=======
     "cytoscape": "^3.32.0",
     "cytoscape-cose-bilkent": "^4.1.0",
     "dompurify": "^3.4.16",
->>>>>>> 46a2335b612ff4470875b0baffc822c13b7f1804
     "jszip": "^3.10.1",
     "lucide-react": "^0.545.0",
+    "prop-types": "^15.8.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router-dom": "^7.12.0",
