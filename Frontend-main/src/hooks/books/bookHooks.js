@@ -4,11 +4,11 @@ import { useState, useEffect, useCallback, useMemo, useReducer } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getBook, getBooks, getBooksArray, toggleBookFavorite, getBookManifest } from '../../utils/api/booksApi';
-import { normalizeTitle, normalizeAuthor, errorUtils } from '../../utils/common/valueUtils';
-import { userViewerPath } from '../../utils/common/urlUtils';
+import { normalizeTitle, normalizeAuthor } from '../../utils/common/valueUtils';
+import { errorUtils, userViewerPath } from '../../utils/common/urlUtils';
 import { prefetchManifest } from '../../utils/common/cache/manifestCache';
 import { PROGRESS_CACHE_UPDATED_EVENT } from '../../utils/common/cache/progressCache';
-import { readBooksCache, writeBooksCache, loadFromStorage, saveToStorage } from '../../utils/common/cache/cacheManager';
+import { readBooksCache, writeBooksCache } from '../../utils/common/cache/cacheManager';
 import { resolveLibraryReadingProgressPercent } from '../../utils/library/libraryUtils';
 import { getStoredAccessToken } from '../../utils/security/authTokenStorage';
 import { ensureSessionAccessToken } from '../../utils/api/authApi';
@@ -25,12 +25,16 @@ const BOOKS_QUERY_OPTIONS = {
 const bookFetchState = new Map();
 
 function readHiddenBookIds() {
-  const parsed = loadFromStorage(HIDDEN_BOOK_IDS_KEY);
-  return new Set(Array.isArray(parsed) ? parsed.map((id) => `${id}`) : []);
+  try {
+    const parsed = JSON.parse(localStorage.getItem(HIDDEN_BOOK_IDS_KEY) || '[]');
+    return new Set(Array.isArray(parsed) ? parsed.map((id) => `${id}`) : []);
+  } catch {
+    return new Set();
+  }
 }
 
 function writeHiddenBookIds(ids) {
-  saveToStorage(HIDDEN_BOOK_IDS_KEY, [...ids]);
+  localStorage.setItem(HIDDEN_BOOK_IDS_KEY, JSON.stringify([...ids]));
 }
 
 function reconcileBooks(fetchedBooks) {
@@ -295,19 +299,14 @@ export const useBooks = () => {
     },
   });
 
-  // storage를 기준으로 갱신 — 마이페이지를 벗어난 뒤 '되돌리기'를 눌러도 반영됨
-  const setBookHidden = useCallback((bookId, hidden) => {
-    const idStr = String(bookId);
-    const next = readHiddenBookIds();
-    if (next.has(idStr) === hidden) return;
-    if (hidden) next.add(idStr);
-    else next.delete(idStr);
-    writeHiddenBookIds(next);
-    setHiddenBookIds(next);
+  const removeBook = useCallback((bookId) => {
+    setHiddenBookIds((prev) => {
+      const next = new Set(prev);
+      next.add(String(bookId));
+      writeHiddenBookIds(next);
+      return next;
+    });
   }, []);
-
-  const removeBook = useCallback((bookId) => setBookHidden(bookId, true), [setBookHidden]);
-  const restoreBook = useCallback((bookId) => setBookHidden(bookId, false), [setBookHidden]);
 
   const addBook = useCallback(
     async (newBook) => {
@@ -321,7 +320,13 @@ export const useBooks = () => {
         isFavorite: !!newBook.isFavorite,
       };
 
-      setBookHidden(idStr, false);
+      setHiddenBookIds((prev) => {
+        if (!prev.has(idStr)) return prev;
+        const next = new Set(prev);
+        next.delete(idStr);
+        writeHiddenBookIds(next);
+        return next;
+      });
 
       const merge = (old) => {
         if (!old) return { books: [bookToAdd], needsAuth: false };
@@ -350,7 +355,7 @@ export const useBooks = () => {
         errorUtils.logWarning('addBook', e?.message || '실패');
       }
     },
-    [queryClient, setBookHidden]
+    [queryClient]
   );
 
   const toggleFavorite = useCallback(
@@ -363,10 +368,8 @@ export const useBooks = () => {
     loading: isLoading,
     error:
       queryError?.message || (data?.needsAuth ? '인증이 필요합니다. 로그인해주세요.' : null),
-    needsAuth: Boolean(data?.needsAuth) || queryError?.status === 401,
     refetch,
     removeBook,
-    restoreBook,
     toggleFavorite,
     addBook,
   };

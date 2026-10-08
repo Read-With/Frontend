@@ -1,11 +1,15 @@
 /** 챕터·이벤트 스냅샷, 매크로 그래프 캐시 로더, relation timeline fetch */
-import { toNumberOrNull, toPositiveInt, toTrimmedStringOrNull, asArray, clampPositivity, errorUtils } from '../common/valueUtils';
+import { toNumberOrNull, toPositiveInt, toTrimmedStringOrNull, asArray } from '../common/valueUtils';
+import { errorUtils } from '../common/urlUtils';
 import { extractApiBookId, isSamePair, isGraphEdgeElement } from './graphCore';
 import {
   loadFromStorage,
   saveToStorage,
   removeFromStorage,
-  setBounded,
+  registerCache,
+  getCacheItem,
+  setCacheItem,
+  enforceCacheSizeLimit,
   isUnusableChapterGraphCacheSource,
 } from '../common/cache/cacheManager';
 import { eventUtils, cacheKeyUtils, MACRO_GRAPH_STORAGE_KEY_RE, ELEMENTS_TO_RELATIONS_OPTS } from '../viewer/viewerCore';
@@ -19,6 +23,7 @@ import {
   findManifestEventInChapter,
   resolveLastEventIdxForChapter,
 } from '../common/cache/manifestCache';
+import { finitePositivityOrZero } from '../styles/graphStyles';
 import { pickGraphApiResult } from '../viewer/viewerGraph';
 
 import {
@@ -362,6 +367,12 @@ const CACHE_PREFIX = 'relation-timeline-';
 const MAX_CACHE_SIZE = 50;
 
 const relationTimelineCache = new Map();
+registerCache('relationTimelineCache', relationTimelineCache, {
+  maxSize: MAX_CACHE_SIZE,
+  ttl: CACHE_DURATION,
+  cleanupInterval: 300000,
+  storageType: 'sessionStorage',
+});
 
 function buildGraphResponseFromDeltas(
   bookId,
@@ -404,13 +415,15 @@ function getRelationTimelineCacheKey(bookId, chapterNum, id1, id2) {
 }
 
 function getCachedRelationTimeline(cacheKey) {
-  const cached = relationTimelineCache.get(cacheKey);
-  if (!cached || Date.now() - cached.timestamp > CACHE_DURATION) return null;
-  return cached.result;
+  return getCacheItem('relationTimelineCache', cacheKey)?.result ?? null;
 }
 
 function setCachedRelationTimeline(cacheKey, result) {
-  setBounded(relationTimelineCache, cacheKey, { result, timestamp: Date.now() }, MAX_CACHE_SIZE);
+  setCacheItem('relationTimelineCache', cacheKey, {
+    result,
+    timestamp: Date.now(),
+  });
+  enforceCacheSizeLimit('relationTimelineCache');
 }
 
 function findRelationInResult(relations, id1, id2) {
@@ -528,7 +541,7 @@ function readEdgePositivityValue(edgeOrRelation) {
   const raw = edgeOrRelation?.data?.positivity ?? edgeOrRelation?.positivity;
   if (raw == null || raw === '') return null;
   const n = Number(raw);
-  return Number.isFinite(n) ? clampPositivity(n) : null;
+  return Number.isFinite(n) ? finitePositivityOrZero(n) : null;
 }
 
 function walkEventIndices(lastEventIdx, lastOnly) {
@@ -670,9 +683,7 @@ async function resolveChapterLastEventIdx(bookId, chapter, fetchEventData) {
     return { lastEventIdx: fromManifest, usedProbe: false };
   }
 
-  // capped/partial 캐시의 maxEventIdx는 챕터 마지막 이벤트가 아님
-  const cached = getCachedChapterEvents(bookId, chapter);
-  const cachedMax = cached?.capped || cached?.partial ? NaN : Number(cached?.maxEventIdx);
+  const cachedMax = Number(getCachedChapterEvents(bookId, chapter)?.maxEventIdx);
   if (Number.isFinite(cachedMax) && cachedMax >= 1) {
     return { lastEventIdx: cachedMax, usedProbe: false };
   }
@@ -732,7 +743,6 @@ async function fetchRelationTimelineCumulativeUncached(bookId, id1, id2, selecte
       let usedProbe = false;
 
       if (chapterPayload?.baseSnapshot) {
-        incomplete = Boolean(chapterPayload.capped || chapterPayload.partial);
         const cachedMax = Number(chapterPayload.maxEventIdx);
         let lastEventIdx;
         if (Number.isFinite(cachedMax) && cachedMax >= 1) {
@@ -789,11 +799,11 @@ async function fetchRelationTimelineCumulativeUncached(bookId, id1, id2, selecte
 
       if (lastOnly) {
         const lastEvent = relationEvents[relationEvents.length - 1];
-        points.push(clampPositivity(lastEvent.positivity));
+        points.push(finitePositivityOrZero(lastEvent.positivity));
         labelInfo.push(`Ch${chapter}`);
       } else {
         for (const event of relationEvents) {
-          points.push(clampPositivity(event.positivity));
+          points.push(finitePositivityOrZero(event.positivity));
           labelInfo.push(`E${event.idx}`);
         }
       }

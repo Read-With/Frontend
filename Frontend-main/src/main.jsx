@@ -4,8 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import './index.css'
 import App from './App.jsx'
-import { errorUtils } from './utils/common/valueUtils.js'
-import { getApiBaseUrl } from './utils/common/urlUtils.js'
+import { errorUtils } from './utils/common/urlUtils.js'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -20,18 +19,6 @@ const queryClient = new QueryClient({
 
 if (import.meta.env.DEV) {
   import('./utils/security/oauthSecurity.js');
-}
-
-// Render 무료 플랜은 15분 무요청 시 슬립 → 앱 진입 즉시 깨우고, 탭이 보이는 동안 10분마다 핑
-// ponytail: 탭이 닫혀 있으면 효과 없음. 항상 깨어 있어야 하면 외부 크론(UptimeRobot 등)으로 /health 핑
-if (import.meta.env.PROD) {
-  const pingBackend = () => {
-    if (document.visibilityState !== 'visible') return;
-    fetch(`${getApiBaseUrl()}/health`, { mode: 'no-cors', cache: 'no-store' }).catch(() => {});
-  };
-  pingBackend();
-  setInterval(pingBackend, 10 * 60 * 1000);
-  document.addEventListener('visibilitychange', pingBackend);
 }
 
 /**

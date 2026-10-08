@@ -18,8 +18,7 @@ import {
   isTokenValid,
   ensureSessionAccessToken,
 } from '../../utils/api/authApi';
-import { getPostLoginHomeUrl, isOAuthCallbackRoute, rememberPostLoginPath } from '../../utils/common/urlUtils';
-import { errorUtils } from '../../utils/common/valueUtils';
+import { getPostLoginHomeUrl, isOAuthCallbackRoute, errorUtils } from '../../utils/common/urlUtils';
 import {
   getStoredAccessToken,
   setStoredAccessToken,
@@ -131,7 +130,6 @@ function AuthProvider({ children }) {
           clearAuthData();
           const currentPath = window.location.pathname;
           if (currentPath !== '/') {
-            rememberPostLoginPath();
             window.location.href = getPostLoginHomeUrl();
           }
           return;

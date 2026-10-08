@@ -1,4 +1,5 @@
 import { lazy, memo, Suspense, useState, useEffect, useCallback, useMemo, useRef } from "react";
+import PropTypes from "prop-types";
 import { useParams } from "react-router-dom";
 import {
   processRelations,
@@ -20,7 +21,7 @@ import { hasGraphPayload } from "../../utils/api/graphApi.js";
 import { useTooltipPosition, useClickOutside, useCanvasAvoidPoint } from "../../hooks/ui/tooltipHooks";
 import { getUnifiedEventInfoForTooltip } from "../../utils/viewer/viewerSession";
 import { USER_GRAPH_PREFIX } from "../../utils/common/urlUtils";
-import { clampPositivity } from "../../utils/common/valueUtils";
+import { finitePositivityOrZero } from "../../utils/styles/graphStyles";
 import {
   COLORS,
   mergeRefs,
@@ -145,7 +146,7 @@ function buildRadarChartData({
         id2: el.data.target,
         relation: el.data.relation || ['관계'],
         count: el.data.count || el.data.strength || 1,
-        positivity: clampPositivity(el.data.positivity),
+        positivity: finitePositivityOrZero(el.data.positivity),
       }));
 
     if (edgeRels.length > 0) {
@@ -641,5 +642,30 @@ function UnifiedNodeInfo({
     </div>
   );
 }
+
+UnifiedNodeInfo.propTypes = {
+  displayMode: PropTypes.oneOf(['tooltip', 'sidebar']),
+  data: PropTypes.object,
+  x: PropTypes.number,
+  y: PropTypes.number,
+  onClose: PropTypes.func,
+  currentChapter: PropTypes.number,
+  eventNum: PropTypes.number,
+  elements: PropTypes.array,
+  filename: PropTypes.string,
+  currentEvent: PropTypes.any,
+  prevValidEvent: PropTypes.any,
+  povSummaries: PropTypes.any,
+  povError: PropTypes.string,
+  povIsLoading: PropTypes.bool,
+  povCached: PropTypes.bool,
+  onRetryPov: PropTypes.func,
+  showPovSummary: PropTypes.bool,
+  apiBookGraphData: PropTypes.object,
+  onSelectRelatedNode: PropTypes.func,
+  chapterRailWidth: PropTypes.number,
+  tooltipBoundsRef: PropTypes.shape({ current: PropTypes.any }),
+  pendingKeepAnalysisOpenRef: PropTypes.shape({ current: PropTypes.bool }),
+};
 
 export default memo(UnifiedNodeInfo);

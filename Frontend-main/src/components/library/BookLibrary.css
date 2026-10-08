@@ -742,21 +742,3 @@
     transform: none;
   }
 }
-
-.book-hidden-toast {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  width: 100%;
-}
-
-.book-hidden-toast-undo {
-  flex-shrink: 0;
-  border: none;
-  background: none;
-  padding: 0.25rem 0.5rem;
-  font-weight: 600;
-  color: var(--brand-accent, #2563eb);
-  cursor: pointer;
-}

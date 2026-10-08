@@ -1,4 +1,5 @@
 import { lazy, Suspense, useMemo, useRef, memo, useCallback, useEffect, useState, useId } from 'react';
+import PropTypes from 'prop-types';
 import { useNavigate, useParams } from 'react-router-dom';
 import { AlertCircle, Filter, Inbox, Loader2, Maximize, Minimize } from 'lucide-react';
 import CytoscapeGraphUnified from '../graph/CytoscapeGraphUnified';
@@ -627,5 +628,27 @@ const GraphSplitArea = memo(function GraphSplitArea({
     </div>
   );
 });
+
+GraphSplitArea.propTypes = {
+  graphState: PropTypes.object.isRequired,
+  graphActions: PropTypes.object.isRequired,
+  viewerState: PropTypes.object.isRequired,
+  searchState: PropTypes.object,
+  searchActions: PropTypes.object,
+  tooltipProps: PropTypes.shape({
+    activeTooltip: PropTypes.object,
+    onClearTooltip: PropTypes.func,
+    onSetActiveTooltip: PropTypes.func,
+    graphClearRef: PropTypes.object,
+  }).isRequired,
+  transitionState: PropTypes.shape({
+    type: PropTypes.string,
+    inProgress: PropTypes.bool,
+  }).isRequired,
+  apiError: PropTypes.oneOfType([PropTypes.object, PropTypes.string]),
+  cachedLocation: PropTypes.object,
+  resumeAnchor: PropTypes.object,
+  onToggleGraph: PropTypes.func,
+};
 
 export default GraphSplitArea;

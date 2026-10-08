@@ -1,11 +1,11 @@
 /** 환경 URL·OAuth·공개 자산·에러 로깅·뷰어/그래프 경로 */
 
-import { AUTH_CLEARED_EVENT } from '../security/authTokenStorage';
+import { AUTH_CLEARED_EVENT, clearAuthData } from '../security/authTokenStorage';
 import { createAndStoreGoogleOAuthState, secureLog } from '../security/oauthSecurity';
 import { trimTrailingSlash, toOneBasedChapterIndexOrNull } from './valueUtils';
 
 export const DEFAULT_API_BASE_URL = 'https://readwith-be.onrender.com';
-const DEFAULT_CDN_BASE_URL = 'https://cdn.readwith.cloud';
+export const DEFAULT_CDN_BASE_URL = 'https://cdn.readwith.cloud';
 const DEFAULT_APP_ORIGIN = 'https://readwith-frontend.vercel.app';
 export const DEFAULT_DEV_PROXY_TARGET =
   'http://read-with-dev-env.eba-wuzcb2s6.ap-northeast-2.elasticbeanstalk.com';
@@ -92,7 +92,7 @@ export const getPostLoginHomeUrl = () => {
   return '/';
 };
 
-const getDevBackendHintUrl = () => {
+export const getDevBackendHintUrl = () => {
   const u = envString('VITE_DEV_PROXY_TARGET');
   if (u) {
     try {
@@ -107,6 +107,8 @@ const getDevBackendHintUrl = () => {
     return DEFAULT_DEV_PROXY_TARGET;
   }
 };
+
+export { clearAuthData };
 
 export const isOAuthCallbackRoute = () => {
   if (typeof window === 'undefined') return false;
@@ -125,7 +127,7 @@ function isGoogleClientIdConfigured() {
   return Boolean(clientId && !INVALID_GOOGLE_CLIENT_IDS.has(clientId));
 }
 
-function buildGoogleOAuthAuthUrl() {
+export function buildGoogleOAuthAuthUrl() {
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
   const redirectUri = getGoogleOAuthRedirectUri();
   const oauthState = createAndStoreGoogleOAuthState();
@@ -141,31 +143,6 @@ function buildGoogleOAuthAuthUrl() {
     `prompt=select_account&` +
     `state=${encodeURIComponent(oauthState)}`
   );
-}
-
-const POST_LOGIN_PATH_KEY = 'post_login_path';
-
-/** 로그인 필요 페이지에서 튕겨나갈 때 경로를 기억 — OAuth 왕복 후 같은 탭에서 복귀 */
-export function rememberPostLoginPath() {
-  try {
-    sessionStorage.setItem(POST_LOGIN_PATH_KEY, `${window.location.pathname}${window.location.search}`);
-  } catch {
-    /* ignore */
-  }
-}
-
-/** 기억한 경로를 꺼내고 지운다. 같은 출처 내부 경로만 허용(오픈 리다이렉트 방지) */
-export function takePostLoginPath() {
-  try {
-    const path = sessionStorage.getItem(POST_LOGIN_PATH_KEY);
-    sessionStorage.removeItem(POST_LOGIN_PATH_KEY);
-    if (path && path.startsWith('/') && !path.startsWith('//') && !path.startsWith('/\\')) {
-      return path;
-    }
-  } catch {
-    /* ignore */
-  }
-  return null;
 }
 
 export function startGoogleOAuthLogin() {
@@ -193,7 +170,7 @@ export function startGoogleOAuthLogin() {
   return { ok: true };
 }
 
-function buildGoogleRedirectUriMismatchMessage(isLocalDev = import.meta.env.DEV) {
+export function buildGoogleRedirectUriMismatchMessage(isLocalDev = import.meta.env.DEV) {
   const actualRedirectUri = getGoogleOAuthRedirectUri();
 
   if (isLocalDev) {
@@ -300,7 +277,7 @@ function routeProtectedPublicAssetForSameOriginProxy(url) {
   return url;
 }
 
-function resolveAssetFetchUrl(url) {
+export function resolveAssetFetchUrl(url) {
   if (url == null) return '';
   const s = String(url).trim();
   if (!s) return '';
@@ -593,9 +570,9 @@ const ASSET_FETCH_MAX_ATTEMPTS = 3;
 const ASSET_FETCH_RETRY_BASE_MS = 400;
 export const GRAPH_IMAGE_DEFERRED_RETRY_MS = 1_500;
 
-export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-function clearAuthenticatedAssetBlobCache() {
+export function clearAuthenticatedAssetBlobCache() {
   blobCacheGeneration += 1;
   for (const blobUrl of blobUrlCache.values()) {
     URL.revokeObjectURL(blobUrl);
@@ -829,3 +806,6 @@ export async function resolveGraphElementsProfileImages(elements, options = {}) 
   const { force = false } = options;
   return Promise.all(elements.map((el) => resolveOneGraphProfileImage(el, { force })));
 }
+
+/* ─── 공통 에러 로깅 (valueUtils — 순환 참조 방지) ─── */
+export { errorUtils } from './valueUtils';

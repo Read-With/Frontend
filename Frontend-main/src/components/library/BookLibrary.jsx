@@ -1,18 +1,17 @@
 import { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react';
+import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { Heart, BookOpen, Network, MoreVertical, Info, Clock, EyeOff } from 'lucide-react';
+import { Heart, BookOpen, Network, MoreVertical, Info, Clock, Trash2 } from 'lucide-react';
 import BookDetailModal, { AuthenticatedImage } from './BookDetailModal';
 import ConfirmDialog from './ConfirmDialog';
 import './BookLibrary.css';
-import { USER_VIEWER_PREFIX, USER_GRAPH_PREFIX } from '../../utils/common/urlUtils';
-import { errorUtils } from '../../utils/common/valueUtils';
+import { USER_VIEWER_PREFIX, USER_GRAPH_PREFIX, errorUtils } from '../../utils/common/urlUtils';
 import { resolveServerBookId } from '../../utils/viewer/viewerCore';
 import {
   formatLibraryRelativeDate,
   makeOpeningTargetKey,
   getOpeningMode,
-  HIDE_BOOK_COPY,
 } from '../../utils/library/libraryUtils';
 import { useMountedRef, useLatestRef } from '../../hooks/common/hooksShared';
 
@@ -60,8 +59,7 @@ function navigateFromLibrary(navigate, book, graphMode) {
 }
 
 async function openBookFromLibrary(navigate, book, graphMode) {
-  // 책 전체 그래프 빌드를 기다리면 첫 진입이 막힘 — 뷰어는 필요한 챕터를 직접 discover
-  void prewarmGraphBookCache(book);
+  await prewarmGraphBookCache(book);
   navigateFromLibrary(navigate, book, graphMode);
 }
 
@@ -299,8 +297,8 @@ const BookCard = memo(({ book, onToggleFavorite, onOpenBook, onBookDetailClick, 
               role="menuitem"
               onClick={handleDeleteClick}
             >
-              <EyeOff size={18} className="book-context-icon" aria-hidden />
-              서재에서 숨기기
+              <Trash2 size={18} className="book-context-icon" aria-hidden />
+              삭제
             </button>
           </div>
         )}
@@ -311,7 +309,27 @@ const BookCard = memo(({ book, onToggleFavorite, onOpenBook, onBookDetailClick, 
 
 BookCard.displayName = 'BookCard';
 
-const BookLibrary = memo(({ books, onToggleFavorite, onBookDelete, onBookRestore, viewMode = 'grid' }) => {
+const bookShape = PropTypes.shape({
+  id: PropTypes.oneOfType([PropTypes.number, PropTypes.string]).isRequired,
+  title: PropTypes.string.isRequired,
+  author: PropTypes.string.isRequired,
+  coverImgUrl: PropTypes.string,
+  isFavorite: PropTypes.bool,
+  progress: PropTypes.number,
+  updatedAt: PropTypes.string
+});
+
+BookCard.propTypes = {
+  book: bookShape.isRequired,
+  onToggleFavorite: PropTypes.func,
+  onOpenBook: PropTypes.func,
+  onBookDetailClick: PropTypes.func,
+  onShowDeleteModal: PropTypes.func,
+  viewMode: PropTypes.oneOf(['grid', 'list']),
+  openingMode: PropTypes.oneOf(['viewer', 'graph'])
+};
+
+const BookLibrary = memo(({ books, onToggleFavorite, onBookDelete, viewMode = 'grid' }) => {
   const navigate = useNavigate();
   const [selectedBook, setSelectedBook] = useState(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -411,55 +429,30 @@ const BookLibrary = memo(({ books, onToggleFavorite, onBookDelete, onBookRestore
     setDeleteTargetBook(null);
   }, []);
 
-  // 서버 삭제 API가 없어 이 기기의 목록에서만 숨긴다 — 되돌리기 토스트로 실수 복구
-  const hideBook = useCallback(
-    async (bookId) => {
-      if (!onBookDelete) return;
-      await onBookDelete(bookId);
-      toast(
-        ({ closeToast }) => (
-          <span className="book-hidden-toast">
-            서재에서 숨겼습니다
-            <button
-              type="button"
-              className="book-hidden-toast-undo"
-              onClick={() => {
-                onBookRestore(bookId);
-                closeToast();
-              }}
-            >
-              되돌리기
-            </button>
-          </span>
-        ),
-        { autoClose: 5000, closeOnClick: false }
-      );
-    },
-    [onBookDelete, onBookRestore]
-  );
-
   const handleDeleteConfirm = useCallback(async () => {
     if (!deleteTargetBook?.id) return;
 
     setShowDeleteModal(false);
 
-    try {
-      await hideBook(deleteTargetBook.id);
-    } catch (err) {
-      errorUtils.logError('BookLibrary', err, { action: 'hideBook' });
-      toast.error(HIDE_BOOK_COPY.failed);
+    if (onBookDelete) {
+      try {
+        await onBookDelete(deleteTargetBook.id);
+      } catch (err) {
+        errorUtils.logError('BookLibrary', err, { action: 'deleteBook' });
+      }
     }
 
     setDeleteTargetBook(null);
-  }, [deleteTargetBook, hideBook]);
+  }, [deleteTargetBook, onBookDelete]);
 
-  // 실패 시 BookDetailModal이 에러 토스트를 띄우도록 그대로 throw
   const handleBookDelete = useCallback(
     async (bookId) => {
-      await hideBook(bookId);
+      if (onBookDelete) {
+        await onBookDelete(bookId);
+      }
       handleCloseDetailModal();
     },
-    [hideBook, handleCloseDetailModal]
+    [onBookDelete, handleCloseDetailModal]
   );
 
   if (!books || books.length === 0) {
@@ -493,13 +486,20 @@ const BookLibrary = memo(({ books, onToggleFavorite, onBookDelete, onBookRestore
         isOpen={showDeleteModal}
         onClose={handleCloseDeleteModal}
         onConfirm={handleDeleteConfirm}
-        title={HIDE_BOOK_COPY.title}
-        message={HIDE_BOOK_COPY.message}
-        confirmLabel={HIDE_BOOK_COPY.confirmLabel}
+        title="책 삭제"
+        message="이 책을 삭제하시겠습니까?"
+        confirmLabel="삭제하기"
       />
     </>
   );
 });
+
+BookLibrary.propTypes = {
+  books: PropTypes.arrayOf(bookShape).isRequired,
+  onToggleFavorite: PropTypes.func,
+  onBookDelete: PropTypes.func,
+  viewMode: PropTypes.oneOf(['grid', 'list'])
+};
 
 BookLibrary.displayName = 'BookLibrary';
 

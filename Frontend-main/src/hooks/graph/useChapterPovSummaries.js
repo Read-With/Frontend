@@ -8,7 +8,7 @@ import {
 } from '../../utils/api/booksApi';
 import { toPositiveNumberOrNull, toPositiveInt } from '../../utils/common/valueUtils';
 
-const chapterPovQueryKey = (bookId, chapterIdx) => [
+export const chapterPovQueryKey = (bookId, chapterIdx) => [
   'books',
   bookId,
   'chapters',

@@ -7,7 +7,7 @@ import {
   resolveCoseBilkentLayout,
   estimateNodeSizePx,
 } from '../styles/graphStyles.js';
-import { clampPositivity, errorUtils } from '../common/valueUtils';
+import { clampPositivity } from '../common/valueUtils';
 import {
   undirectedPairKey,
   GRAPH_ZOOM,
@@ -18,6 +18,7 @@ import {
   normalizeElementId,
 } from './graphCore';
 import { expandConnectedSubgraph, OVERLAP_RESOLVE, readNodeRadius } from './graphModel';
+import { errorUtils } from '../common/urlUtils';
 
 let coseBilkentRegistered = false;
 function ensureCoseBilkentRegistered() {

@@ -1,5 +1,4 @@
 import { useRef, useEffect, useCallback, useMemo, useState } from 'react';
-import PropTypes from 'prop-types';
 import { toast } from 'react-toastify';
 import ViewerLayout from './ViewerLayout';
 import XhtmlViewer from './XhtmlViewer';
@@ -7,13 +6,14 @@ import ViewerSettings from './ViewerSettings';
 import { useViewerPage } from '../../hooks/viewer/useViewerPage';
 import { useModalFocusTrap, useLatestRef } from '../../hooks/common/hooksShared';
 import { useTooltipState } from '../../hooks/ui/tooltipHooks';
-import { anchorToLocators, resolveChapterIndex, errorUtils } from '../../utils/common/valueUtils';
+import { anchorToLocators, resolveChapterIndex } from '../../utils/common/valueUtils';
 import {
   resolveViewerLineEvent,
   parseReadingLocatorKey,
   patchTopBarFromLineEvent,
 } from '../../utils/viewer/viewerSession';
 import { isSameBookmarkPosition, normalizeBookmarkLocators } from '../../utils/bookmarks/bookmarkUtils';
+import { errorUtils } from '../../utils/common/urlUtils';
 import GraphSplitArea from './GraphSplitArea';
 import '../../pages/BookmarksPage.css';
 
@@ -90,13 +90,6 @@ function BookmarkDeleteConfirm({
     </div>
   );
 }
-
-BookmarkDeleteConfirm.propTypes = {
-  open: PropTypes.bool.isRequired,
-  busy: PropTypes.bool,
-  onCancel: PropTypes.func.isRequired,
-  onConfirm: PropTypes.func.isRequired,
-};
 
 const ViewerPage = () => {
   const {
@@ -187,7 +180,7 @@ const ViewerPage = () => {
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('touchstart', onTouchStart);
     };
-  }, [setShowToolbar, showToolbarRef]);
+  }, [setShowToolbar]);
 
   const toggleToolbar = useCallback(() => {
     setShowToolbar((prev) => !prev);
@@ -301,21 +294,17 @@ const ViewerPage = () => {
       book,
       bookKey,
       markViewerPageReady,
-      readingChapterRef,
       setCurrentChapter,
       setCurrentEvent,
       applyReadingLocator,
       setProgressTopBar,
-      readingChapterRef,
     ]
   );
 
   const handleExitToMypage = useCallback(async () => {
-    let saved = true;
     try {
       const res = await flushProgressAsync();
       if (res?.isSuccess === false && !res.skipped && !res.deduped) {
-        saved = false;
         errorUtils.logWarning(
           '[ViewerPage] 마이페이지 이동 전 진도 저장 실패',
           res?.message || '알 수 없는 오류',
@@ -323,11 +312,8 @@ const ViewerPage = () => {
         );
       }
     } catch {
-      saved = false; // 저장 실패해도 이탈
+      /* 저장 실패해도 이탈 */
     } finally {
-      if (!saved) {
-        toast.warning('읽던 위치를 저장하지 못했어요. 다음에 열 때 위치가 조금 다를 수 있어요.');
-      }
       exitToMypage();
     }
   }, [bookKey, flushProgressAsync, exitToMypage]);
@@ -411,7 +397,7 @@ const ViewerPage = () => {
           bookKey={bookKey}
           suppressViewport={suppressViewport}
           suppressMessage={
-            resumeAnchor ? '읽던 위치로 이동 중…' : '로딩 중…'
+            resumeAnchor ? '읽던 위치로 이동 중...' : '로딩 중...'
           }
           onToggleChrome={toggleToolbar}
         />

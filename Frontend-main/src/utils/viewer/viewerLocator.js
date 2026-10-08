@@ -1,10 +1,11 @@
 /** XHTML 본문·locator·페이지 매핑 */
 
-import { resolveChapterIndex, errorUtils } from '../common/valueUtils';
-import { resolveApiArtifactUrl } from '../common/urlUtils';
+import { resolveChapterIndex } from '../common/valueUtils';
+import { errorUtils, resolveApiArtifactUrl } from '../common/urlUtils';
 import { authenticatedFetch } from '../api/authApi';
 import { getBookManifest } from '../api/booksApi';
-import DOMPurify from 'dompurify';
+import DOMPurify from 'isomorphic-dompurify';
+import { LRUCache } from 'lru-cache';
 import {
   getChapterDataFromManifest,
   getEffectiveChapterLengthForProgress,
@@ -34,9 +35,10 @@ const CSS_SANITIZE_RULES = [
 ];
 
 const XHTML_LOAD_CACHE_VERSION = 'v4';
+export const XHTML_CACHE_INVALIDATED_EVENT = 'readwith:xhtml-cache-invalidated';
 const MAX_CACHED_BOOKS = 5;
 
-const xhtmlLoadCache = new Map(); // 삽입 순서 = 오래된 순
+const xhtmlLoadCache = new LRUCache({ max: MAX_CACHED_BOOKS });
 
 function resolveXhtmlBookId(bid) {
   return String(bid ?? '').trim();
@@ -57,7 +59,7 @@ function sanitizeEpubStyleCss(css) {
 }
 
 /** 문서 내 모든 style 태그 텍스트를 합쳐 살균 */
-function collectSanitizedStyleCssFromDocument(doc) {
+export function collectSanitizedStyleCssFromDocument(doc) {
   if (!doc?.querySelectorAll) return '';
   return Array.from(doc.querySelectorAll('style'))
     .map((el) => sanitizeEpubStyleCss(el.textContent ?? ''))
@@ -66,9 +68,24 @@ function collectSanitizedStyleCssFromDocument(doc) {
 }
 
 /** body innerHTML 살균 (data-chapter-index 등 로케이터 속성 유지) */
-function sanitizeXhtmlBodyHtml(html) {
+export function sanitizeXhtmlBodyHtml(html) {
   if (!html || typeof html !== 'string') return '';
   return DOMPurify.sanitize(html, XHTML_SANITIZE_CONFIG);
+}
+
+/** bookId에 해당하는 XHTML 로드 캐시를 제거하고, 갱신 이벤트를 broadcast한다. */
+export function invalidateCachedXhtml(bid) {
+  const bookId = resolveXhtmlBookId(bid);
+  const cacheKey = getXhtmlLoadCacheKey(bookId);
+  if (!cacheKey) return false;
+  const existed = xhtmlLoadCache.has(cacheKey);
+  xhtmlLoadCache.delete(cacheKey);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent(XHTML_CACHE_INVALIDATED_EVENT, { detail: { bookId } })
+    );
+  }
+  return existed;
 }
 
 /**
@@ -82,11 +99,7 @@ export function loadCachedXhtmlContent(bid, loader, parse) {
   }
 
   const cached = xhtmlLoadCache.get(cacheKey);
-  if (cached) {
-    xhtmlLoadCache.delete(cacheKey);
-    xhtmlLoadCache.set(cacheKey, cached);
-    return cached;
-  }
+  if (cached) return cached;
 
   const loadPromise = Promise.resolve()
     .then(() => loader(bid))
@@ -97,9 +110,6 @@ export function loadCachedXhtmlContent(bid, loader, parse) {
     });
 
   xhtmlLoadCache.set(cacheKey, loadPromise);
-  if (xhtmlLoadCache.size > MAX_CACHED_BOOKS) {
-    xhtmlLoadCache.delete(xhtmlLoadCache.keys().next().value);
-  }
   return loadPromise;
 }
 

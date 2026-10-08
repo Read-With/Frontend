@@ -3,14 +3,6 @@
 import { getProgressFromCache } from '../common/cache/progressCache';
 import { clampPercent } from '../common/valueUtils';
 
-/** 서재 숨기기 — 카드 메뉴(BookLibrary)와 상세 모달(BookDetailModal) 공용 문구 */
-export const HIDE_BOOK_COPY = {
-  title: '서재에서 숨기기',
-  message: '이 기기의 서재 목록에서 숨깁니다. 같은 책을 다시 업로드하면 다시 표시됩니다.',
-  confirmLabel: '숨기기',
-  failed: '책을 숨기지 못했습니다. 잠시 후 다시 시도해 주세요.',
-};
-
 /** 마이페이지 BookCard·useBooks — locator 기반 캐시 진도만 사용 */
 export function resolveLibraryReadingProgressPercent(book) {
   if (book == null) return 0;

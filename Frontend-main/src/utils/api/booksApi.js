@@ -18,9 +18,8 @@ import {
   progressPayloadFromData,
   resolveProgressLocator,
   locatorsEqual,
-  errorUtils,
 } from '../common/valueUtils';
-import { getApiBaseUrl } from '../common/urlUtils';
+import { sanitizeAssetUrl, getApiBaseUrl, errorUtils } from '../common/urlUtils';
 import {
   normalizeStartEndLocatorsForServer,
   withNormalizedProgressLocators,
@@ -28,10 +27,9 @@ import {
   removeProgressFromCache,
   getProgressFromCache,
   ensureProgressRowLocator,
-  normalizeReadingProgressPercent,
 } from '../common/cache/progressCache';
 import { setManifestData, getManifestFromCache } from '../common/cache/manifestCache';
-import { normalizeBookCore } from '../common/bookNormalize';
+import { normalizeReadingProgressPercent } from '../viewer/viewerSession';
 import { getStoredAccessToken } from '../security/authTokenStorage';
 import {
   DEFAULT_BOOKMARK_COLOR,
@@ -39,6 +37,29 @@ import {
 } from '../bookmarks/bookmarkUtils';
 
 const BOOK_LIST_SORT_VALUES = new Set(['updatedAt', 'title']);
+
+const normalizeBookCore = (book) => {
+  const coverImgUrl =
+    typeof book.coverImgUrl === 'string' ? sanitizeAssetUrl(book.coverImgUrl) : '';
+  return {
+    id: book.id,
+    title: typeof book.title === 'string' ? book.title : '',
+    author: typeof book.author === 'string' ? book.author : '',
+    language: book.language != null ? String(book.language) : undefined,
+    coverImgUrl,
+    epubPath: book.epubPath != null ? String(book.epubPath) : undefined,
+    normalizationStatus: book.normalizationStatus ?? null,
+    analysisStatus: book.analysisStatus ?? null,
+    ruleVersion: book.ruleVersion ?? null,
+    locatorVersion: book.locatorVersion ?? null,
+    normalizationRunId: book.normalizationRunId ?? null,
+    normalizationVersionStatus: book.normalizationVersionStatus ?? null,
+    needsRenormalization: !!book.needsRenormalization,
+    normalizedArtifactPath: book.normalizedArtifactPath ?? null,
+    summary: book.summary === true,
+    isDefault: !!book.isDefault,
+  };
+};
 
 /** v2 books 응답 정규화 (목록·상세) */
 const normalizeV2Book = (book) => {
@@ -48,6 +69,17 @@ const normalizeV2Book = (book) => {
     ...normalizeBookCore(book),
     updatedAt: book.updatedAt ?? null,
     isFavorite: !!book.isFavorite,
+  };
+};
+
+/** manifest result.book 정규화 */
+export const normalizeManifestBook = (book) => {
+  if (!book || typeof book !== 'object') return book;
+  return {
+    ...book,
+    ...normalizeBookCore(book),
+    summaryUrl:
+      book.summaryUrl != null ? sanitizeAssetUrl(String(book.summaryUrl)) : undefined,
   };
 };
 

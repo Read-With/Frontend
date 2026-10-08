@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import PropTypes from "prop-types";
 import cytoscape from "cytoscape";
 import { UserSearch } from "lucide-react";
 import {
@@ -41,7 +42,7 @@ import {
 } from '../../hooks/graph/useGraphCy.js';
 import { useRefSlot } from '../../hooks/common/hooksShared.js';
 import { eventUtils } from "../../utils/viewer/viewerCore";
-import { errorUtils } from "../../utils/common/valueUtils";
+import { errorUtils } from "../../utils/common/urlUtils";
 
 const ZOOM_CONTROL_BUTTONS = [
   { factor: GRAPH_ZOOM.STEP, label: '그래프 확대', title: '확대', text: '+' },
@@ -77,6 +78,11 @@ function GraphZoomControls({ cy, className = 'graph-zoom-controls' }) {
     </div>
   );
 }
+
+GraphZoomControls.propTypes = {
+  cy: PropTypes.object,
+  className: PropTypes.string,
+};
 
 const EMPTY_ELEMENTS_UPDATE = {
   nodesToAdd: [],
@@ -681,6 +687,58 @@ const CytoscapeGraphUnified = ({
       <GraphZoomControls cy={showZoomControls ? cy : null} />
     </div>
   );
+};
+
+const elementShape = PropTypes.shape({
+  data: PropTypes.shape({
+    id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
+    source: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+    target: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+    label: PropTypes.string,
+    weight: PropTypes.number,
+  }),
+  position: PropTypes.shape({
+    x: PropTypes.number,
+    y: PropTypes.number,
+  }),
+  classes: PropTypes.string,
+});
+
+CytoscapeGraphUnified.propTypes = {
+  elements: PropTypes.arrayOf(elementShape).isRequired,
+  stylesheet: PropTypes.arrayOf(PropTypes.object),
+  fitNodeIds: PropTypes.arrayOf(PropTypes.oneOfType([PropTypes.string, PropTypes.number])),
+  cyRef: PropTypes.shape({
+    current: PropTypes.object,
+  }).isRequired,
+  searchTerm: PropTypes.string,
+  isSearchActive: PropTypes.bool,
+  filteredElements: PropTypes.arrayOf(elementShape),
+  onShowNodeTooltip: PropTypes.func,
+  onShowEdgeTooltip: PropTypes.func,
+  onClearTooltip: PropTypes.func,
+  selectedElementRef: PropTypes.shape({
+    current: PropTypes.oneOfType([
+      PropTypes.oneOf([null]),
+      PropTypes.shape({
+        kind: PropTypes.oneOf(['node', 'edge']),
+        id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+      }),
+    ]),
+  }),
+  graphClearRef: PropTypes.shape({
+    current: PropTypes.func,
+  }),
+  graphSelectNodeRef: PropTypes.shape({
+    current: PropTypes.func,
+  }),
+  graphSelectElementRef: PropTypes.shape({
+    current: PropTypes.func,
+  }),
+  isDataRefreshing: PropTypes.bool,
+  showZoomControls: PropTypes.bool,
+  onCyReady: PropTypes.func,
+  viewportFitKey: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
 };
 
 export default CytoscapeGraphUnified;
