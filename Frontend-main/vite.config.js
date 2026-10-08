@@ -50,7 +50,6 @@ export default defineConfig(({ mode }) => {
           manualChunks(id) {
             if (/node_modules\/(react|react-dom|react-router|react-router-dom|scheduler)\//.test(id)) return 'react-vendor';
             if (id.includes('node_modules/@tanstack/react-query/')) return 'query';
-            if (id.includes('node_modules/recharts/')) return 'charts';
             if (id.includes('node_modules/cytoscape')) return 'graph';
           },
         },

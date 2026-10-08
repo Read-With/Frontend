@@ -41,6 +41,7 @@ import {
 import { eventUtils, cacheKeyUtils } from '../viewer/viewerCore';
 import {
   deepClone,
+  isPositiveFiniteNumberLiteral,
   resolveChapterIndex,
   toNumberOrNull,
   toPositiveInt,
@@ -195,29 +196,11 @@ function validateAndNormalizeProfileImageUrl(profileImage) {
  * 2. Node weights
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-/** number 리터럴이면서 양의 유한수인지 (문자열 강제 변환 없음) */
-function isPositiveFiniteNumberLiteral(n) {
-  return typeof n === 'number' && Number.isFinite(n) && n > 0;
-}
-
-/**
- * 노드 weight가 양의 유한수인지 검사.
- * @param {*} weight
- * @returns {boolean}
- */
-export function isValidNodeWeight(weight) {
-  return isPositiveFiniteNumberLiteral(weight);
-}
-
-function isValidNodeCount(count) {
-  return isPositiveFiniteNumberLiteral(count);
-}
-
 function isNodeWeightEntryVisible(entry) {
   return Boolean(
     entry &&
-    isValidNodeWeight(entry.weight) &&
-    isValidNodeCount(entry.count)
+    isPositiveFiniteNumberLiteral(entry.weight) &&
+    isPositiveFiniteNumberLiteral(entry.count)
   );
 }
 
@@ -226,14 +209,14 @@ function resolveNodeWeightAndCount(char, previousEntry = null) {
   const hasCountField = typeof char?.count === 'number';
   const rawCount = hasCountField ? char.count : null;
 
-  const weight = isValidNodeWeight(rawWeight)
+  const weight = isPositiveFiniteNumberLiteral(rawWeight)
     ? rawWeight
-    : (previousEntry && isValidNodeWeight(previousEntry.weight) ? previousEntry.weight : null);
+    : (previousEntry && isPositiveFiniteNumberLiteral(previousEntry.weight) ? previousEntry.weight : null);
 
   let count = null;
   if (hasCountField) {
-    count = isValidNodeCount(rawCount) ? rawCount : null;
-  } else if (previousEntry && isValidNodeCount(previousEntry.count)) {
+    count = isPositiveFiniteNumberLiteral(rawCount) ? rawCount : null;
+  } else if (previousEntry && isPositiveFiniteNumberLiteral(previousEntry.count)) {
     count = previousEntry.count;
   }
 
@@ -257,13 +240,13 @@ function mergeCharacterRecord(prev, char) {
   const merged = { ...prev, ...filled };
   const { weight, count } = resolveNodeWeightAndCount(merged, prev);
 
-  if (isValidNodeWeight(weight)) {
+  if (isPositiveFiniteNumberLiteral(weight)) {
     merged.weight = weight;
   } else {
     delete merged.weight;
   }
 
-  if (isValidNodeCount(count)) {
+  if (isPositiveFiniteNumberLiteral(count)) {
     merged.count = count;
   } else if (typeof merged.count !== 'number') {
     delete merged.count;
@@ -345,7 +328,7 @@ export function buildNodeWeights(characters, previousNodeWeights = null) {
     const previousEntry = nodeWeights[id] ?? null;
     const { weight, count } = resolveNodeWeightAndCount(char, previousEntry);
 
-    if (isValidNodeWeight(weight) && isValidNodeCount(count)) {
+    if (isPositiveFiniteNumberLiteral(weight) && isPositiveFiniteNumberLiteral(count)) {
       nodeWeights[id] = { weight, count };
     } else {
       delete nodeWeights[id];

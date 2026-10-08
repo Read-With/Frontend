@@ -178,6 +178,10 @@ export const resolvePositiveBookId = (...candidates) => {
   return null;
 };
 
+/** number 리터럴이면서 양의 유한수인지 (문자열 강제 변환 없음) */
+export const isPositiveFiniteNumberLiteral = (n) =>
+  typeof n === 'number' && Number.isFinite(n) && n > 0;
+
 const isPositiveFiniteNumber = (value) => {
   const num = toNumberOrNull(value);
   return num !== null && num > 0;

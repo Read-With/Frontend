@@ -1,11 +1,8 @@
 /** Cytoscape 스타일시트·레이아웃·노드 크기·긍정성 색/라벨 */
 
-import { clampPositivity } from '../common/valueUtils';
+import { clampPositivity, isPositiveFiniteNumberLiteral } from '../common/valueUtils';
 
-// graphModel.isValidNodeWeight와 동일. import하면 graphModel 전체가 메인 번들에 실려 복제함.
-const isValidNodeWeight = (w) => typeof w === 'number' && Number.isFinite(w) && w > 0;
-
-// styles.js가 이 모듈을 re-export하므로 styles.js를 import하지 않는다.
+// styles.js가 이 모듈을 import하므로 styles.js를 import하지 않는다 (순환 방지).
 
 export { clampPositivity };
 
@@ -83,13 +80,13 @@ export function getResponsiveNodeSizeRange(containerWidth) {
 }
 
 function computeWeightRange(weights) {
-  const valid = (Array.isArray(weights) ? weights : []).filter(isValidNodeWeight);
+  const valid = (Array.isArray(weights) ? weights : []).filter(isPositiveFiniteNumberLiteral);
   if (valid.length === 0) return { min: 0, max: 0 };
   return { min: Math.min(...valid), max: Math.max(...valid) };
 }
 
 function normalizeWeightToUnit(weight, minWeight, maxWeight) {
-  if (!isValidNodeWeight(weight)) return 0;
+  if (!isPositiveFiniteNumberLiteral(weight)) return 0;
   if (typeof minWeight !== 'number' || typeof maxWeight !== 'number') return 0;
   if (minWeight >= maxWeight) return 1;
   return (weight - minWeight) / (maxWeight - minWeight);
