@@ -1,0 +1,15 @@
+# Render 무료 플랜은 15분 무요청 시 슬립(콜드 스타트 50~90초) → 주기적으로 /health 핑
+# ponytail: GitHub 스케줄은 수 분씩 밀릴 수 있음. 그래도 슬립되면 UptimeRobot(5분 간격)으로 교체
+name: Keep backend warm
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - run: curl -fsS -m 120 -o /dev/null -w "%{http_code} %{time_total}s\n" https://readwith-be.onrender.com/health
