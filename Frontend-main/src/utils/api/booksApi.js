@@ -27,10 +27,10 @@ import {
   removeProgressFromCache,
   getProgressFromCache,
   ensureProgressRowLocator,
+  normalizeReadingProgressPercent,
 } from '../common/cache/progressCache';
 import { setManifestData, getManifestFromCache } from '../common/cache/manifestCache';
 import { normalizeBookCore } from '../common/bookNormalize';
-import { normalizeReadingProgressPercent } from '../viewer/viewerSession';
 import { getStoredAccessToken } from '../security/authTokenStorage';
 import {
   DEFAULT_BOOKMARK_COLOR,

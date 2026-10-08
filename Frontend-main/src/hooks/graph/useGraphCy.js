@@ -10,7 +10,6 @@ import {
   useRef,
   useState,
 } from 'react';
-import PropTypes from 'prop-types';
 import {
   applySelectionHighlight,
   buildTapShowArgs,
@@ -985,16 +984,3 @@ export function GraphA11yStatus({
     ),
   );
 }
-
-GraphA11yStatus.propTypes = {
-  id: PropTypes.string,
-  chapterLabel: PropTypes.string,
-  eventNum: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
-  elements: PropTypes.array,
-  filterStage: PropTypes.number,
-  isSearchActive: PropTypes.bool,
-  searchTerm: PropTypes.string,
-  activeTooltip: PropTypes.object,
-  isLoading: PropTypes.bool,
-  liveAnnouncement: PropTypes.string,
-};

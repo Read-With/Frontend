@@ -1,5 +1,4 @@
 import { memo, useState, useEffect, useMemo } from "react";
-import PropTypes from "prop-types";
 import {ResponsiveContainer, LineChart, CartesianGrid, ReferenceLine, Tooltip as RechartsTooltip, Line, XAxis, YAxis,} from "recharts";
 import { useParams } from "react-router-dom";
 import { useTooltipPosition, useClickOutside, useCanvasAvoidPoint } from "../../hooks/ui/tooltipHooks";
@@ -601,25 +600,6 @@ function UnifiedEdgeTooltip({
     </div>
   );
 }
-
-const endpointShape = PropTypes.shape({
-  label: PropTypes.string,
-  image: PropTypes.string,
-});
-
-UnifiedEdgeTooltip.propTypes = {
-  data: PropTypes.object.isRequired,
-  x: PropTypes.number,
-  y: PropTypes.number,
-  onClose: PropTypes.func,
-  variant: PropTypes.oneOf(['graphPage', 'viewer']),
-  currentChapter: PropTypes.number,
-  eventNum: PropTypes.number,
-  bookId: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
-  sourceEndpoint: endpointShape,
-  targetEndpoint: endpointShape,
-  tooltipBoundsRef: PropTypes.shape({ current: PropTypes.any }),
-};
 
 export default memo(UnifiedEdgeTooltip, (prevProps, nextProps) => {
   return (

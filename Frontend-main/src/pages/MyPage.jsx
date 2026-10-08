@@ -5,12 +5,11 @@ import BookLibrary from '../components/library/BookLibrary';
 import FileUpload from '../components/library/FileUpload';
 import { useBooks } from '../hooks/books/bookHooks';
 import useAuth from '../hooks/auth/useAuth';
+import { useModalFocusTrap } from '../hooks/common/hooksShared';
 import { EPUB_FILE_CONSTRAINTS } from '../utils/library/libraryUtils';
 import './MyPage.css';
 
 const MAX_EPUB_MB = Math.round(EPUB_FILE_CONSTRAINTS.MAX_SIZE / (1024 * 1024));
-const FOCUSABLE_SELECTOR =
-  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 const SORT_OPTIONS = [
   { value: 'recent', label: '최근 추가순' },
@@ -47,61 +46,16 @@ function LogoutConfirmDialog({ open, onConfirm, onCancel }) {
   const titleId = useId();
   const descId = useId();
   const dialogRef = useRef(null);
-  const previouslyFocusedRef = useRef(null);
+
+  useModalFocusTrap(open, dialogRef, onCancel);
 
   useEffect(() => {
     if (!open) return undefined;
-
-    previouslyFocusedRef.current = document.activeElement;
-    const dialog = dialogRef.current;
-    if (!dialog) return undefined;
-
-    const getFocusable = () =>
-      Array.from(dialog.querySelectorAll(FOCUSABLE_SELECTOR)).filter(
-        (el) => el.offsetParent !== null || el === document.activeElement
-      );
-
-    const focusable = getFocusable();
-    (focusable[0] || dialog).focus();
     document.body.style.overflow = 'hidden';
-
-    const onKeyDown = (event) => {
-      if (event.key === 'Escape') {
-        event.stopPropagation();
-        onCancel();
-        return;
-      }
-      if (event.key !== 'Tab') return;
-
-      const items = getFocusable();
-      if (items.length === 0) {
-        event.preventDefault();
-        dialog.focus();
-        return;
-      }
-
-      const first = items[0];
-      const last = items[items.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-
-    document.addEventListener('keydown', onKeyDown);
-
     return () => {
-      document.removeEventListener('keydown', onKeyDown);
       document.body.style.overflow = '';
-      const prev = previouslyFocusedRef.current;
-      if (prev && typeof prev.focus === 'function') {
-        prev.focus();
-      }
     };
-  }, [open, onCancel]);
+  }, [open]);
 
   if (!open) return null;
 

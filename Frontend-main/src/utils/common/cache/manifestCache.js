@@ -9,13 +9,9 @@ import {
 } from '../valueUtils';
 import { eventUtils } from '../../viewer/viewerCore';
 import {
-  registerCache,
-  getCacheItem,
-  setCacheItem,
-  removeCacheItem,
+  setBounded,
   loadFromStorage,
   saveToStorage,
-  removeFromStorage,
   MANIFEST_CACHE_PREFIX,
   MANIFEST_TTL_MS,
 } from './cacheManager';
@@ -275,11 +271,7 @@ function migrateLegacyManifestStorage() {
 migrateLegacyManifestStorage();
 
 const manifestCache = new Map();
-registerCache('manifestCache', manifestCache, {
-  maxSize: 100,
-  ttl: MANIFEST_TTL_MS,
-  cleanupInterval: 300000,
-});
+const MANIFEST_MEMORY_MAX = 100;
 
 const prefetchPromises = new Map();
 
@@ -601,7 +593,7 @@ export const setManifestData = (bookId, manifestData, { persist = true } = {}) =
       timestamp: Date.now(),
     };
 
-    setCacheItem('manifestCache', String(bookId), payload);
+    setBounded(manifestCache, String(bookId), payload, MANIFEST_MEMORY_MAX);
 
     if (persist) {
       saveToStorage(cacheKey, payload, 'localStorage');
@@ -618,7 +610,7 @@ export const getManifestFromCache = (bookId) => {
   if (!bookId) return null;
 
   const key = String(bookId);
-  const cachedInMemory = getCacheItem('manifestCache', key);
+  const cachedInMemory = manifestCache.get(key);
   if (cachedInMemory && !isExpired(cachedInMemory.timestamp)) {
     return normalizeManifestData(cachedInMemory.data);
   }
@@ -626,7 +618,7 @@ export const getManifestFromCache = (bookId) => {
   const cacheKey = getManifestCacheKey(bookId);
   const fromStorage = loadFromStorage(cacheKey, 'localStorage');
   if (fromStorage && !isExpired(fromStorage.timestamp)) {
-    setCacheItem('manifestCache', key, fromStorage);
+    setBounded(manifestCache, key, fromStorage, MANIFEST_MEMORY_MAX);
     return normalizeManifestData(fromStorage.data);
   }
 
@@ -635,7 +627,7 @@ export const getManifestFromCache = (bookId) => {
 
 const hasManifestData = (bookId) => {
   const key = String(bookId);
-  const cachedInMemory = getCacheItem('manifestCache', key);
+  const cachedInMemory = manifestCache.get(key);
   if (cachedInMemory && !isExpired(cachedInMemory.timestamp)) {
     return true;
   }
@@ -643,18 +635,6 @@ const hasManifestData = (bookId) => {
   const cacheKey = getManifestCacheKey(bookId);
   const fromStorage = loadFromStorage(cacheKey, 'localStorage');
   return !!(fromStorage && !isExpired(fromStorage.timestamp) && fromStorage.data);
-};
-
-export const invalidateManifest = (bookId) => {
-  if (!bookId) return;
-  const key = String(bookId);
-  removeCacheItem('manifestCache', key);
-  const cacheKey = getManifestCacheKey(bookId);
-  removeFromStorage(cacheKey, 'localStorage');
-  // viewerLocator imports manifestCache — dynamic import로 순환 방지
-  void import('../../viewer/viewerLocator')
-    .then((m) => m.invalidateCachedXhtml(bookId))
-    .catch(() => {});
 };
 
 export const prefetchManifest = async (bookId, fetcher) => {

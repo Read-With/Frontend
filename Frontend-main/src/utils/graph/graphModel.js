@@ -60,12 +60,10 @@ import {
   listBookManifestEventIds,
 } from '../common/cache/manifestCache';
 import {
-  registerCache,
-  getCacheItem,
-  setCacheItem,
+  setBounded,
+  loadFromStorage,
   loadTtlStorage,
   saveTtlStorage,
-  hydrateCacheFromStorage,
   GRAPH_BOOK_CACHE_PREFIX,
   CHAPTER_EVENT_CACHE_MAX_AGE_MS,
   CHAPTER_EVENT_CACHE_PREFIX,
@@ -1795,11 +1793,7 @@ export const reconstructChapterGraphState = (cachePayload, targetEventIdx) => {
 };
 
 const graphBookMemoryCache = new Map();
-registerCache('graphBookCache', graphBookMemoryCache, {
-  maxSize: 50,
-  ttl: null,
-  cleanupInterval: 3600000,
-});
+const GRAPH_BOOK_MEMORY_MAX = 50;
 
 const graphBuildPromises = new Map();
 const chapterDiscoverPromises = new Map();
@@ -1816,11 +1810,13 @@ const readGraphBookCache = (bookId) => {
   const key = getGraphBookCacheKey(bookId);
   if (!key) return null;
 
-  const cached = getCacheItem('graphBookCache', key);
+  const cached = graphBookMemoryCache.get(key);
   if (cached) return cached;
 
   try {
-    return hydrateCacheFromStorage('graphBookCache', key, 'localStorage');
+    const stored = loadFromStorage(key, 'localStorage');
+    if (stored) setBounded(graphBookMemoryCache, key, stored, GRAPH_BOOK_MEMORY_MAX);
+    return stored;
   } catch (error) {
     errorUtils.logDebug('graphModel', '그래프 책 캐시 로드 실패', { message: error?.message });
     return null;
@@ -1838,7 +1834,7 @@ const writeGraphBookCache = (bookId, payload) => {
     timestamp: Date.now(),
   };
 
-  setCacheItem('graphBookCache', key, normalized);
+  setBounded(graphBookMemoryCache, key, normalized, GRAPH_BOOK_MEMORY_MAX);
   saveTtlStorage(key, normalized, 'localStorage');
 
   return normalized;

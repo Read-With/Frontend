@@ -13,10 +13,9 @@ import {
   progressResultToViewerAnchor,
 } from '../valueUtils';
 import {
-  registerCache,
-  getCacheItem,
-  setCacheItem,
-  removeCacheItem,
+  setBounded,
+  loadFromStorage,
+  saveToStorage,
   removeFromStorage,
   loadTtlStorage,
   PROGRESS_CACHE_KEY,
@@ -99,7 +98,7 @@ const progressPercentFromData = (data, options, pickValue) => {
   return value != null ? clampPercent(value) : null;
 };
 
-const normalizeReadingProgressPercent = (data, options = {}) =>
+export const normalizeReadingProgressPercent = (data, options = {}) =>
   progressPercentFromData(data, options, (bookId, locator) =>
     readingProgressPercentFromLocator(bookId, locator)
   );
@@ -110,7 +109,7 @@ const normalizeChapterProgressPercent = (data, options = {}) =>
     return metrics?.chapterProgress ?? null;
   });
 
-const resolveProgressEventName = (source) => {
+export const resolveProgressEventName = (source) => {
   if (!source || typeof source !== 'object') return '';
   const name =
     source.eventName ??
@@ -126,15 +125,28 @@ const resolveProgressEventName = (source) => {
 
 export const PROGRESS_CACHE_UPDATED_EVENT = 'readwith:progress-cache-updated';
 
-const progressCache = new Map();
-registerCache('progressCache', progressCache, {
-  maxSize: 1000,
-  ttl: PROGRESS_CACHE_TTL_MS,
-  cleanupInterval: 3600000,
-  storageKey: PROGRESS_CACHE_KEY,
-  storageType: 'localStorage',
-  persist: true,
-});
+const PROGRESS_CACHE_MAX = 1000;
+const isProgressExpired = (entry) =>
+  !!entry?.timestamp && Date.now() - entry.timestamp > PROGRESS_CACHE_TTL_MS;
+
+const progressCache = new Map(
+  Object.entries(loadFromStorage(PROGRESS_CACHE_KEY)?.data ?? {}).filter(
+    ([, entry]) => !isProgressExpired(entry)
+  )
+);
+
+const persistProgressCache = () =>
+  saveToStorage(PROGRESS_CACHE_KEY, { data: Object.fromEntries(progressCache), timestamp: Date.now() });
+
+const setProgressEntry = (bookId, entry) => {
+  setBounded(progressCache, bookId, { ...entry, timestamp: entry.timestamp || Date.now() }, PROGRESS_CACHE_MAX);
+  persistProgressCache();
+};
+
+const removeProgressEntry = (bookId) => {
+  progressCache.delete(bookId);
+  persistProgressCache();
+};
 
 function migrateLegacyProgressAggregate() {
   const allEntry = progressCache.get('all');
@@ -143,13 +155,10 @@ function migrateLegacyProgressAggregate() {
   for (const [bookId, row] of Object.entries(allEntry.data)) {
     if (!row || row.bookId == null) continue;
     if (!progressCache.has(bookId)) {
-      setCacheItem('progressCache', bookId, {
-        ...row,
-        timestamp: row.timestamp || Date.now(),
-      });
+      setProgressEntry(bookId, row);
     }
   }
-  removeCacheItem('progressCache', 'all');
+  removeProgressEntry('all');
 }
 
 migrateLegacyProgressAggregate();
@@ -371,21 +380,22 @@ export const setProgressToCache = (progressData) => {
     return;
   }
 
-  setCacheItem('progressCache', bookIdStr, progress);
+  setProgressEntry(bookIdStr, progress);
   dispatchProgressCacheUpdated(progressData.bookId);
 };
 
 export const getProgressFromCache = (bookId) => {
   if (!bookId) return null;
   const bookIdStr = toStringOrNull(bookId);
-  const cached = getCacheItem('progressCache', bookIdStr);
+  const cached = progressCache.get(bookIdStr);
+  if (isProgressExpired(cached)) return null;
   return fromStoredProgress(cached);
 };
 
 export const removeProgressFromCache = (bookId) => {
   if (!bookId) return;
   const bookIdStr = toStringOrNull(bookId);
-  removeCacheItem('progressCache', bookIdStr);
+  removeProgressEntry(bookIdStr);
   const storageKey = getReaderProgressStorageKey(bookIdStr);
   if (storageKey) removeFromStorage(storageKey, 'localStorage');
   dispatchProgressCacheUpdated(bookIdStr);

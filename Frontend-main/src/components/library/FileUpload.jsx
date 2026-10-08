@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import PropTypes from 'prop-types';
 import { Upload, X, Loader2 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { getBooksArray, getBook, uploadBook } from '../../utils/api/booksApi';
@@ -341,11 +340,6 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
       </div>
     </div>
   );
-};
-
-FileUpload.propTypes = {
-  onUploadSuccess: PropTypes.func.isRequired,
-  onClose: PropTypes.func.isRequired,
 };
 
 export default FileUpload;

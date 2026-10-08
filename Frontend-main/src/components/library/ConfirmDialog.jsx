@@ -1,5 +1,4 @@
 import { useEffect, useId, useRef } from 'react';
-import PropTypes from 'prop-types';
 import { X } from 'lucide-react';
 import { attachLibraryModalChrome } from '../../utils/library/libraryUtils';
 import { useModalFocusTrap } from '../../hooks/common/hooksShared';
@@ -78,17 +77,6 @@ const ConfirmDialog = ({
       </div>
     </div>
   );
-};
-
-ConfirmDialog.propTypes = {
-  isOpen: PropTypes.bool.isRequired,
-  title: PropTypes.string.isRequired,
-  message: PropTypes.string.isRequired,
-  confirmLabel: PropTypes.string,
-  cancelLabel: PropTypes.string,
-  onClose: PropTypes.func.isRequired,
-  onConfirm: PropTypes.func.isRequired,
-  manageChrome: PropTypes.bool,
 };
 
 export default ConfirmDialog;

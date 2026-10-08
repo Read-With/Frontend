@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react';
-import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { Heart, BookOpen, Network, MoreVertical, Info, Clock, Trash2 } from 'lucide-react';
@@ -309,26 +308,6 @@ const BookCard = memo(({ book, onToggleFavorite, onOpenBook, onBookDetailClick, 
 
 BookCard.displayName = 'BookCard';
 
-const bookShape = PropTypes.shape({
-  id: PropTypes.oneOfType([PropTypes.number, PropTypes.string]).isRequired,
-  title: PropTypes.string.isRequired,
-  author: PropTypes.string.isRequired,
-  coverImgUrl: PropTypes.string,
-  isFavorite: PropTypes.bool,
-  progress: PropTypes.number,
-  updatedAt: PropTypes.string
-});
-
-BookCard.propTypes = {
-  book: bookShape.isRequired,
-  onToggleFavorite: PropTypes.func,
-  onOpenBook: PropTypes.func,
-  onBookDetailClick: PropTypes.func,
-  onShowDeleteModal: PropTypes.func,
-  viewMode: PropTypes.oneOf(['grid', 'list']),
-  openingMode: PropTypes.oneOf(['viewer', 'graph'])
-};
-
 const BookLibrary = memo(({ books, onToggleFavorite, onBookDelete, viewMode = 'grid' }) => {
   const navigate = useNavigate();
   const [selectedBook, setSelectedBook] = useState(null);
@@ -493,13 +472,6 @@ const BookLibrary = memo(({ books, onToggleFavorite, onBookDelete, viewMode = 'g
     </>
   );
 });
-
-BookLibrary.propTypes = {
-  books: PropTypes.arrayOf(bookShape).isRequired,
-  onToggleFavorite: PropTypes.func,
-  onBookDelete: PropTypes.func,
-  viewMode: PropTypes.oneOf(['grid', 'list'])
-};
 
 BookLibrary.displayName = 'BookLibrary';
 

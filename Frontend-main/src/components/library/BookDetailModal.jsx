@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo, useCallback, useRef, memo } from 'react';
-import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { getBookManifest, getBookProgress, deleteBookProgress } from '../../utils/api/booksApi';
@@ -95,15 +94,6 @@ export function AuthenticatedImage({
     />
   );
 }
-
-AuthenticatedImage.propTypes = {
-  src: PropTypes.string,
-  alt: PropTypes.string,
-  className: PropTypes.string,
-  fallback: PropTypes.node,
-  onError: PropTypes.func,
-  onLoad: PropTypes.func,
-};
 
 function mergeBookWithManifest(book, manifestData) {
   const manifest = manifestData.result;
@@ -823,14 +813,6 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
     </>
   );
 });
-
-BookDetailModal.propTypes = {
-  book: PropTypes.object,
-  isOpen: PropTypes.bool.isRequired,
-  onClose: PropTypes.func.isRequired,
-  onDelete: PropTypes.func,
-  viewMode: PropTypes.oneOf(['grid', 'list']),
-};
 
 BookDetailModal.displayName = 'BookDetailModal';
 

@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo, useCallback, memo, useRef } from 'react';
-import PropTypes from 'prop-types';
 import { toast } from 'react-toastify';
 import ViewerToolbar from './ViewerToolbar';
 import { useIsNarrowViewport } from '../../hooks/common/hooksShared';
@@ -67,16 +66,6 @@ const ViewerProgressBar = memo(function ViewerProgressBar({
     </div>
   );
 });
-
-ViewerProgressBar.propTypes = {
-  showToolbar: PropTypes.bool.isRequired,
-  progress: PropTypes.number,
-  onSliderChange: PropTypes.func,
-  currentChapter: PropTypes.number,
-  currentPage: PropTypes.number,
-  totalPages: PropTypes.number,
-  progressMetricsReady: PropTypes.bool,
-};
 
 function ViewerLayout({
   children,
@@ -361,30 +350,5 @@ function ViewerLayout({
     </div>
   );
 }
-
-ViewerLayout.propTypes = {
-  children: PropTypes.node,
-  currentChapter: PropTypes.number,
-  progress: PropTypes.number,
-  progressMetricsReady: PropTypes.bool,
-  showToolbar: PropTypes.bool.isRequired,
-  onPrev: PropTypes.func,
-  onNext: PropTypes.func,
-  isBookmarked: PropTypes.bool,
-  onAddBookmark: PropTypes.func,
-  onToggleBookmarkList: PropTypes.func,
-  onOpenSettings: PropTypes.func,
-  onSliderChange: PropTypes.func,
-  currentPage: PropTypes.number,
-  totalPages: PropTypes.number,
-  showGraph: PropTypes.bool,
-  onToggleGraph: PropTypes.func,
-  rightSideContent: PropTypes.node,
-  graphFullScreen: PropTypes.bool,
-  isFromLibrary: PropTypes.bool,
-  previousPage: PropTypes.object,
-  onExitToMypage: PropTypes.func,
-  onViewerLayoutSettled: PropTypes.func,
-};
 
 export default ViewerLayout;
