@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
+import PropTypes from 'prop-types';
 import { Upload, X, Loader2 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { getBooksArray, getBook, uploadBook } from '../../utils/api/booksApi';
+import { errorUtils } from '../../utils/common/urlUtils';
 import {
   extractEpubFileMetadata,
   epubUploadBasename,
@@ -9,7 +11,7 @@ import {
   validateEpubFile,
   attachLibraryModalChrome,
 } from '../../utils/library/libraryUtils';
-import { normalizeTitle, normalizeAuthor, errorUtils } from '../../utils/common/valueUtils';
+import { normalizeTitle, normalizeAuthor } from '../../utils/common/valueUtils';
 import { findCanonicalBook } from '../../hooks/books/bookHooks';
 import { useModalFocusTrap, useAsyncRequestGuard, useMountedRef } from '../../hooks/common/hooksShared';
 import './LibraryModalChrome.css';
@@ -30,20 +32,6 @@ function withMetadataTimeout(promise, ms = METADATA_EXTRACT_TIMEOUT_MS) {
     timeoutId = setTimeout(() => reject(new Error('Metadata extraction timeout')), ms);
   });
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timeoutId));
-}
-
-/** 서버 원문 에러 대신 상태별 안내 — 원문은 logError로만 남긴다 */
-function uploadErrorMessage(error) {
-  const status = Number(error?.status);
-  if (status === 413) return `파일이 너무 큽니다. ${MAX_MB}MB 이하의 EPUB 파일을 선택해 주세요.`;
-  if (status === 400 || status === 415 || status === 422) {
-    return 'EPUB 파일을 처리할 수 없습니다. 파일이 손상되지 않았는지 확인해 주세요.';
-  }
-  // getUserFriendlyMessage는 모르는 상태에서 원문을 돌려주므로 아는 경우만 위임
-  if ([401, 403, 500, 502, 503].includes(status) || errorUtils.isNetworkError(error)) {
-    return errorUtils.getUserFriendlyMessage(error);
-  }
-  return '업로드에 실패했습니다. 잠시 후 다시 시도해 주세요.';
 }
 
 const FileUpload = ({ onUploadSuccess, onClose }) => {
@@ -108,6 +96,9 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
   const resolveServerBook = async () => {
     const titleKey = normalizeTitle(metadata.title || '');
     const authorKey = normalizeAuthor(metadata.author || '');
+    if (!titleKey || !authorKey) {
+      throw new Error('제목과 저자를 확인해주세요.');
+    }
 
     const books = await getBooksArray();
 
@@ -153,7 +144,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
         status: error?.status ?? null,
         code: error?.code ?? null,
       });
-      toast.error(uploadErrorMessage(error));
+      toast.error(`업로드 처리 중 오류가 발생했습니다: ${error.message}`);
     } finally {
       uploadingRef.current = false;
       if (mountedRef.current) setUploading(false);
@@ -350,6 +341,11 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
       </div>
     </div>
   );
+};
+
+FileUpload.propTypes = {
+  onUploadSuccess: PropTypes.func.isRequired,
+  onClose: PropTypes.func.isRequired,
 };
 
 export default FileUpload;

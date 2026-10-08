@@ -8,7 +8,8 @@ import {
   useCallback,
   useMemo,
 } from 'react';
-import { errorUtils } from '../../utils/common/valueUtils';
+import PropTypes from 'prop-types';
+import { errorUtils } from '../../utils/common/urlUtils';
 import {
   absoluteOffsetFromReadingProgressPercent,
   locatorFromBookAbsoluteOffset,
@@ -17,7 +18,6 @@ import {
 import {
   toReadingLocatorKey,
   defaultSettings,
-  viewerFontStack,
 } from '../../utils/viewer/viewerSession';
 import { resolveServerBookIdOrFallback } from '../../hooks/common/hooksShared';
 import { resolveViewerBookKey } from '../../utils/viewer/viewerCore';
@@ -31,6 +31,7 @@ import {
   resolvePageIndexFromLocator,
   resolveViewportLocatorEmit,
   loadCachedXhtmlContent,
+  XHTML_CACHE_INVALIDATED_EVENT,
 } from '../../utils/viewer/viewerLocator';
 import './XhtmlViewer.css';
 
@@ -50,7 +51,7 @@ const XhtmlViewer = forwardRef(
       manifestReady = true,
       /** resume 점프 전 본문 깜빡임 방지(레이아웃·ruler는 유지) */
       suppressViewport = false,
-      suppressMessage = '로딩 중…',
+      suppressMessage = '로딩 중...',
       onToggleChrome = null,
     },
     ref
@@ -66,6 +67,7 @@ const XhtmlViewer = forwardRef(
     const [pageHeight, setPageHeight] = useState(0);
     const [contentHeight, setContentHeight] = useState(0);
     const [currentPageIndex, setCurrentPageIndex] = useState(0);
+    const [reloadNonce, setReloadNonce] = useState(0);
     const touchStartX = useRef(0);
     const touchStartY = useRef(0);
     const suppressClickRef = useRef(false);
@@ -113,8 +115,6 @@ const XhtmlViewer = forwardRef(
 
     const currentSnap = useMemo(
       () => getSnappedOffsetAndHeight(safePageIndex, pageHeight || 1),
-      // lineBoundsVersion: getSnappedOffsetAndHeight가 ref로 읽는 줄 경계가 바뀌면 재계산
-      // eslint-disable-next-line react-hooks/exhaustive-deps
       [getSnappedOffsetAndHeight, safePageIndex, pageHeight, lineBoundsVersion]
     );
 
@@ -190,6 +190,16 @@ const XhtmlViewer = forwardRef(
     );
 
     useEffect(() => {
+      if (!bid || typeof window === 'undefined') return undefined;
+      const onInvalidate = (e) => {
+        if (String(e?.detail?.bookId) !== String(bid)) return;
+        setReloadNonce((n) => n + 1);
+      };
+      window.addEventListener(XHTML_CACHE_INVALIDATED_EVENT, onInvalidate);
+      return () => window.removeEventListener(XHTML_CACHE_INVALIDATED_EVENT, onInvalidate);
+    }, [bid]);
+
+    useEffect(() => {
       let cancelled = false;
       const load = async () => {
         if (!bid) {
@@ -223,7 +233,7 @@ const XhtmlViewer = forwardRef(
       };
       load();
       return () => { cancelled = true; };
-    }, [bid, manifestReady]);
+    }, [bid, manifestReady, reloadNonce]);
 
     useEffect(() => {
       const container = containerRef.current;
@@ -468,7 +478,7 @@ const XhtmlViewer = forwardRef(
     if (loading) {
       return (
         <div className="xhtml-viewer-status" role="status" aria-live="polite">
-          로딩 중…
+          로딩 중...
         </div>
       );
     }
@@ -507,7 +517,7 @@ const XhtmlViewer = forwardRef(
             padding-bottom: ${contentPadding.paddingBottom}px;
             font-size: ${baseFontSize}%;
             line-height: ${lineHeight};
-            font-family: ${viewerFontStack(settings?.fontFamily)};
+            font-family: ${settings?.fontFamily || 'Noto Serif KR'}, 'Noto Serif', Georgia, serif;
           }
         `}</style>
         <div ref={rulerRef} className="xhtml-viewer-ruler xhtml-viewer-content" dangerouslySetInnerHTML={contentHtml} aria-hidden />
@@ -531,5 +541,22 @@ const XhtmlViewer = forwardRef(
 );
 
 XhtmlViewer.displayName = 'XhtmlViewer';
+XhtmlViewer.propTypes = {
+  book: PropTypes.object,
+  bookKey: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  onCurrentPageChange: PropTypes.func,
+  onTotalPagesChange: PropTypes.func,
+  onCurrentLineChange: PropTypes.func,
+  settings: PropTypes.shape({
+    fontSize: PropTypes.number,
+    lineHeight: PropTypes.number,
+    fontFamily: PropTypes.string,
+    margin: PropTypes.number,
+  }),
+  manifestReady: PropTypes.bool,
+  suppressViewport: PropTypes.bool,
+  suppressMessage: PropTypes.string,
+  onToggleChrome: PropTypes.func,
+};
 
 export default XhtmlViewer;

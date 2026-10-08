@@ -34,7 +34,7 @@ export const bookmarkToResumeAnchor = (bookmark) =>
   });
 
 /** 북마크 추가 전: 해당 챕터 paragraphStarts가 있어야 서버 offset 검증을 통과함 */
-const isBookmarkAxisReady = (bookId, locator) => {
+export const isBookmarkAxisReady = (bookId, locator) => {
   const loc = toLocator(locator);
   const id = toPositiveNumberOrNull(bookId) ?? bookId;
   if (!loc || id == null || id === '') return false;
@@ -131,7 +131,7 @@ function getBookmarkPositionSortKey(bookmark, bookId = null) {
   return Number.isFinite(o) ? `o_${String(o).padStart(12, '0')}` : '';
 }
 
-const sortBookmarks = (bookmarks, sortOrder, bookId = null) => {
+export const sortBookmarks = (bookmarks, sortOrder, bookId = null) => {
   if (!bookmarks?.length) return [];
   if (sortOrder === 'position') {
     return [...bookmarks].sort((a, b) =>
@@ -230,7 +230,19 @@ export const formatRelativeTime = (value) => {
   return date.toLocaleString('ko-KR', { month: 'short', day: 'numeric' });
 };
 
-const bookmarkColors = {
+export const formatAbsoluteTime = (value) => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString('ko-KR', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
+export const bookmarkColors = {
   normal: '#f4f7ff',
   important: '#fff3c2',
   highlight: '#e0e7ff',
@@ -250,7 +262,7 @@ export const colorOptions = [
   { key: 'highlight', label: '강조', color: bookmarkColors.highlight, border: bookmarkBorders.highlight },
 ];
 
-const normalizeBookmarkColor = (color) => {
+export const normalizeBookmarkColor = (color) => {
   if (typeof color !== 'string') return DEFAULT_BOOKMARK_COLOR;
   const trimmed = color.trim().toLowerCase();
   return trimmed || DEFAULT_BOOKMARK_COLOR;

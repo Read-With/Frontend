@@ -1,23 +1,37 @@
 import { createElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import axios from "axios";
 import { toast } from "react-toastify";
-import { BookOpen, ChevronDown, CloudUpload, Database, LayoutGrid, List, RefreshCw, Trash2, X } from "lucide-react";
-import { errorUtils } from "../utils/common/valueUtils";
-import { authenticatedRequest } from "../utils/api/authApi";
+import { getApiBaseUrl, errorUtils } from "../utils/common/urlUtils";
+import { getStoredAccessToken } from "../utils/security/authTokenStorage";
+import { ensureSessionAccessToken } from "../utils/api/authApi";
 import { AuthenticatedImage } from "../components/library/BookDetailModal";
-import { useModalFocusTrap } from "../hooks/common/hooksShared";
 import "./AdminPage.css";
 
+const API_BASE_URL = `${getApiBaseUrl()}/api/v2/admin`;
 const POLL_INTERVAL_MS = 5000;
 
-// axios 호환 형태({ data })로 감싼 admin API 호출 — 재시도·자체 로그 없이 기존 동작 유지
-const adminRequest = async (method, path, body) => ({
-  data: await authenticatedRequest(`/v2/admin${path}`, { method, body, retry: false, silent: true }),
+const apiClient = axios.create({
+  baseURL: API_BASE_URL,
+  headers: { "Content-Type": "application/json" },
 });
-const apiClient = {
-  get: (path) => adminRequest("GET", path),
-  post: (path, body) => adminRequest("POST", path, body),
-  delete: (path) => adminRequest("DELETE", path),
-};
+
+apiClient.interceptors.request.use(async (config) => {
+  try {
+    await ensureSessionAccessToken();
+  } catch {
+    /* refresh 실패 시 아래 토큰 없이 요청 → 401 */
+  }
+  const token = getStoredAccessToken();
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  if (typeof FormData !== "undefined" && config.data instanceof FormData) {
+    if (config.headers && typeof config.headers.delete === "function") {
+      config.headers.delete("Content-Type");
+    } else if (config.headers) {
+      delete config.headers["Content-Type"];
+    }
+  }
+  return config;
+});
 
 const DELETE_ACTIONS = [
   {
@@ -94,22 +108,59 @@ const LOG_LEVEL_FILTERS = [
   { id: "INFO", label: "INFO" },
 ];
 
-// heroicons 시절 기본값(admin-icon-sm, stroke 1.5) 유지
-const adminIcon = (Icon) => {
-  const AdminIcon = ({ className = "admin-icon-sm", strokeWidth = 1.5 }) =>
-    createElement(Icon, { className, strokeWidth, "aria-hidden": "true" });
-  return AdminIcon;
-};
+const DatabaseIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="admin-icon-sm">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" />
+  </svg>
+);
 
-const DatabaseIcon = adminIcon(Database);
-const UploadIcon = adminIcon(CloudUpload);
-const TrashIcon = adminIcon(Trash2);
-const LayoutDashboardIcon = adminIcon(LayoutGrid);
-const BookIcon = adminIcon(BookOpen);
-const ProcessingIcon = adminIcon(RefreshCw);
-const ListBulletIcon = adminIcon(List);
-const CloseIcon = adminIcon(X);
-const ChevronIcon = adminIcon(ChevronDown);
+const UploadIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="admin-icon-sm">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.233-2.33 3 3 0 013.758 3.848A3.752 3.752 0 0118 19.5H6.75z" />
+  </svg>
+);
+
+const TrashIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="admin-icon-sm">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+  </svg>
+);
+
+const LayoutDashboardIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="admin-icon-sm">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
+  </svg>
+);
+
+const BookIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="admin-icon-sm">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
+  </svg>
+);
+
+const ProcessingIcon = ({ className = "admin-icon-sm", strokeWidth = 1.5 }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={strokeWidth} stroke="currentColor" className={className}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+  </svg>
+);
+
+const ListBulletIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="admin-icon-sm">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+  </svg>
+);
+
+const CloseIcon = ({ className = "admin-icon-sm", strokeWidth = 1.5 }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={strokeWidth} stroke="currentColor" className={className}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+  </svg>
+);
+
+const ChevronIcon = ({ className = "admin-icon-sm", strokeWidth = 1.5 }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={strokeWidth} stroke="currentColor" className={className} aria-hidden="true">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+  </svg>
+);
 
 const toArray = (data) => {
   if (Array.isArray(data)) return data;
@@ -231,6 +282,15 @@ const RefreshButton = ({ onClick, disabled, label = "새로고침" }) => (
   </button>
 );
 
+const getFocusableElements = (panel) =>
+  panel
+    ? Array.from(
+        panel.querySelectorAll(
+          "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])",
+        ),
+      )
+    : [];
+
 const useStableCallback = (fn) => {
   const ref = useRef(fn);
   ref.current = fn;
@@ -239,7 +299,40 @@ const useStableCallback = (fn) => {
 
 const useFocusTrap = ({ open, onClose, loading = false }) => {
   const panelRef = useRef(null);
-  useModalFocusTrap(open, panelRef, loading ? undefined : onClose);
+  const previousFocusRef = useRef(null);
+  const onCloseStable = useStableCallback(onClose);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    previousFocusRef.current = document.activeElement;
+    const panel = panelRef.current;
+    const focusables = getFocusableElements(panel);
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    first?.focus();
+
+    const onKeyDown = (e) => {
+      if (e.key === "Escape" && !loading) {
+        e.preventDefault();
+        onCloseStable();
+        return;
+      }
+      if (e.key !== "Tab" || focusables.length === 0) return;
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last?.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first?.focus();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      if (previousFocusRef.current instanceof HTMLElement) previousFocusRef.current.focus();
+    };
+  }, [open, loading, onCloseStable]);
+
   return panelRef;
 };
 
@@ -276,6 +369,25 @@ const AdminBookCard = ({ book, onSelect }) => {
   );
 };
 
+const Toast = ({ toast, onClose }) => {
+  if (!toast) return null;
+  const isError = toast.type === "error";
+  return (
+    <div className="fixed bottom-6 right-6 z-[110] max-w-sm" role="status" aria-live="polite">
+      <div
+        className={`rounded-lg border px-4 py-3 shadow-lg flex items-start gap-3 ${
+          isError ? "bg-red-50 border-red-200 text-red-800" : "bg-green-50 border-green-200 text-green-800"
+        }`}
+      >
+        <p className="text-sm flex-1">{toast.message}</p>
+        <button type="button" onClick={onClose} className="text-xs font-bold opacity-60 hover:opacity-100" aria-label="닫기">
+          닫기
+        </button>
+      </div>
+    </div>
+  );
+};
+
 const ConfirmModal = ({ open, title, children, confirmLabel, onConfirm, onCancel, loading, danger = true }) => {
   const onCancelStable = useStableCallback(onCancel);
   const onConfirmStable = useStableCallback(onConfirm);
@@ -290,7 +402,6 @@ const ConfirmModal = ({ open, title, children, confirmLabel, onConfirm, onCancel
     >
       <div
         ref={panelRef}
-        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby="admin-confirm-title"
@@ -413,7 +524,6 @@ const ImageZoomModal = ({ src, onClose }) => {
     >
       <div
         ref={panelRef}
-        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-label="인물 이미지 확대"
@@ -454,7 +564,6 @@ const PayloadModal = ({ payload, onClose }) => {
     >
       <div
         ref={panelRef}
-        tabIndex={-1}
         className="bg-white rounded-xl w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden border border-gray-200"
         onClick={(e) => e.stopPropagation()}
         role="dialog"

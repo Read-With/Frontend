@@ -1,18 +1,21 @@
-import { normalizeManifestBook } from '../bookNormalize';
-import { sanitizeAssetUrl } from '../urlUtils';
+import { normalizeManifestBook } from '../../api/booksApi';
+import { sanitizeAssetUrl, errorUtils } from '../urlUtils';
 import {
   toNumberOrNull,
   toOneBasedChapterIndexOrNull,
   toPositiveInt,
   clampPercent,
   toLocator,
-  errorUtils,
 } from '../valueUtils';
 import { eventUtils } from '../../viewer/viewerCore';
 import {
-  setBounded,
+  registerCache,
+  getCacheItem,
+  setCacheItem,
+  removeCacheItem,
   loadFromStorage,
   saveToStorage,
+  removeFromStorage,
   MANIFEST_CACHE_PREFIX,
   MANIFEST_TTL_MS,
 } from './cacheManager';
@@ -272,7 +275,11 @@ function migrateLegacyManifestStorage() {
 migrateLegacyManifestStorage();
 
 const manifestCache = new Map();
-const MANIFEST_MEMORY_MAX = 100;
+registerCache('manifestCache', manifestCache, {
+  maxSize: 100,
+  ttl: MANIFEST_TTL_MS,
+  cleanupInterval: 300000,
+});
 
 const prefetchPromises = new Map();
 
@@ -594,7 +601,7 @@ export const setManifestData = (bookId, manifestData, { persist = true } = {}) =
       timestamp: Date.now(),
     };
 
-    setBounded(manifestCache, String(bookId), payload, MANIFEST_MEMORY_MAX);
+    setCacheItem('manifestCache', String(bookId), payload);
 
     if (persist) {
       saveToStorage(cacheKey, payload, 'localStorage');
@@ -611,7 +618,7 @@ export const getManifestFromCache = (bookId) => {
   if (!bookId) return null;
 
   const key = String(bookId);
-  const cachedInMemory = manifestCache.get(key);
+  const cachedInMemory = getCacheItem('manifestCache', key);
   if (cachedInMemory && !isExpired(cachedInMemory.timestamp)) {
     return normalizeManifestData(cachedInMemory.data);
   }
@@ -619,7 +626,7 @@ export const getManifestFromCache = (bookId) => {
   const cacheKey = getManifestCacheKey(bookId);
   const fromStorage = loadFromStorage(cacheKey, 'localStorage');
   if (fromStorage && !isExpired(fromStorage.timestamp)) {
-    setBounded(manifestCache, key, fromStorage, MANIFEST_MEMORY_MAX);
+    setCacheItem('manifestCache', key, fromStorage);
     return normalizeManifestData(fromStorage.data);
   }
 
@@ -628,7 +635,7 @@ export const getManifestFromCache = (bookId) => {
 
 const hasManifestData = (bookId) => {
   const key = String(bookId);
-  const cachedInMemory = manifestCache.get(key);
+  const cachedInMemory = getCacheItem('manifestCache', key);
   if (cachedInMemory && !isExpired(cachedInMemory.timestamp)) {
     return true;
   }
@@ -636,6 +643,18 @@ const hasManifestData = (bookId) => {
   const cacheKey = getManifestCacheKey(bookId);
   const fromStorage = loadFromStorage(cacheKey, 'localStorage');
   return !!(fromStorage && !isExpired(fromStorage.timestamp) && fromStorage.data);
+};
+
+export const invalidateManifest = (bookId) => {
+  if (!bookId) return;
+  const key = String(bookId);
+  removeCacheItem('manifestCache', key);
+  const cacheKey = getManifestCacheKey(bookId);
+  removeFromStorage(cacheKey, 'localStorage');
+  // viewerLocator imports manifestCache — dynamic import로 순환 방지
+  void import('../../viewer/viewerLocator')
+    .then((m) => m.invalidateCachedXhtml(bookId))
+    .catch(() => {});
 };
 
 export const prefetchManifest = async (bookId, fetcher) => {
@@ -745,6 +764,48 @@ export const getLastManifestEventInChapter = (
     const lastNum = last ? manifestEventIndex(last) : 0;
     return num >= lastNum ? event : last;
   }, null);
+};
+
+/** 챕터 manifest events 중 가장 첫(최소 인덱스) 이벤트 */
+export const getFirstManifestEventInChapter = (
+  bookId,
+  chapterIdx,
+  manifestOverride = undefined
+) => {
+  const chapterData = getChapterData(bookId, chapterIdx, manifestOverride);
+  const events = Array.isArray(chapterData?.events) ? chapterData.events : [];
+  return events.reduce((first, event) => {
+    const num = manifestEventIndex(event);
+    if (!num) return first;
+    const firstNum = first ? manifestEventIndex(first) : Infinity;
+    return num < firstNum ? event : first;
+  }, null);
+};
+
+/** 책 전체 기준 첫 이벤트 (가장 작은 chapterIdx의 첫 이벤트) */
+export const getFirstManifestEventInBook = (bookId, manifestOverride = undefined) => {
+  const manifest = manifestOverride ?? (bookId ? getManifestFromCache(bookId) : null);
+  const chapters = sortByChapterIdx(manifest?.chapters);
+  for (const chapter of chapters) {
+    const idx = toNumberOrNull(chapter?.idx);
+    if (idx == null || idx < 1) continue;
+    const first = getFirstManifestEventInChapter(bookId, idx, manifest);
+    if (first) return first;
+  }
+  return null;
+};
+
+/** 책 전체 기준 마지막 이벤트 (가장 큰 chapterIdx의 마지막 이벤트) */
+export const getLastManifestEventInBook = (bookId, manifestOverride = undefined) => {
+  const manifest = manifestOverride ?? (bookId ? getManifestFromCache(bookId) : null);
+  const chapters = sortByChapterIdx(manifest?.chapters);
+  for (let i = chapters.length - 1; i >= 0; i -= 1) {
+    const idx = toNumberOrNull(chapters[i]?.idx);
+    if (idx == null || idx < 1) continue;
+    const last = getLastManifestEventInChapter(bookId, idx, manifest);
+    if (last) return last;
+  }
+  return null;
 };
 
 /** 책 전체 eventId를 챕터·이벤트 순으로 */

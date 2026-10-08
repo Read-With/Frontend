@@ -291,6 +291,10 @@
   border-color: var(--admin-danger-border);
 }
 
+.admin-card--result {
+  box-shadow: 0 0.25rem 1rem rgba(0, 0, 0, 0.08);
+}
+
 .admin-card-header {
   padding: 1rem 1.5rem;
   border-bottom: 0.0625rem solid var(--admin-border-soft);
@@ -299,6 +303,10 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
+}
+
+.admin-card-header--muted {
+  background: var(--admin-muted);
 }
 
 .admin-card-header-title-row {
@@ -329,6 +337,14 @@
 }
 
 /* ─── Forms / buttons ─── */
+
+.admin-label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #374151;
+}
+
 .admin-input {
   width: 100%;
   padding: 0.5rem 1rem;
@@ -395,6 +411,37 @@
 .admin-btn--primary:disabled {
   background: #9ca3af;
   opacity: 1;
+}
+
+.admin-btn--ghost {
+  padding: 0.5rem 1rem;
+  background: var(--admin-surface);
+  color: #374151;
+  border: 0.0625rem solid #d1d5db;
+}
+
+.admin-btn--ghost:hover:not(:disabled) {
+  background: var(--admin-muted);
+}
+
+.admin-btn--muted {
+  padding: 0.5rem 1rem;
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.admin-btn--muted:hover:not(:disabled) {
+  background: #e5e7eb;
+}
+
+.admin-btn--danger {
+  padding: 0.5rem 1rem;
+  background: var(--admin-danger);
+  color: #fff;
+}
+
+.admin-btn--danger:hover:not(:disabled) {
+  background: #b91c1c;
 }
 
 .admin-btn--refresh {
@@ -600,6 +647,149 @@
   color: #dc2626;
 }
 
+/* ─── Modals ─── */
+
+.admin-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.admin-modal-overlay--dark {
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(0.25rem);
+}
+
+.admin-modal-panel {
+  width: 100%;
+  max-width: 28rem;
+  border-radius: var(--admin-radius);
+  background: var(--admin-surface);
+  border: 0.0625rem solid var(--admin-border);
+  overflow: hidden;
+}
+
+.admin-modal-panel--wide {
+  max-width: 42rem;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.admin-modal-header {
+  padding: 1rem 1.5rem;
+  border-bottom: 0.0625rem solid var(--admin-border-soft);
+}
+
+.admin-modal-header h3 {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+.admin-modal-header--bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--admin-muted);
+}
+
+.admin-modal-header--bar h3 {
+  font-weight: 700;
+  color: var(--admin-text);
+}
+
+.admin-modal-body {
+  padding: 1.25rem 1.5rem;
+  font-size: 0.875rem;
+  color: #374151;
+}
+
+.admin-modal-body > * + * {
+  margin-top: 0.75rem;
+}
+
+.admin-modal-body--scroll {
+  padding: 1.5rem;
+  overflow: auto;
+}
+
+.admin-modal-footer {
+  padding: 1rem 1.5rem;
+  background: var(--admin-muted);
+  border-top: 0.0625rem solid var(--admin-border-soft);
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.admin-modal-footer--plain {
+  background: transparent;
+}
+
+.admin-modal-icon-close {
+  border: none;
+  background: transparent;
+  color: var(--admin-text-faint);
+  cursor: pointer;
+  padding: 0;
+}
+
+.admin-modal-icon-close:hover {
+  color: #4b5563;
+}
+
+.admin-zoom-panel {
+  position: relative;
+  max-width: 56rem;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.admin-zoom-close {
+  position: absolute;
+  top: -3rem;
+  right: 0;
+  border: none;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+}
+
+.admin-zoom-close:hover {
+  color: #d1d5db;
+}
+
+.admin-zoom-img {
+  max-width: 100%;
+  max-height: 80vh;
+  object-fit: contain;
+  border-radius: var(--admin-radius-sm);
+}
+
+.admin-payload-code {
+  background: #111827;
+  border-radius: var(--admin-radius-sm);
+  padding: 1rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.875rem;
+  color: #4ade80;
+  overflow-x: auto;
+}
+
+.admin-payload-code pre {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
 .admin-confirm-danger-list {
   background: var(--admin-danger-bg);
   border: 0.0625rem solid var(--admin-danger-border);
@@ -701,7 +891,30 @@
   text-overflow: ellipsis;
 }
 
+.admin-result-loading {
+  display: flex;
+  align-items: center;
+  color: var(--brand-accent);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.admin-result-spinner {
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-right: 0.75rem;
+  margin-left: -0.25rem;
+  animation: admin-spin 1s linear infinite;
+}
+
+@keyframes admin-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .admin-result-spinner,
   .admin-book-card-cover img {
     animation: none;
     transition: none;
@@ -710,6 +923,68 @@
   .admin-book-card:hover .admin-book-card-cover img {
     transform: none;
   }
+}
+
+.admin-result-banner {
+  font-size: 0.875rem;
+  padding: 1rem;
+  border-radius: var(--admin-radius-sm);
+  border: 0.0625rem solid;
+}
+
+.admin-result-banner.is-ok {
+  color: var(--admin-ok-text);
+  background: var(--admin-ok-bg);
+  border-color: var(--admin-ok-border);
+}
+
+.admin-result-banner.is-error {
+  color: var(--admin-danger-text);
+  background: var(--admin-danger-bg);
+  border-color: var(--admin-danger-border);
+}
+
+.admin-result-banner > p {
+  margin: 0 0 0.5rem;
+  font-weight: 500;
+}
+
+.admin-result-mini-table-wrap {
+  overflow-x: auto;
+  margin-top: 0.75rem;
+  background: rgba(255, 255, 255, 0.6);
+  border-radius: 0.25rem;
+  border: 0.0625rem solid rgba(0, 0, 0, 0.08);
+}
+
+.admin-result-mini-table {
+  width: 100%;
+  text-align: left;
+  font-size: 0.75rem;
+}
+
+.admin-result-mini-table thead tr {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.admin-result-mini-table th,
+.admin-result-mini-table td {
+  padding: 0.5rem 0.75rem;
+}
+
+.admin-result-mini-table th {
+  font-weight: 600;
+}
+
+.admin-result-mini-table tbody tr {
+  border-top: 0.0625rem solid rgba(0, 0, 0, 0.08);
+}
+
+.admin-result-mini-table td {
+  max-width: 11.25rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .admin-selected-book {
@@ -788,6 +1063,11 @@
 .admin-icon-md {
   width: 1.5rem;
   height: 1.5rem;
+}
+
+.admin-icon-lg {
+  width: 2rem;
+  height: 2rem;
 }
 
 /* 업로드/삭제 대상 도서 드롭다운 */

@@ -2,24 +2,27 @@
 
 import { PanelsTopLeft, FileText } from 'lucide-react';
 import { toast } from 'react-toastify';
-import { loadFromStorage, saveToStorage } from '../common/cache/cacheManager';
+import { errorUtils } from '../common/urlUtils';
+import { storageUtils } from '../common/cache/cacheManager';
 import {
   toLocator,
   progressResultToViewerAnchor,
   locatorsEqual,
+  resolveProgressLocator,
   toViewerResumeAnchor,
   anchorToLocators,
+  clampPercent,
   resolveChapterIndex,
   toPositiveNumberOrNull,
-  errorUtils,
 } from '../common/valueUtils';
 import {
   findManifestEventInChapter,
   getLastManifestEventInChapter,
   resolveLocatorToEventParams as resolveManifestLocatorToEventParams,
   resolveProgressMetricsFromLocator,
+  readingProgressPercentFromLocator,
 } from '../common/cache/manifestCache';
-import { getProgressFromCache, resolveProgressEventName } from '../common/cache/progressCache';
+import { getProgressFromCache } from '../common/cache/progressCache';
 import { eventUtils, resolveServerBookId } from './viewerCore';
 
 export const VIEWER_MODE_OPTIONS = [
@@ -36,11 +39,9 @@ export const defaultSettings = {
   showGraph: false,
 };
 
-/** 본문·설정 미리보기 공용 글꼴 스택 */
-export const viewerFontStack = (fontFamily) =>
-  `${fontFamily || defaultSettings.fontFamily}, 'Noto Serif', Georgia, serif`;
-
 export const SETTINGS_STORAGE_KEY = 'xhtml_viewer_settings';
+
+const SETTINGS_KEYS = Object.keys(defaultSettings);
 
 function toFiniteOr(value, fallback) {
   const n = Number(value);
@@ -61,6 +62,11 @@ export function normalizeSettings(settings = {}) {
   };
 }
 
+function needsSettingsPersist(raw, normalized) {
+  if (!raw || typeof raw !== 'object' || 'pageMode' in raw) return true;
+  return SETTINGS_KEYS.some((key) => raw[key] !== normalized[key]);
+}
+
 export function findViewerModeOption(showGraph) {
   return (
     VIEWER_MODE_OPTIONS.find((opt) => opt.showGraph === Boolean(showGraph)) ??
@@ -70,20 +76,36 @@ export function findViewerModeOption(showGraph) {
 
 export function loadSettings() {
   try {
-    return normalizeSettings(loadFromStorage(SETTINGS_STORAGE_KEY) ?? defaultSettings);
+    const raw = storageUtils.getJson(SETTINGS_STORAGE_KEY, defaultSettings);
+    const loaded = normalizeSettings(raw);
+    if (needsSettingsPersist(raw, loaded)) {
+      storageUtils.setJson(SETTINGS_STORAGE_KEY, loaded);
+    }
+    return loaded;
   } catch (error) {
-    return errorUtils.handleError('loadSettings', error, defaultSettings);
+    return errorUtils.handleError('loadSettings', error, defaultSettings, {
+      settings: storageUtils.get(SETTINGS_STORAGE_KEY),
+    });
   }
 }
 
 export function saveSettings(settings) {
   try {
-    saveToStorage(SETTINGS_STORAGE_KEY, normalizeSettings(settings));
+    storageUtils.setJson(SETTINGS_STORAGE_KEY, normalizeSettings(settings));
     return { success: true };
   } catch (error) {
     errorUtils.logError('saveSettings', error, { settings });
     return { success: false, message: '설정 저장 중 오류가 발생했습니다.' };
   }
+}
+
+function progressPercentFromData(data, options, pickValue) {
+  if (!data || typeof data !== 'object') return null;
+  const bookId = options.bookId ?? data.bookId;
+  const locator = resolveProgressLocator(data);
+  if (bookId == null || !locator) return null;
+  const value = pickValue(bookId, locator);
+  return value != null ? clampPercent(value) : null;
 }
 
 function chapterIdxOf(source) {
@@ -92,6 +114,20 @@ function chapterIdxOf(source) {
 
 function positiveEventNum(source) {
   return toPositiveNumberOrNull(eventUtils.resolveEventNum(source));
+}
+
+export function resolveProgressEventName(source) {
+  if (!source || typeof source !== 'object') return '';
+  const name =
+    source.eventName ??
+    source.eventTitle ??
+    source.eventLabel ??
+    source.name ??
+    source.event_name ??
+    source.event?.name ??
+    source.event?.title ??
+    source.title;
+  return typeof name === 'string' ? name.trim() : '';
 }
 
 // --- 이벤트 매칭·manifest ---
@@ -347,6 +383,19 @@ function emptyTopBar() {
   return { ...EMPTY_PROGRESS_TOP_BAR };
 }
 
+export function normalizeReadingProgressPercent(data, options = {}) {
+  return progressPercentFromData(data, options, (bookId, locator) =>
+    readingProgressPercentFromLocator(bookId, locator)
+  );
+}
+
+export function normalizeChapterProgressPercent(data, options = {}) {
+  return progressPercentFromData(data, options, (bookId, locator) => {
+    const metrics = resolveProgressMetricsFromLocator(bookId, locator);
+    return metrics?.chapterProgress ?? null;
+  });
+}
+
 export function toReadingLocatorKey(startLocator, endLocator) {
   const start = toLocator(startLocator);
   if (!start) return '';
@@ -378,7 +427,7 @@ export function resolveMetricsFromReadingLocatorKey(bookKey, readingLocatorKey, 
   return resolveMetricsFromLocator(bookKey, start, options);
 }
 
-function progressRowToTopBar(row, bookId = null) {
+export function progressRowToTopBar(row, bookId = null) {
   if (!row || typeof row !== 'object') return emptyTopBar();
 
   const explicit = Number(row.eventNum);
@@ -565,6 +614,13 @@ export function resolvePersistedViewerMode(graphFullScreen, showGraph) {
   if (graphFullScreen) return 'graph';
   if (showGraph) return 'split';
   return 'viewer';
+}
+
+export function deriveGraphPhase({ isReloading, isEventGraphLoading, isGraphLoading }) {
+  if (isReloading) return 'reloading';
+  if (isEventGraphLoading) return 'event';
+  if (isGraphLoading) return 'loading';
+  return 'idle';
 }
 
 export function isHardNavigationReload() {

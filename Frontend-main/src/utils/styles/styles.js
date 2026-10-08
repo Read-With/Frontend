@@ -27,6 +27,8 @@ export function joinClasses(...parts) {
 /** GRAPH_COLORS 재export (소비자는 COLORS 또는 GRAPH_COLORS) */
 export const COLORS = GRAPH_COLORS;
 
+export { brandAlpha, BRAND_RGB } from './graphStyles';
+
 const opacityTransition = `opacity ${ANIMATION_VALUES.DURATION.NORMAL}`;
 
 const createConditionalTransition = (condition, normalTransition, disabledTransition = 'none') =>

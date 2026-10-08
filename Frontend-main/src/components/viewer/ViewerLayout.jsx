@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, memo, useRef } from 'react';
+import PropTypes from 'prop-types';
 import { toast } from 'react-toastify';
 import ViewerToolbar from './ViewerToolbar';
 import { useIsNarrowViewport } from '../../hooks/common/hooksShared';
@@ -33,7 +34,7 @@ const ViewerProgressBar = memo(function ViewerProgressBar({
   const hasProgress = progress != null && Number.isFinite(Number(progress));
   const clamped = hasProgress ? Math.max(0, Math.min(Number(progress), 100)) : 0;
   const percentLabel =
-    progressMetricsReady && hasProgress ? `${Math.round(clamped)}%` : '계산 중';
+    progressMetricsReady && hasProgress ? `${Math.round(clamped)}%` : '계산중';
   const chapterLabel = `챕터 ${Math.max(1, Math.trunc(Number(currentChapter) || 1))}`;
 
   const onChange = (e) => {
@@ -59,11 +60,6 @@ const ViewerProgressBar = memo(function ViewerProgressBar({
         onChange={onChange}
         disabled={!progressMetricsReady}
         aria-label="진행률 슬라이더"
-        aria-valuetext={
-          progressMetricsReady && hasProgress
-            ? `${chapterLabel}, ${Math.round(clamped)}%`
-            : '진행률 계산 중'
-        }
         aria-busy={!progressMetricsReady}
         className="progressbar-slider"
       />
@@ -71,6 +67,16 @@ const ViewerProgressBar = memo(function ViewerProgressBar({
     </div>
   );
 });
+
+ViewerProgressBar.propTypes = {
+  showToolbar: PropTypes.bool.isRequired,
+  progress: PropTypes.number,
+  onSliderChange: PropTypes.func,
+  currentChapter: PropTypes.number,
+  currentPage: PropTypes.number,
+  totalPages: PropTypes.number,
+  progressMetricsReady: PropTypes.bool,
+};
 
 function ViewerLayout({
   children,
@@ -355,5 +361,30 @@ function ViewerLayout({
     </div>
   );
 }
+
+ViewerLayout.propTypes = {
+  children: PropTypes.node,
+  currentChapter: PropTypes.number,
+  progress: PropTypes.number,
+  progressMetricsReady: PropTypes.bool,
+  showToolbar: PropTypes.bool.isRequired,
+  onPrev: PropTypes.func,
+  onNext: PropTypes.func,
+  isBookmarked: PropTypes.bool,
+  onAddBookmark: PropTypes.func,
+  onToggleBookmarkList: PropTypes.func,
+  onOpenSettings: PropTypes.func,
+  onSliderChange: PropTypes.func,
+  currentPage: PropTypes.number,
+  totalPages: PropTypes.number,
+  showGraph: PropTypes.bool,
+  onToggleGraph: PropTypes.func,
+  rightSideContent: PropTypes.node,
+  graphFullScreen: PropTypes.bool,
+  isFromLibrary: PropTypes.bool,
+  previousPage: PropTypes.object,
+  onExitToMypage: PropTypes.func,
+  onViewerLayoutSettled: PropTypes.func,
+};
 
 export default ViewerLayout;

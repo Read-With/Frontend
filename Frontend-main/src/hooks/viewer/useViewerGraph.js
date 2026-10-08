@@ -1,6 +1,6 @@
 /** 뷰어 그래프: UI 상태·검색·mode persist + 챕터 이벤트 discovery·캐시 로드 */
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   applyChapterEventsFromCache,
 } from '../../utils/graph/graphFetch';
@@ -9,7 +9,7 @@ import {
   prefetchChapterEvents,
   clearBookRelationshipDeltas,
 } from '../../utils/graph/graphModel';
-import { errorUtils } from '../../utils/common/valueUtils';
+import { errorUtils } from '../../utils/common/urlUtils';
 import { cacheKeyUtils, deriveGraphPhase, eventUtils } from '../../utils/viewer/viewerCore';
 import {
   saveViewerMode,
@@ -40,48 +40,6 @@ import { useAsyncRequestGuard } from '../common/hooksShared';
 
 const { HARD_RELOAD_SETTLE_MS } = VIEWER_GRAPH_PIPELINE;
 
-const INITIAL_GRAPH_LOAD = {
-  isDataReady: false,
-  isGraphLoading: true,
-  isEventGraphLoading: false,
-  appliedGraphKey: null,
-  isDataEmpty: false,
-};
-
-/** 그래프 로딩 플래그는 이 reducer에서만 바뀐다 — 플래그 조합을 액션 단위로 고정 */
-function graphLoadReducer(state, action) {
-  let next;
-  switch (action.type) {
-    case 'bookReset':
-      next = { isDataReady: false, isGraphLoading: true, isEventGraphLoading: true, appliedGraphKey: null, isDataEmpty: true };
-      break;
-    case 'chapterChanged':
-      next = { isDataReady: false, isGraphLoading: true, isEventGraphLoading: true, appliedGraphKey: null };
-      break;
-    case 'pending':
-      next = { isDataReady: false, isEventGraphLoading: true, appliedGraphKey: null };
-      break;
-    case 'retry':
-      next = { isEventGraphLoading: true, appliedGraphKey: null };
-      break;
-    case 'applied':
-      next = { appliedGraphKey: action.key ?? null };
-      break;
-    case 'finished':
-      next = { isDataReady: action.ready, isEventGraphLoading: action.loading };
-      break;
-    case 'discoveryLoading':
-      next = { isGraphLoading: action.loading };
-      break;
-    case 'empty':
-      next = { isDataEmpty: action.empty };
-      break;
-    default:
-      return state;
-  }
-  return Object.keys(next).every((k) => state[k] === next[k]) ? state : { ...state, ...next };
-}
-
 export function useViewerGraphState({
   currentChapter,
   bookKey,
@@ -93,6 +51,7 @@ export function useViewerGraphState({
   const [graphFullScreen, setGraphFullScreen] = useState(() =>
     resolveInitialGraphFullScreen(showGraph),
   );
+  const [isDataReady, setIsDataReady] = useState(false);
   const {
     edgeLabelVisible,
     setEdgeLabelVisible,
@@ -100,9 +59,11 @@ export function useViewerGraphState({
     setFilterStage,
   } = useGraphDisplayToggles();
   const [isReloading, setIsReloading] = useState(false);
+  const [isGraphLoading, setIsGraphLoading] = useState(true);
+  const [isEventGraphLoading, setEventGraphLoading] = useState(false);
   const [elements, setElements] = useState([]);
-  const [graphLoad, dispatchGraphLoad] = useReducer(graphLoadReducer, INITIAL_GRAPH_LOAD);
-  const { isDataReady, isGraphLoading, isEventGraphLoading, appliedGraphKey, isDataEmpty } = graphLoad;
+  const [isDataEmpty, setIsDataEmpty] = useState(false);
+  const [appliedGraphKey, setAppliedGraphKey] = useState(null);
 
   const currentChapterData = useMemo(
     () => buildChapterCharacterSearchData(events, currentChapter),
@@ -120,25 +81,42 @@ export function useViewerGraphState({
     saveViewerMode(resolvePersistedViewerMode(graphFullScreen, showGraph));
   }, [showGraph, graphFullScreen]);
 
-  // 그래프를 끄면 전체화면 해제 (렌더 중 조정 → 중간 커밋 없음)
-  if (!showGraph && graphFullScreen) setGraphFullScreen(false);
+  useEffect(() => {
+    if (!showGraph && graphFullScreen) setGraphFullScreen(false);
+  }, [showGraph, graphFullScreen]);
 
-
-  // 챕터·이벤트 정합성은 렌더 중 조정 — 새 챕터 + 이전 이벤트 조합이 커밋되지 않게 함
-  if (currentEvent) {
-    if (!eventMatchesChapter(currentEvent, currentChapter)) {
-      setCurrentEvent(null);
-      setPrevValidEvent(null);
-    } else if (prevValidEvent !== currentEvent) {
-      setPrevValidEvent(currentEvent);
+  const clearDisplayedGraph = useCallback(({ loading = true } = {}) => {
+    setElements([]);
+    setIsDataEmpty(true);
+    setIsDataReady(false);
+    setAppliedGraphKey(null);
+    if (loading) {
+      setIsGraphLoading(true);
+      setEventGraphLoading(true);
     }
-  }
+  }, []);
+
+  const markGraphTransitionLoading = useCallback(() => {
+    setIsDataReady(false);
+    setAppliedGraphKey(null);
+    setIsGraphLoading(true);
+    setEventGraphLoading(true);
+  }, []);
+
+  useEffect(() => {
+    if (!currentEvent) return;
+    if (eventMatchesChapter(currentEvent, currentChapter)) {
+      setPrevValidEvent(currentEvent);
+      return;
+    }
+    setCurrentEvent(null);
+    setPrevValidEvent(null);
+  }, [currentChapter, currentEvent]);
 
   const resetGraphPipelineState = useCallback(() => {
     setEvents([]);
-    setElements([]);
-    dispatchGraphLoad({ type: 'bookReset' });
-  }, []);
+    clearDisplayedGraph({ loading: true });
+  }, [clearDisplayedGraph]);
 
   const resetGraphTransientState = useCallback(() => {
     setCurrentEvent(null);
@@ -152,11 +130,13 @@ export function useViewerGraphState({
   }, [bookKey, resetGraphPipelineState]);
 
   // 챕터 전환 중에도 기존 요소를 유지하고, 다음 스냅샷 적용 시 id diff로 증감만 반영한다.
-  const [graphChapter, setGraphChapter] = useState(currentChapter);
-  if (graphChapter !== currentChapter) {
-    setGraphChapter(currentChapter);
-    if (currentChapter != null) dispatchGraphLoad({ type: 'chapterChanged' });
-  }
+  const prevChapterForGraphRef = useRef(currentChapter);
+  useEffect(() => {
+    if (prevChapterForGraphRef.current === currentChapter) return;
+    prevChapterForGraphRef.current = currentChapter;
+    if (currentChapter == null) return;
+    markGraphTransitionLoading();
+  }, [currentChapter, markGraphTransitionLoading]);
 
   useEffect(() => {
     if (!isHardNavigationReload()) return undefined;
@@ -167,7 +147,7 @@ export function useViewerGraphState({
 
     const timer = setTimeout(() => {
       setIsReloading(false);
-      dispatchGraphLoad({ type: 'discoveryLoading', loading: false });
+      setIsGraphLoading(false);
     }, HARD_RELOAD_SETTLE_MS);
 
     return () => clearTimeout(timer);
@@ -198,6 +178,7 @@ export function useViewerGraphState({
     () => ({
       setGraphFullScreen,
       setEdgeLabelVisible,
+      setIsDataEmpty,
       filterStage,
       setFilterStage,
     }),
@@ -214,7 +195,10 @@ export function useViewerGraphState({
     setCurrentEvent,
     setEvents,
     setElements,
-    dispatchGraphLoad,
+    setIsDataReady,
+    setIsGraphLoading,
+    setEventGraphLoading,
+    setAppliedGraphKey,
     graphState,
     graphActions,
     graphViewerState,
@@ -265,7 +249,7 @@ function usePipelineRefs() {
   );
 }
 
-function useGraphElementApply({ setElements, setEvents, dispatchGraphLoad, refs }) {
+function useGraphElementApply({ setElements, setEvents, setGraphIsDataEmpty, refs }) {
   const setVisibleElements = useCallback((nextElements) => {
     // useState setter는 안정적이라 ref indirection 불필요
     const visibleElements = commitVisibleGraphElements(
@@ -274,9 +258,9 @@ function useGraphElementApply({ setElements, setEvents, dispatchGraphLoad, refs 
       { applyTokenRef: refs.applyTokenRef },
     );
     refs.hasVisibleElementsRef.current = visibleElements.length > 0;
-    dispatchGraphLoad({ type: 'empty', empty: visibleElements.length === 0 });
+    setGraphIsDataEmpty?.(visibleElements.length === 0);
     return visibleElements;
-  }, [setElements, dispatchGraphLoad, refs]);
+  }, [setElements, setGraphIsDataEmpty, refs]);
 
   /** React elements는 GraphState가 리셋. in-flight apply만 무효화 */
   const invalidateVisibleGraphApply = useCallback(() => {
@@ -318,14 +302,17 @@ function useGraphElementApply({ setElements, setEvents, dispatchGraphLoad, refs 
 }
 
 function useGraphCacheApply({
-  bookId: pipelineBookId,
+  book,
   setEvents,
-  dispatchGraphLoad,
+  setIsDataReady,
+  setEventGraphLoading,
+  setAppliedGraphKey,
+  finishFineLoading,
   refs,
   commitGraphState,
 }) {
   const syncEventsFromCache = useCallback((targetChapter, { force = false, throughEventIdx = null } = {}) => {
-    const bookId = pipelineBookId;
+    const bookId = resolvePipelineBookId(book);
     if (!bookId || !targetChapter || targetChapter < 1) return false;
 
     const key = cacheKeyUtils.createChapterKey(bookId, targetChapter);
@@ -355,7 +342,7 @@ function useGraphCacheApply({
       errorUtils.logError(`${LOG_PREFIX} 챕터 이벤트 동기화 실패`, error);
       return false;
     }
-  }, [pipelineBookId, setEvents, refs]);
+  }, [book, setEvents, refs]);
 
   const prefetchAhead = useCallback((bookId, chapter, eventIdx) => {
     void prefetchChapterEvents(bookId, chapter, eventIdx + PREFETCH_AHEAD_EVENTS).catch(() => {});
@@ -366,15 +353,17 @@ function useGraphCacheApply({
     }
   }, []);
 
-  const markPendingLoad = useCallback(() => {
-    dispatchGraphLoad({ type: 'pending' });
+  const markPendingLoad = useCallback((_bookId, _chapter, _eventIdx) => {
+    setIsDataReady(false);
+    setEventGraphLoading(true);
+    setAppliedGraphKey?.(null);
     // 이전 이벤트 callKey 잔존 시 조기 return으로 새 타깃 적용이 스킵되지 않게 함
     refs.cacheAppliedCallKeyRef.current = null;
-  }, [dispatchGraphLoad, refs]);
+  }, [setIsDataReady, setEventGraphLoading, setAppliedGraphKey, refs]);
 
   const tryApplyCache = useCallback((bookId, chapter, eventIdx, callKey) => {
     if (refs.cacheAppliedCallKeyRef.current === callKey) {
-      dispatchGraphLoad({ type: 'applied', key: callKey });
+      setAppliedGraphKey?.(callKey);
       return true;
     }
 
@@ -383,40 +372,39 @@ function useGraphCacheApply({
 
     refs.cacheAppliedCallKeyRef.current = callKey;
     commitGraphState(toCommitGraphArgs(chapter, eventIdx, resolved));
-    dispatchGraphLoad({ type: 'applied', key: callKey });
+    setAppliedGraphKey?.(callKey);
     return true;
-  }, [commitGraphState, refs, dispatchGraphLoad]);
+  }, [commitGraphState, refs, setAppliedGraphKey]);
 
-  const ensureCacheOrPending = useCallback((bookId, chapter, eventIdx, callKey) => {
+  const ensureCacheOrPending = useCallback((bookId, chapter, eventIdx, callKey, { finalizeOnCache = false } = {}) => {
     const hit = tryApplyCache(bookId, chapter, eventIdx, callKey);
     if (!hit) {
-      markPendingLoad();
+      markPendingLoad(bookId, chapter, eventIdx);
       return false;
     }
     prefetchAhead(bookId, chapter, eventIdx);
+    if (finalizeOnCache) finishFineLoading(true, false, null, true);
     return true;
-  }, [markPendingLoad, prefetchAhead, tryApplyCache]);
+  }, [finishFineLoading, markPendingLoad, prefetchAhead, tryApplyCache]);
 
   return { syncEventsFromCache, ensureCacheOrPending };
 }
 
 function useGraphChapterDiscovery({
-  bookId,
+  book,
   currentChapter,
-  throughEventIdx,
+  currentEvent,
   isViewerPageReady,
-  dispatchGraphLoad,
+  setIsGraphLoading,
   syncEventsFromCache,
   refs,
 }) {
-  const setIsGraphLoading = useCallback((loading) => {
-    dispatchGraphLoad({ type: 'discoveryLoading', loading });
-  }, [dispatchGraphLoad]);
   const [discoveryError, setDiscoveryError] = useState(null);
   const [discoveryRetryToken, bumpDiscoveryRetry] = useRetryToken();
   const { nextRequestId, isStale, invalidate } = useAsyncRequestGuard();
 
   const retryDiscovery = useCallback(() => {
+    const bookId = resolvePipelineBookId(book);
     if (!bookId || !currentChapter) return;
 
     const chapterKey = cacheKeyUtils.createChapterKey(bookId, currentChapter);
@@ -426,19 +414,23 @@ function useGraphChapterDiscovery({
     setDiscoveryError(null);
     setIsGraphLoading(true);
     bumpDiscoveryRetry();
-  }, [bookId, currentChapter, setIsGraphLoading, refs, bumpDiscoveryRetry]);
+  }, [book, currentChapter, setIsGraphLoading, refs, bumpDiscoveryRetry]);
 
   useEffect(() => {
+    const bookId = resolvePipelineBookId(book);
     if (!bookId || !currentChapter || currentChapter < 1) return;
+    const throughEventIdx = eventUtils.resolveEventNum(currentEvent, null);
     // 확정된 이벤트까지만 캐시 동기화 — 미확정 시 event 1로 가장하지 않음
     if (!(throughEventIdx >= 1)) return;
     syncEventsFromCache(currentChapter, { throughEventIdx });
-  }, [bookId, currentChapter, throughEventIdx, syncEventsFromCache]);
+  }, [book, currentChapter, currentEvent, syncEventsFromCache]);
 
   useEffect(() => {
+    const bookId = resolvePipelineBookId(book);
     if (!isViewerPageReady || !bookId || !currentChapter) return undefined;
 
     // 현재 읽기 이벤트가 확정된 뒤에만 discovery → 잘못된 이벤트 스냅샷 방지
+    const throughEventIdx = eventUtils.resolveEventNum(currentEvent, null);
     if (!(throughEventIdx >= 1)) {
       setIsGraphLoading(true);
       return undefined;
@@ -561,9 +553,9 @@ function useGraphChapterDiscovery({
       }
     };
   }, [
-    bookId,
+    book,
     currentChapter,
-    throughEventIdx,
+    currentEvent,
     discoveryRetryToken,
     isViewerPageReady,
     retryDiscovery,
@@ -590,17 +582,18 @@ function useGraphFineLoad({
   const { book, currentChapter, currentEvent } = target;
   const manifestLoaded = ready.manifest;
   const isViewerPageReady = ready.viewer;
-  const { resetTransition, dispatchGraphLoad } = loading;
+  const { resetTransition, setIsDataReady, setEventGraphLoading, setAppliedGraphKey } = loading;
   const { nextRequestId, isStale, invalidate } = useAsyncRequestGuard();
 
   const [apiError, setApiError] = useState(null);
   const [retryGeneration, bumpGraphRetry] = useRetryToken();
 
   const finishFineLoading = useCallback((isReady, isLoading, error = null, shouldResetTransition = true) => {
-    dispatchGraphLoad({ type: 'finished', ready: isReady, loading: isLoading });
+    setIsDataReady((prev) => (prev === isReady ? prev : isReady));
+    setEventGraphLoading((prev) => (prev === isLoading ? prev : isLoading));
     if (shouldResetTransition) resetTransition();
     setApiError((prev) => (error == null && prev == null ? prev : error));
-  }, [resetTransition, dispatchGraphLoad]);
+  }, [resetTransition, setIsDataReady, setEventGraphLoading]);
 
   const clearActiveGraphKeys = useCallback(() => {
     refs.activeCallKeyRef.current = null;
@@ -610,9 +603,10 @@ function useGraphFineLoad({
   const triggerGraphRetry = useCallback(() => {
     setApiError(null);
     clearActiveGraphKeys();
-    dispatchGraphLoad({ type: 'retry' });
+    setAppliedGraphKey?.(null);
+    setEventGraphLoading(true);
     bumpGraphRetry();
-  }, [clearActiveGraphKeys, dispatchGraphLoad, bumpGraphRetry]);
+  }, [clearActiveGraphKeys, setAppliedGraphKey, setEventGraphLoading, bumpGraphRetry]);
 
   const resolveCallContext = useCallback(
     () => resolveGraphCallContext({ book, currentChapter, currentEvent }),
@@ -621,7 +615,7 @@ function useGraphFineLoad({
 
   const failFineLoad = useCallback((error) => {
     clearActiveGraphKeys();
-    dispatchGraphLoad({ type: 'applied', key: null });
+    setAppliedGraphKey?.(null);
     setVisibleElements([]);
     finishFineLoading(
       true,
@@ -632,7 +626,7 @@ function useGraphFineLoad({
         triggerGraphRetry,
       ),
     );
-  }, [clearActiveGraphKeys, finishFineLoading, dispatchGraphLoad, setVisibleElements, triggerGraphRetry]);
+  }, [clearActiveGraphKeys, finishFineLoading, setAppliedGraphKey, setVisibleElements, triggerGraphRetry]);
 
   const waitForDiscovery = useCallback(async (bookId, chapter, eventIdx) => {
     const discoveryKey = cacheKeyUtils.createChapterKey(bookId, chapter);
@@ -675,7 +669,7 @@ function useGraphFineLoad({
       clearViewerGraphPipelineMaps(refs);
       setApiError(null);
       clearActiveGraphKeys();
-      dispatchGraphLoad({ type: 'applied', key: null });
+      setAppliedGraphKey?.(null);
       // 책/챕터 전환만 in-flight apply·이미지 resolve 무효화
       invalidateVisibleGraphApply();
     }
@@ -687,14 +681,16 @@ function useGraphFineLoad({
     currentEvent,
     clearActiveGraphKeys,
     invalidateVisibleGraphApply,
-    dispatchGraphLoad,
+    setAppliedGraphKey,
     refs,
   ]);
 
   const holdUntilEventResolved = useCallback(() => {
     clearActiveGraphKeys();
-    dispatchGraphLoad({ type: 'pending' });
-  }, [clearActiveGraphKeys, dispatchGraphLoad]);
+    setIsDataReady(false);
+    setEventGraphLoading(true);
+    setAppliedGraphKey?.(null);
+  }, [clearActiveGraphKeys, setIsDataReady, setEventGraphLoading, setAppliedGraphKey]);
 
   useLayoutEffect(() => {
     if (!manifestLoaded) return;
@@ -710,13 +706,13 @@ function useGraphFineLoad({
     const callKey = ctx.callKey;
     if (callKey === refs.activeCallKeyRef.current) return;
 
-    if (ensureCacheOrPending(ctx.bookId, ctx.chapter, ctx.eventIdx, callKey)) {
-      finishFineLoading(true, false, null, true);
+    if (ensureCacheOrPending(ctx.bookId, ctx.chapter, ctx.eventIdx, callKey, {
+      finalizeOnCache: true,
+    })) {
       refs.activeCallKeyRef.current = callKey;
     }
   }, [
     ensureCacheOrPending,
-    finishFineLoading,
     holdUntilEventResolved,
     manifestLoaded,
     resolveCallContext,
@@ -776,7 +772,7 @@ function useGraphFineLoad({
 
         // 캐시 히트 없이 준비만 끝난 빈 그래프 — 타깃 key를 기록해 empty UI가 뜨게 함
         setVisibleElements([]);
-        dispatchGraphLoad({ type: 'applied', key: callKey });
+        setAppliedGraphKey?.(callKey);
         refs.cacheAppliedCallKeyRef.current = callKey;
         finishFineLoading(true, false);
       } catch (error) {
@@ -799,7 +795,7 @@ function useGraphFineLoad({
     resolveCallContext,
     retryGeneration,
     setVisibleElements,
-    dispatchGraphLoad,
+    setAppliedGraphKey,
     waitForDiscovery,
     refs,
     nextRequestId,
@@ -807,57 +803,70 @@ function useGraphFineLoad({
     invalidate,
   ]);
 
-  return { apiError };
+  return { apiError, finishFineLoading };
 }
 
 export function useViewerGraphPipeline({
   book,
   currentChapter,
   currentEvent,
+  setIsDataEmpty: setGraphIsDataEmpty,
   manifestLoaded,
   isViewerPageReady,
   setElements,
   setEvents,
-  dispatchGraphLoad,
+  setIsGraphLoading,
+  setEventGraphLoading,
+  setIsDataReady,
+  setAppliedGraphKey,
   resetTransition,
 }) {
   const refs = usePipelineRefs();
-  const pipelineBookId = resolvePipelineBookId(book);
+  const finishFineLoadingRef = useRef(() => {});
 
   const { setVisibleElements, invalidateVisibleGraphApply, commitGraphState } = useGraphElementApply({
     setElements,
     setEvents,
-    dispatchGraphLoad,
+    setGraphIsDataEmpty,
     refs,
   });
 
+  const invokeFinishFineLoading = useCallback((...args) => {
+    finishFineLoadingRef.current(...args);
+  }, []);
+
   const { syncEventsFromCache, ensureCacheOrPending } = useGraphCacheApply({
-    bookId: pipelineBookId,
+    book,
     setEvents,
-    dispatchGraphLoad,
+    setIsDataReady,
+    setEventGraphLoading,
+    setAppliedGraphKey,
+    finishFineLoading: invokeFinishFineLoading,
     refs,
     commitGraphState,
   });
 
   const { discoveryError } = useGraphChapterDiscovery({
-    bookId: pipelineBookId,
+    book,
     currentChapter,
-    throughEventIdx: eventUtils.resolveEventNum(currentEvent, null),
+    currentEvent,
     isViewerPageReady,
-    dispatchGraphLoad,
+    setIsGraphLoading,
     syncEventsFromCache,
     refs,
   });
 
-  const { apiError } = useGraphFineLoad({
+  const { apiError, finishFineLoading } = useGraphFineLoad({
     target: { book, currentChapter, currentEvent },
     ready: { manifest: manifestLoaded, viewer: isViewerPageReady },
-    loading: { resetTransition, dispatchGraphLoad },
+    loading: { resetTransition, setIsDataReady, setEventGraphLoading, setAppliedGraphKey },
     refs,
     invalidateVisibleGraphApply,
     setVisibleElements,
     ensureCacheOrPending,
   });
+
+  finishFineLoadingRef.current = finishFineLoading;
 
   return { graphApiError: discoveryError ?? apiError };
 }

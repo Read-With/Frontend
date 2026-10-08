@@ -6,6 +6,7 @@ import {
   getChapterData,
   getManifestFromCache,
 } from '../common/cache/manifestCache.js';
+import { getProgressFromCache } from '../common/cache/progressCache.js';
 import {
   toPositiveNumberOrNull,
   toPositiveNumberFromId,
@@ -813,6 +814,37 @@ export function formatGraphEventMetaLabel(eventNum, { unknown = '?' } = {}) {
   return `Event ${unknown}`;
 }
 
+/** 챕터 manifest events → 정렬된 eventIdx 목록 */
+export function listChapterEventIndices(bookId, chapter, manifestHint) {
+  if (bookId == null) return [];
+  const ch = getChapterData(bookId, chapter, manifestHint);
+  const events = Array.isArray(ch?.events) ? ch.events : [];
+  const nums = [];
+  const seen = new Set();
+  for (const ev of events) {
+    const n = eventUtils.resolveEventNum(ev);
+    if (n > 0 && !seen.has(n)) {
+      seen.add(n);
+      nums.push(n);
+    }
+  }
+  nums.sort((a, b) => a - b);
+  return nums;
+}
+
+/** 진도 캐시 기준, 해당 챕터의 읽기 중 사건 번호 */
+export function resolveReadingEventNumForChapter(bookId, chapter) {
+  if (bookId == null) return null;
+  const progress = getProgressFromCache(bookId);
+  if (!progress) return null;
+  const ch = Number(progress.chapterIdx);
+  const ev = Number(progress.eventNum);
+  if (ch === Number(chapter) && Number.isFinite(ev) && ev > 0) {
+    return Math.trunc(ev);
+  }
+  return null;
+}
+
 /* ─── 노드 툴팁 · 관계 분석 연결 상태 ─── */
 
 export const RELATION_CONNECTION_KIND = Object.freeze({
@@ -844,14 +876,14 @@ export const NODE_TOOLTIP_VIEW_STATUS = Object.freeze({
   PENDING: 'pending',
 });
 
-function normalizeMatchName(value) {
+export function normalizeMatchName(value) {
   return String(value ?? '')
     .trim()
     .toLowerCase()
     .replace(/\s+/g, ' ');
 }
 
-function collectNodeMatchNames(node) {
+export function collectNodeMatchNames(node) {
   const names = [];
   const push = (v) => {
     if (typeof v !== 'string') return;
@@ -869,7 +901,7 @@ function collectNodeMatchNames(node) {
 }
 
 /** id/이름 비교용 문자열 */
-function normalizeGraphIdString(value) {
+export function normalizeGraphIdString(value) {
   if (value == null) return '';
   if (typeof value === 'number') {
     return Number.isFinite(value) ? String(Math.trunc(value)) : '';
@@ -965,6 +997,16 @@ export function buildProcessedNode(data) {
 }
 
 const POV_SPOILER_SESSION_KEY = 'readwith:pov-spoiler-unlocked';
+
+/** @deprecated 세션 유지 안 함 — 선택 해제 후 안내 문구가 다시 보이도록 false 고정 */
+export function readPovSpoilerUnlocked() {
+  return false;
+}
+
+/** @deprecated 세션에 저장하지 않음 */
+export function unlockPovSpoilerSession() {
+  clearPovSpoilerSession();
+}
 
 export function clearPovSpoilerSession() {
   try {

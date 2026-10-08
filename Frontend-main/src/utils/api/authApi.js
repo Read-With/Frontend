@@ -1,7 +1,6 @@
 /** 인증·토큰 갱신·authenticatedFetch */
 
-import { getApiBaseUrl, sleep } from '../common/urlUtils';
-import { errorUtils } from '../common/valueUtils';
+import { getApiBaseUrl, errorUtils } from '../common/urlUtils';
 import {
   getStoredAccessToken,
   setStoredAccessToken,
@@ -231,6 +230,7 @@ async function authorizedFetch(url, options = {}, retryCount = 0) {
 const API_REQUEST_MAX_ATTEMPTS = 3;
 const API_REQUEST_RETRY_BASE_MS = 400;
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const isNetworkFetchError = (error) => {
   if (!error || error.status === 401) return false;

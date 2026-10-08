@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import PropTypes from 'prop-types';
 import { BookOpen, ChevronLeft, ChevronRight } from 'lucide-react';
 import { buildChapterSidebarItems } from '../../utils/graph/graphCore.js';
 import { useIsNarrowViewport } from '../../hooks/graph/useGraphViewState.js';
@@ -250,3 +251,16 @@ export default function ChapterSidebar({
     </>
   );
 }
+
+ChapterSidebar.propTypes = {
+  isSidebarOpen: PropTypes.bool.isRequired,
+  onToggleSidebar: PropTypes.func.isRequired,
+  onCloseSidebar: PropTypes.func,
+  chapterList: PropTypes.arrayOf(PropTypes.number).isRequired,
+  currentChapter: PropTypes.number.isRequired,
+  onChapterSelect: PropTypes.func.isRequired,
+  manifestBookId: PropTypes.number,
+  bookTitle: PropTypes.string,
+  manifestHint: PropTypes.object,
+  userCurrentChapter: PropTypes.number,
+};
