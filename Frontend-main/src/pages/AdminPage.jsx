@@ -1,15 +1,8 @@
 import { createElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
-<<<<<<< HEAD
-import { getApiBaseUrl } from "../utils/common/urlUtils";
-import { errorUtils } from "../utils/common/valueUtils";
-import { getStoredAccessToken } from "../utils/security/authTokenStorage";
-import { ensureSessionAccessToken } from "../utils/api/authApi";
-=======
 import { BookOpen, ChevronDown, CloudUpload, Database, LayoutGrid, List, RefreshCw, Trash2, X } from "lucide-react";
-import { errorUtils } from "../utils/common/urlUtils";
+import { errorUtils } from "../utils/common/valueUtils";
 import { authenticatedRequest } from "../utils/api/authApi";
->>>>>>> 46a2335b612ff4470875b0baffc822c13b7f1804
 import { AuthenticatedImage } from "../components/library/BookDetailModal";
 import { useModalFocusTrap } from "../hooks/common/hooksShared";
 import "./AdminPage.css";
