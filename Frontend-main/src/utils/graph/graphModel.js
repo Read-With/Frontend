@@ -2471,14 +2471,23 @@ const fetchAndStoreByChapter = async (key, uptoChapter) => {
   const covered = toPositiveInt(current?.coveredThroughChapter) ?? 0;
   const startChapter = Math.max(1, covered + 1);
 
+  const chapters = [];
   for (let ch = startChapter; ch <= uptoChapter; ch += 1) {
-    if (current && cacheCoversChapter(current, ch, key)) continue;
+    if (!(current && cacheCoversChapter(current, ch, key))) chapters.push(ch);
+  }
+  // 챕터 요청은 병렬로 보내고, 병합은 챕터 순서대로 (순차 요청 시 N챕터 = N 왕복 대기)
+  const results = await Promise.allSettled(
+    chapters.map((ch) => fetchRelationshipDeltasList(key, { chapterIndex: ch }))
+  );
+  // 일부만 받은 deltas를 성공으로 넘기면 discover가 관계 빠진 챕터 캐시를 저장함
+  if ((bookDeltasGeneration.get(key) ?? 0) !== generation) {
+    throw new DOMException('Aborted', 'AbortError');
+  }
 
-    const fetched = await fetchRelationshipDeltasList(key, { chapterIndex: ch });
-    // 일부만 받은 deltas를 성공으로 넘기면 discover가 관계 빠진 챕터 캐시를 저장함
-    if ((bookDeltasGeneration.get(key) ?? 0) !== generation) {
-      throw new DOMException('Aborted', 'AbortError');
-    }
+  for (let i = 0; i < chapters.length; i += 1) {
+    const ch = chapters[i];
+    if (results[i].status === 'rejected') throw results[i].reason;
+    const fetched = results[i].value;
     const chapterLastId = resolveManifestEventId(getLastManifestEventInChapter(key, ch));
     const chapterOk = fetched.isSuccess !== false;
 
