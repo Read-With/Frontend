@@ -38,8 +38,6 @@ export const defaultSettings = {
 
 export const SETTINGS_STORAGE_KEY = 'xhtml_viewer_settings';
 
-const SETTINGS_KEYS = Object.keys(defaultSettings);
-
 function toFiniteOr(value, fallback) {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
@@ -59,11 +57,6 @@ export function normalizeSettings(settings = {}) {
   };
 }
 
-function needsSettingsPersist(raw, normalized) {
-  if (!raw || typeof raw !== 'object' || 'pageMode' in raw) return true;
-  return SETTINGS_KEYS.some((key) => raw[key] !== normalized[key]);
-}
-
 export function findViewerModeOption(showGraph) {
   return (
     VIEWER_MODE_OPTIONS.find((opt) => opt.showGraph === Boolean(showGraph)) ??
@@ -73,12 +66,7 @@ export function findViewerModeOption(showGraph) {
 
 export function loadSettings() {
   try {
-    const raw = loadFromStorage(SETTINGS_STORAGE_KEY) ?? defaultSettings;
-    const loaded = normalizeSettings(raw);
-    if (needsSettingsPersist(raw, loaded)) {
-      saveToStorage(SETTINGS_STORAGE_KEY, loaded);
-    }
-    return loaded;
+    return normalizeSettings(loadFromStorage(SETTINGS_STORAGE_KEY) ?? defaultSettings);
   } catch (error) {
     return errorUtils.handleError('loadSettings', error, defaultSettings);
   }

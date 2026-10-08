@@ -16,12 +16,8 @@ import {
   setBounded,
   loadFromStorage,
   saveToStorage,
-  removeFromStorage,
-  loadTtlStorage,
   PROGRESS_CACHE_KEY,
   PROGRESS_CACHE_TTL_MS,
-  READER_PROGRESS_CACHE_PREFIX,
-  READER_PROGRESS_MAX_AGE_MS,
 } from './cacheManager';
 import {
   getChapterData,
@@ -146,27 +142,6 @@ const setProgressEntry = (bookId, entry) => {
 const removeProgressEntry = (bookId) => {
   progressCache.delete(bookId);
   persistProgressCache();
-};
-
-function migrateLegacyProgressAggregate() {
-  const allEntry = progressCache.get('all');
-  if (!allEntry?.data || typeof allEntry.data !== 'object') return;
-
-  for (const [bookId, row] of Object.entries(allEntry.data)) {
-    if (!row || row.bookId == null) continue;
-    if (!progressCache.has(bookId)) {
-      setProgressEntry(bookId, row);
-    }
-  }
-  removeProgressEntry('all');
-}
-
-migrateLegacyProgressAggregate();
-
-const getReaderProgressStorageKey = (bookKey) => {
-  const sanitized = toTrimmedStringOrNull(bookKey);
-  if (!sanitized) return null;
-  return `${READER_PROGRESS_CACHE_PREFIX}${sanitized}`;
 };
 
 const progressToReaderLocation = (progress) => {
@@ -396,73 +371,12 @@ export const removeProgressFromCache = (bookId) => {
   if (!bookId) return;
   const bookIdStr = toStringOrNull(bookId);
   removeProgressEntry(bookIdStr);
-  const storageKey = getReaderProgressStorageKey(bookIdStr);
-  if (storageKey) removeFromStorage(storageKey, 'localStorage');
   dispatchProgressCacheUpdated(bookIdStr);
 };
 
-/** 뷰어 재개용 위치 — progressCache SSOT, legacy는 1회 마이그레이션 후 삭제 */
-export const getCachedReaderProgress = (bookKey) => {
-  try {
-    const fromProgress = progressToReaderLocation(getProgressFromCache(bookKey));
-    if (fromProgress) return fromProgress;
-
-    const legacy = getLegacyReaderProgress(bookKey);
-    if (!legacy) return null;
-
-    setProgressToCache({
-      bookId: legacy.bookId ?? bookKey,
-      startLocator: legacy.startLocator,
-      endLocator: legacy.endLocator,
-      locator: legacy.locator ?? legacy.startLocator,
-      eventNum: legacy.eventNum,
-      eventName: legacy.eventName,
-      chapterProgress: legacy.chapterProgress,
-    });
-    const storageKey = getReaderProgressStorageKey(bookKey);
-    if (storageKey) removeFromStorage(storageKey, 'localStorage');
-
-    return progressToReaderLocation(getProgressFromCache(bookKey)) ?? legacy;
-  } catch (error) {
-    errorUtils.logError('getCachedReaderProgress', error, { bookKey });
-    return null;
-  }
-};
-
-/** legacy reader_progress_{id}만 조회 (마이그레이션 폴백용) */
-const getLegacyReaderProgress = (bookKey) => {
-  try {
-    const storageKey = getReaderProgressStorageKey(bookKey);
-    if (!storageKey) return null;
-
-    const parsed = loadTtlStorage(storageKey, READER_PROGRESS_MAX_AGE_MS, 'localStorage');
-    if (!parsed) return null;
-
-    let chapterIdx = resolveChapterIndex(parsed);
-    const loc = parsed?.startLocator ?? parsed?.locator;
-    if (chapterIdx == null && loc && typeof loc === 'object') {
-      chapterIdx = resolveChapterIndex(loc);
-    }
-
-    if (chapterIdx == null || chapterIdx < 1) {
-      removeFromStorage(storageKey, 'localStorage');
-      return null;
-    }
-
-    return {
-      ...parsed,
-      chapterIdx,
-      eventIdx: Number.isFinite(Number(parsed.eventIdx)) ? Number(parsed.eventIdx) : null,
-      eventNum: Number.isFinite(Number(parsed.eventNum)) ? Number(parsed.eventNum) : null,
-      chapterProgress: Number.isFinite(Number(parsed.chapterProgress))
-        ? clampPercent(parsed.chapterProgress)
-        : null,
-    };
-  } catch (error) {
-    errorUtils.logError('getLegacyReaderProgress', error, { bookKey });
-    return null;
-  }
-};
+/** 뷰어 재개용 위치 — progressCache SSOT */
+export const getCachedReaderProgress = (bookKey) =>
+  progressToReaderLocation(getProgressFromCache(bookKey));
 
 /** 뷰어 위치 저장 — progressCache만 갱신 */
 export const setCachedReaderProgress = (bookKey, payload) => {

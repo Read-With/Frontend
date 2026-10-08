@@ -14,9 +14,6 @@ export const CHAPTER_EVENT_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 /** 챕터 이벤트 localStorage 키 — v2: convert 단일 진입점 이후 elements 스키마 */
 export const CHAPTER_EVENT_CACHE_PREFIX = 'chapter_events_v2_';
 
-export const READER_PROGRESS_CACHE_PREFIX = 'reader_progress_';
-export const READER_PROGRESS_MAX_AGE_MS = 3 * 24 * 60 * 60 * 1000;
-
 export const CHAPTER_GRAPH_CACHE_SOURCE = Object.freeze({
   API: 'api',
   INVALID: 'invalid',
@@ -80,6 +77,9 @@ export function removeFromStorage(storageKey, storageType = 'localStorage') {
     errorUtils.logDebug('cacheManager', `스토리지 삭제 실패 (${storageKey})`, { message: error?.message });
   }
 }
+
+// ponytail: 제거된 storageCache 레지스트리의 잔여 키 정리. 배포 몇 주 뒤 이 줄도 삭제
+removeFromStorage('storageCache_data');
 
 /** timestamp 기반 TTL 검사 후 만료 시 스토리지 항목 제거 */
 export function loadTtlStorage(storageKey, maxAgeMs, storageType = 'localStorage') {
