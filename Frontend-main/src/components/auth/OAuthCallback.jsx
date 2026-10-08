@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import PropTypes from 'prop-types';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import useAuth from '../../hooks/auth/useAuth';
 import {
@@ -14,11 +15,12 @@ import {
   resolveOAuthHttpError,
   normalizeOAuthFetchError,
   getOAuthErrorTip,
-  errorUtils,
+  takePostLoginPath,
 } from '../../utils/common/urlUtils';
+import { errorUtils } from '../../utils/common/valueUtils';
 import './OAuthCallback.css';
 
-function GoogleIcon({ className, ...props }) {
+export function GoogleIcon({ className, ...props }) {
   return (
     <svg className={className} viewBox="0 0 24 24" aria-hidden="true" {...props}>
       <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
@@ -28,6 +30,10 @@ function GoogleIcon({ className, ...props }) {
     </svg>
   );
 }
+
+GoogleIcon.propTypes = {
+  className: PropTypes.string,
+};
 
 const LOADING_PHASES = [
   { title: 'Google 로그인 처리 중', detail: '계정 정보를 확인하고 있어요.' },
@@ -80,6 +86,11 @@ function SentenceLines({ text, className }) {
   );
 }
 
+SentenceLines.propTypes = {
+  text: PropTypes.string,
+  className: PropTypes.string,
+};
+
 function splitOAuthErrorDisplay(error) {
   const cleaned = String(error || '')
     .replace(/^로그인 실패:\s*/i, '')
@@ -124,6 +135,14 @@ function OAuthCallbackShell({ variant = '', role, ariaLive, ariaBusy, children }
     </div>
   );
 }
+
+OAuthCallbackShell.propTypes = {
+  variant: PropTypes.string,
+  role: PropTypes.string,
+  ariaLive: PropTypes.string,
+  ariaBusy: PropTypes.oneOfType([PropTypes.bool, PropTypes.string]),
+  children: PropTypes.node,
+};
 
 function tagOAuthError(error, tags = {}) {
   const err = error instanceof Error ? error : new Error(String(error ?? 'OAuth 오류'));
@@ -326,7 +345,7 @@ const OAuthCallback = () => {
         if (cancelled) return;
         login(frontendUserData);
         clearOAuthAttemptArtifacts();
-        navigate('/mypage', { replace: true });
+        navigate(takePostLoginPath() || '/mypage', { replace: true });
       } catch (err) {
         finishError(normalizeOAuthFetchError(err), {
           error: err,

@@ -13,8 +13,8 @@ import {
   resolveBookmarkApiBookId,
   groupBookmarksByChapter,
 } from '../utils/bookmarks/bookmarkUtils';
-import { userViewerPath, userViewerBookmarksPath, userViewerReadingPath, errorUtils } from '../utils/common/urlUtils';
-import { resolveChapterIndex } from '../utils/common/valueUtils';
+import { userViewerPath, userViewerBookmarksPath, userViewerReadingPath } from '../utils/common/urlUtils';
+import { resolveChapterIndex, errorUtils } from '../utils/common/valueUtils';
 import { formatFallbackChapterLabel } from '../utils/viewer/viewerCore';
 import './BookmarksPage.css';
 

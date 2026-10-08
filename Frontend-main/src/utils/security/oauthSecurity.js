@@ -18,15 +18,6 @@ const validateOAuthState = (receivedState, storedState) => {
   return { isValid: true };
 };
 
-function base64UrlEncode(bytes) {
-  let binary = '';
-  const view = bytes instanceof ArrayBuffer ? new Uint8Array(bytes) : bytes;
-  for (let i = 0; i < view.length; i += 1) {
-    binary += String.fromCharCode(view[i]);
-  }
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
 function sessionGet(key) {
   if (typeof sessionStorage === 'undefined') return null;
   try {
@@ -64,43 +55,11 @@ function sessionStoreOrThrow(key, value, label) {
   }
 }
 
-/** @deprecated dormant — 백엔드 PKCE 미사용 */
-export function generateCodeVerifier() {
-  const bytes = new Uint8Array(32);
-  crypto.getRandomValues(bytes);
-  return base64UrlEncode(bytes);
-}
-
-/** @deprecated dormant — 백엔드 PKCE 미사용 */
-export async function generateCodeChallenge(verifier) {
-  const data = new TextEncoder().encode(verifier);
-  const digest = await crypto.subtle.digest('SHA-256', data);
-  return base64UrlEncode(digest);
-}
-
 export function createAndStoreGoogleOAuthState() {
   const state = generateOAuthState();
   sessionStoreOrThrow(GOOGLE_OAUTH_STATE_SESSION_KEY, state, 'OAuth state');
   sessionRemove(GOOGLE_OAUTH_STATE_VERIFIED_KEY);
   return state;
-}
-
-/** @deprecated dormant — 백엔드 PKCE 미사용 */
-export async function createAndStoreGoogleOAuthPkce() {
-  const verifier = generateCodeVerifier();
-  const challenge = await generateCodeChallenge(verifier);
-  sessionStoreOrThrow(GOOGLE_OAUTH_PKCE_VERIFIER_KEY, verifier, 'PKCE verifier');
-  return { verifier, challenge };
-}
-
-/** @deprecated dormant — 백엔드 PKCE 미사용 */
-export function getGoogleOAuthPkceVerifier() {
-  return sessionGet(GOOGLE_OAUTH_PKCE_VERIFIER_KEY);
-}
-
-/** @deprecated dormant — 백엔드 PKCE 미사용 */
-export function clearGoogleOAuthPkceVerifier() {
-  sessionRemove(GOOGLE_OAUTH_PKCE_VERIFIER_KEY);
 }
 
 export function clearGoogleOAuthStateSession() {

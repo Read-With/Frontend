@@ -14,7 +14,7 @@ import {
   calculateLastEventForChapter,
 } from '../../utils/graph/graphCore';
 import { isGraphDragEndEvent } from '../../utils/graph/graphCy';
-import { userViewerPath, errorUtils } from '../../utils/common/urlUtils';
+import { userViewerPath } from '../../utils/common/urlUtils';
 import {
   useGraphSearch,
   useGraphState,
@@ -26,12 +26,11 @@ import { resolveServerBookIdOrFallback, useLocalStorageNumber } from '../../hook
 import {
   convertGraphSourceToElements,
   commitVisibleGraphElements,
-  DEFAULT_GRAPH_TRANSFORM_DEPS,
 } from '../../utils/viewer/viewerGraph';
 import { extractNodeWeightsFromElements, getGraphEventState } from '../../utils/graph/graphModel';
 import { eventUtils, formatFallbackChapterLabel, stripRedundantBookTitlePrefix, resolveChapterTitleMeta } from '../../utils/viewer/viewerCore';
 import { hasGraphPayload } from '../../utils/api/graphApi';
-import { toPositiveNumberOrNull } from '../../utils/common/valueUtils';
+import { toPositiveNumberOrNull, errorUtils } from '../../utils/common/valueUtils';
 import {
   shouldIgnoreGraphOutsideClick,
   useGraphTooltipSelection,
@@ -267,7 +266,6 @@ function RelationGraphWrapper() {
         graphApiPayload,
         currentChapter,
         currentEvent,
-        DEFAULT_GRAPH_TRANSFORM_DEPS,
         extractNodeWeightsFromElements(previousEventState?.elements),
         { bookId: serverBookId },
       ).elements;

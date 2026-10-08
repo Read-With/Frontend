@@ -1,5 +1,4 @@
 import { lazy, memo, Suspense, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import PropTypes from 'prop-types';
 import CytoscapeGraphUnified from './CytoscapeGraphUnified';
 import UnifiedNodeInfo from './UnifiedNodeInfo';
 import { GraphFloatingControls, GraphTopBarMeta } from './GraphControls';
@@ -369,46 +368,5 @@ function GraphCanvas({
     </div>
   );
 }
-
-GraphCanvas.propTypes = {
-  isSidebarOpen: PropTypes.bool.isRequired,
-  sidebarLayoutWidth: PropTypes.number,
-  activeTooltip: PropTypes.object,
-  cyRef: PropTypes.object.isRequired,
-  eventNum: PropTypes.number.isRequired,
-  filename: PropTypes.string.isRequired,
-  elements: PropTypes.array.isRequired,
-  renderElements: PropTypes.array.isRequired,
-  povSummaries: PropTypes.any,
-  povError: PropTypes.string,
-  povIsLoading: PropTypes.bool,
-  povCached: PropTypes.bool,
-  onRetryPov: PropTypes.func,
-  apiBookGraphData: PropTypes.object,
-  bookId: PropTypes.number,
-  isLoading: PropTypes.bool.isRequired,
-  hasShownGraphOnce: PropTypes.bool.isRequired,
-  onCanvasClick: PropTypes.func.isRequired,
-  currentChapter: PropTypes.number.isRequired,
-  chapterDisplayLabel: PropTypes.string,
-  chapterTitleTooltip: PropTypes.string,
-  sidebarControl: PropTypes.object.isRequired,
-  searchState: PropTypes.object.isRequired,
-  floatingControls: PropTypes.shape({
-    searchState: PropTypes.object.isRequired,
-    searchActions: PropTypes.object.isRequired,
-    edgeLabelVisible: PropTypes.bool.isRequired,
-    onToggleEdgeLabel: PropTypes.func.isRequired,
-    filterStage: PropTypes.number.isRequired,
-    onFilterChange: PropTypes.func.isRequired,
-  }),
-  pageChromeStart: PropTypes.node,
-  cytoscapeConfig: PropTypes.object.isRequired,
-  tooltipHandlers: PropTypes.object.isRequired,
-  graphClearRef: PropTypes.object,
-  graphSelectNodeRef: PropTypes.object,
-  onSelectRelatedNode: PropTypes.func,
-  pendingKeepAnalysisOpenRef: PropTypes.shape({ current: PropTypes.bool }),
-};
 
 export default memo(GraphCanvas);

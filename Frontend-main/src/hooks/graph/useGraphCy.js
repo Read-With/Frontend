@@ -10,7 +10,6 @@ import {
   useRef,
   useState,
 } from 'react';
-import PropTypes from 'prop-types';
 import {
   applySelectionHighlight,
   buildTapShowArgs,
@@ -45,7 +44,7 @@ import {
   GRAPH_ZOOM,
   GRAPH_CHARACTER_FILTER_STAGE_OPTIONS,
 } from '../../utils/graph/graphCore.js';
-import { errorUtils } from '../../utils/common/urlUtils';
+import { errorUtils } from '../../utils/common/valueUtils';
 import { useLatestRef } from '../common/hooksShared';
 
 function toCyId(value) {
@@ -770,7 +769,7 @@ export function useGraphTooltipSelection({
   return { onShowNodeTooltip, onShowEdgeTooltip };
 }
 
-export const GRAPH_CANVAS_ARIA_LABEL =
+const GRAPH_CANVAS_ARIA_LABEL =
   '관계 그래프. 화살표로 인물 이동, Enter로 상세, 선택 후 좌우로 관계, 더하기 빼기 영으로 확대 축소 맞춤, Escape로 해제';
 
 /**
@@ -985,16 +984,3 @@ export function GraphA11yStatus({
     ),
   );
 }
-
-GraphA11yStatus.propTypes = {
-  id: PropTypes.string,
-  chapterLabel: PropTypes.string,
-  eventNum: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
-  elements: PropTypes.array,
-  filterStage: PropTypes.number,
-  isSearchActive: PropTypes.bool,
-  searchTerm: PropTypes.string,
-  activeTooltip: PropTypes.object,
-  isLoading: PropTypes.bool,
-  liveAnnouncement: PropTypes.string,
-};

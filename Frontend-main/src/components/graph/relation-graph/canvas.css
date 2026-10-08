@@ -91,21 +91,6 @@
   gap: 0.25rem;
 }
 
-.graph-zoom-controls.is-embedded {
-  position: static;
-  top: auto;
-  right: auto;
-  z-index: auto;
-  box-shadow: none;
-}
-
-.graph-zoom-controls.is-embedded .graph-zoom-btn {
-  width: 1.75rem;
-  height: 1.75rem;
-  min-width: 1.75rem;
-  box-shadow: none;
-}
-
 /* 단독 페이지: 상단바 도구 · 돌아가기 (오른쪽). 줌은 캔버스 우측 상단 */
 .graph-page-topbar .graph-hint-panel,
 .graph-page-topbar .graph-floating-options-panel,

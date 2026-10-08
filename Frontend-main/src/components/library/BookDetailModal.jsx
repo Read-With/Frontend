@@ -1,9 +1,8 @@
 import { useState, useEffect, useMemo, useCallback, useRef, memo } from 'react';
-import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { getBookManifest, getBookProgress, deleteBookProgress } from '../../utils/api/booksApi';
-import { resolveProgressLocator } from '../../utils/common/valueUtils';
+import { resolveProgressLocator, errorUtils } from '../../utils/common/valueUtils';
 import { BOOKS_QUERY_KEY } from '../../hooks/books/bookHooks';
 import { useAsyncRequestGuard, useModalFocusTrap, useLatestRef } from '../../hooks/common/hooksShared';
 import { getProgressFromCache, PROGRESS_CACHE_UPDATED_EVENT,} from '../../utils/common/cache/progressCache';
@@ -14,6 +13,7 @@ import {
   dedupeAndSortCharacters,
   toLibraryIsoDateOrNull,
   libraryPanelBodyClass,
+  HIDE_BOOK_COPY,
 } from '../../utils/library/libraryUtils';
 import {
   resolveServerBookId,
@@ -25,7 +25,6 @@ import {
   fetchAuthenticatedAssetBlobUrl,
   isProtectedPublicAsset,
   sanitizeAssetUrl,
-  errorUtils,
 } from '../../utils/common/urlUtils';
 import { toast } from 'react-toastify';
 import ConfirmDialog from './ConfirmDialog';
@@ -95,15 +94,6 @@ export function AuthenticatedImage({
     />
   );
 }
-
-AuthenticatedImage.propTypes = {
-  src: PropTypes.string,
-  alt: PropTypes.string,
-  className: PropTypes.string,
-  fallback: PropTypes.node,
-  onError: PropTypes.func,
-  onLoad: PropTypes.func,
-};
 
 function mergeBookWithManifest(book, manifestData) {
   const manifest = manifestData.result;
@@ -425,15 +415,14 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
     try {
       if (onDelete) {
         await onDelete(book.id);
-        toast.success('책이 삭제되었습니다');
         setBookDeleteConfirm(false);
         onClose();
       } else {
-        toast.error('삭제 기능을 사용할 수 없습니다');
+        toast.error('숨기기 기능을 사용할 수 없습니다');
       }
     } catch (err) {
       errorUtils.logError('BookDetailModal', err, { action: 'deleteBook' });
-      toast.error('책 삭제에 실패했습니다');
+      toast.error(HIDE_BOOK_COPY.failed);
     }
   }, [book, onDelete, onClose]);
 
@@ -778,7 +767,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
 
           <div className="book-detail-footer-stack">
             <div className="book-detail-actions book-detail-actions--footer">
-              <div className="book-detail-footer-row" role="group" aria-label="관계도 및 서재 삭제">
+              <div className="book-detail-footer-row" role="group" aria-label="관계도 및 서재에서 숨기기">
                 <button
                   className="book-detail-secondary-btn"
                   onClick={handleGraphClick}
@@ -791,9 +780,9 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
                   className="book-detail-danger-btn book-detail-danger-btn--inline"
                   onClick={() => setBookDeleteConfirm(true)}
                   type="button"
-                  aria-label="서재에서 이 책 삭제"
+                  aria-label="서재에서 이 책 숨기기"
                 >
-                  서재에서 삭제
+                  서재에서 숨기기
                 </button>
               </div>
             </div>
@@ -805,9 +794,9 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
         isOpen={bookDeleteConfirm}
         onClose={() => setBookDeleteConfirm(false)}
         onConfirm={handleConfirmDeleteBook}
-        title="책 삭제"
-        message="서재에서 이 책을 삭제할까요? 이 작업은 되돌릴 수 없습니다."
-        confirmLabel="삭제"
+        title={HIDE_BOOK_COPY.title}
+        message={HIDE_BOOK_COPY.message}
+        confirmLabel={HIDE_BOOK_COPY.confirmLabel}
         manageChrome={false}
       />
 
@@ -823,14 +812,6 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
     </>
   );
 });
-
-BookDetailModal.propTypes = {
-  book: PropTypes.object,
-  isOpen: PropTypes.bool.isRequired,
-  onClose: PropTypes.func.isRequired,
-  onDelete: PropTypes.func,
-  viewMode: PropTypes.oneOf(['grid', 'list']),
-};
 
 BookDetailModal.displayName = 'BookDetailModal';
 

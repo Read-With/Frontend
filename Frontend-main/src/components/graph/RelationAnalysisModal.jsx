@@ -1,11 +1,10 @@
 import { memo, useState, useEffect, useCallback, useMemo, useRef } from "react";
-import PropTypes from "prop-types";
 import {
   GRAPH_LAYOUT_CONSTANTS,
   RELATION_CONNECTION_KIND,
 } from "../../utils/graph/graphCore";
 import {Radar,RadarChart,PolarGrid,PolarAngleAxis,PolarRadiusAxis,ResponsiveContainer,} from 'recharts';
-import { getPositivityDisplay, clampPositivity, getPositivityGradientCss, GRAPH_COLORS, brandAlpha } from '../../utils/styles/graphStyles.js';
+import { getPositivityDisplay, clampPositivity, GRAPH_COLORS, brandAlpha } from '../../utils/styles/graphStyles.js';
 import { truncateWithEllipsis, cycleIndex } from '../../utils/common/valueUtils.js';
 import { joinClasses } from '../../utils/styles/styles.js';
 import { NodeProfileAvatar } from './GraphControls';
@@ -22,7 +21,6 @@ const RADAR_RADIUS_TICK_LABELS = {
 };
 
 const CONNECTION = RELATION_CONNECTION_KIND;
-const POSITIVITY_GRADIENT = getPositivityGradientCss();
 
 const SIBLING_NAV = [
   { dir: -1, label: '이전 연결 인물로 분석 전환', text: '‹' },
@@ -93,7 +91,7 @@ const RadarDot = memo(function RadarDot({
         cy={cy}
         r={Math.max(16, radius * 3)}
         fill="transparent"
-        style={{ cursor: 'pointer', pointerEvents: 'all', outline: 'none' }}
+        className="relation-radar-dot-hit"
         onMouseEnter={activate}
         onClick={activate}
         onFocus={activate}
@@ -116,7 +114,6 @@ const RadarDot = memo(function RadarDot({
           stroke={GRAPH_COLORS.primary}
           strokeWidth={1.5}
           strokeOpacity={0.55}
-          style={{ pointerEvents: 'none' }}
         />
       ) : null}
       <circle
@@ -126,7 +123,6 @@ const RadarDot = memo(function RadarDot({
         fill={color}
         stroke={isActive ? '#fff' : 'rgba(255,255,255,0.85)'}
         strokeWidth={isActive ? 2 : 1}
-        style={{ pointerEvents: 'none' }}
       />
     </g>
   );
@@ -213,10 +209,7 @@ function PositivityScaleBar({ positivity }) {
       role="img"
       aria-label={`긍정성 ${label} (${clamped.toFixed(2)})`}
     >
-      <div
-        className="relation-positivity-scale-track"
-        style={{ background: POSITIVITY_GRADIENT }}
-      >
+      <div className="relation-positivity-scale-track">
         <span className="relation-positivity-scale-zero" />
         <span
           className="relation-positivity-scale-marker"
@@ -457,7 +450,7 @@ function RelationAnalysisModalImpl({
         fontSize={active ? 16 : 14}
         fontWeight={active ? 700 : 500}
         letterSpacing={active ? '0.01em' : '0'}
-        style={{ cursor: point ? 'pointer' : 'default' }}
+        className={joinClasses('relation-radar-tick', point && 'is-clickable')}
         onClick={() => point && activateItem(point)}
       >
         <title>{raw}</title>
@@ -474,7 +467,6 @@ function RelationAnalysisModalImpl({
         <RadarChart
           data={radarChartData}
           margin={{ top: 68, right: 68, bottom: 68, left: 68 }}
-          style={{ outline: 'none' }}
         >
           <PolarGrid
             gridType="polygon"
@@ -613,7 +605,6 @@ function RelationAnalysisModalImpl({
               size={40}
               className="relation-modal-avatar"
               innerClassName={null}
-              style={{ width: 40, height: 40 }}
             />
             <div className="relation-modal-header-copy">
               <h2 id={titleId} className="tooltip-modal-title">
@@ -659,10 +650,7 @@ function RelationAnalysisModalImpl({
             <span className="relation-modal-legend-label">긍정성</span>
             <div className="relation-modal-legend-bar">
               <span>부정 (−100%)</span>
-              <span
-                className="relation-modal-legend-gradient"
-                style={{ background: POSITIVITY_GRADIENT }}
-              />
+              <span className="relation-modal-legend-gradient" />
               <span>긍정 (+100%)</span>
             </div>
           </div>
@@ -676,26 +664,6 @@ function RelationAnalysisModalImpl({
     </div>
   );
 }
-
-RelationAnalysisModalImpl.propTypes = {
-  node: PropTypes.object,
-  radarChartData: PropTypes.arrayOf(
-    PropTypes.shape({
-      id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-      name: PropTypes.string,
-      positivity: PropTypes.number,
-      normalizedValue: PropTypes.number,
-      relationTags: PropTypes.arrayOf(PropTypes.string),
-    }),
-  ),
-  connectionKind: PropTypes.oneOf(Object.values(RELATION_CONNECTION_KIND)),
-  loadError: PropTypes.string,
-  onClose: PropTypes.func.isRequired,
-  onSelectRelatedNode: PropTypes.func,
-  returnFocusRef: PropTypes.shape({ current: PropTypes.any }),
-  chapterRailWidth: PropTypes.number,
-  reserveRight: PropTypes.number,
-};
 
 const RelationAnalysisModal = memo(RelationAnalysisModalImpl);
 

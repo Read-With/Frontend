@@ -1,9 +1,8 @@
 /** Cytoscape 스타일시트·레이아웃·노드 크기·긍정성 색/라벨 */
 
-import { isValidNodeWeight } from '../graph/graphModel.js';
-import { clampPositivity } from '../common/valueUtils';
+import { clampPositivity, isPositiveFiniteNumberLiteral } from '../common/valueUtils';
 
-// styles.js가 이 모듈을 re-export하므로 styles.js를 import하지 않는다.
+// styles.js가 이 모듈을 import하므로 styles.js를 import하지 않는다 (순환 방지).
 
 export { clampPositivity };
 
@@ -13,7 +12,7 @@ export const STYLE_DURATION = {
 };
 
 /** --rg-* / --brand-* 와 동일 hex (Cytoscape는 CSS var 미지원) */
-export const BRAND_RGB = '62, 79, 47';
+const BRAND_RGB = '62, 79, 47';
 
 export function brandAlpha(alpha) {
   return `rgba(${BRAND_RGB}, ${alpha})`;
@@ -59,8 +58,8 @@ export const GRAPH_COLORS = {
   surfaceGlass: RG.surfaceGlass,
 };
 
-export const NODE_SIZE_MIN = 30;
-export const NODE_SIZE_MAX = 80;
+const NODE_SIZE_MIN = 30;
+const NODE_SIZE_MAX = 80;
 
 const RESPONSIVE_NODE_SIZE_RANGES = Object.freeze([
   { maxWidth: 420, min: 22, max: 54 },
@@ -81,13 +80,13 @@ export function getResponsiveNodeSizeRange(containerWidth) {
 }
 
 function computeWeightRange(weights) {
-  const valid = (Array.isArray(weights) ? weights : []).filter(isValidNodeWeight);
+  const valid = (Array.isArray(weights) ? weights : []).filter(isPositiveFiniteNumberLiteral);
   if (valid.length === 0) return { min: 0, max: 0 };
   return { min: Math.min(...valid), max: Math.max(...valid) };
 }
 
 function normalizeWeightToUnit(weight, minWeight, maxWeight) {
-  if (!isValidNodeWeight(weight)) return 0;
+  if (!isPositiveFiniteNumberLiteral(weight)) return 0;
   if (typeof minWeight !== 'number' || typeof maxWeight !== 'number') return 0;
   if (minWeight >= maxWeight) return 1;
   return (weight - minWeight) / (maxWeight - minWeight);
@@ -150,7 +149,7 @@ export const PRESET_LAYOUT = Object.freeze({
 /** 최초 로딩·전체 재배치용. animate:false로 동기 완료
  *  노드 반지름이 최대 40px(NODE_SIZE_MAX/2)까지 나오므로, 인접 노드가 맞닿아 보이지 않도록
  *  idealEdgeLength·nodeRepulsion·tilingPadding을 노드 크기 대비 여유 있게 잡는다. */
-export const COSE_BILKENT_LAYOUT = Object.freeze({
+const COSE_BILKENT_LAYOUT = Object.freeze({
   name: 'cose-bilkent',
   fit: false,
   animate: false,
@@ -210,8 +209,6 @@ export const getEdgeStyle = (context = 'default') => ({
 /* ─── 긍정성 (−1~+1) 색·라벨 ─── */
 
 /** 관계 존재 구간의 긍정도. 없/비정상이면 0. UI에서 null(정보 없음)과 구분할 때는 쓰지 말 것. */
-export const finitePositivityOrZero = clampPositivity;
-
 export const getRelationColor = (positivity) => {
   const value = clampPositivity(positivity);
   const normalized = (value + 1) / 2;
@@ -256,7 +253,7 @@ function isMissingPositivity(positivity) {
 }
 
 /** @returns {{ color: string, text: string }} */
-export function getRelationStyle(positivity) {
+function getRelationStyle(positivity) {
   if (isMissingPositivity(positivity)) {
     return { color: getRelationColor(0), text: '정보 없음' };
   }
@@ -284,10 +281,6 @@ export function getPositivityDisplay(positivity) {
     label: text,
     percent: isMissingPositivity(positivity) ? 0 : Math.round(clampPositivity(positivity) * 100),
   };
-}
-
-export function clearStyleCache() {
-  relationStyleCache.clear();
 }
 
 /* ─── Cytoscape stylesheet ─── */

@@ -299,12 +299,12 @@ export function formatFallbackChapterLabel(idx) {
   return Number.isFinite(n) && n >= 1 ? `제${Math.trunc(n)}장` : '제—장';
 }
 
-export function isFallbackChapterLabel(label) {
+function isFallbackChapterLabel(label) {
   return /^제[\d—]+장$/.test(toComparable(label));
 }
 
 /** spineHref → 사람이 읽을 수 있는 파일명 기반 제목 */
-export function titleFromSpineHref(href) {
+function titleFromSpineHref(href) {
   const raw = String(href ?? '').trim();
   if (!raw) return '';
   let path = raw;
@@ -334,7 +334,7 @@ export function titleFromSpineHref(href) {
  * 매니페스트 챕터에서 원제 후보를 고른다.
  * 우선순위: title → chapterTitle → nav/toc → label → spine 파일명
  */
-export function pickChapterRawTitle(chapter) {
+function pickChapterRawTitle(chapter) {
   if (!chapter || typeof chapter !== 'object') {
     return { raw: '', source: null };
   }
@@ -363,7 +363,7 @@ function stripLeadingSep(text) {
 }
 
 /** 목록 라벨용: 책 제목을 전역 제거(prefix만이 아님) */
-export function stripBookTitleFromText(label, bookTitle) {
+function stripBookTitleFromText(label, bookTitle) {
   let text = toComparable(label);
   const book = toComparable(bookTitle);
   if (!text) return '';
@@ -387,7 +387,7 @@ export function stripBookTitleFromText(label, bookTitle) {
  * - 비면 책 제목만 제거한 중간값 → 그래도 비고 raw≠책제목이면 raw 유지
  * - raw가 책 제목과 동일하면 '' (collapsed)
  */
-export function cleanChapterListLabel(rawTitle, bookTitle) {
+function cleanChapterListLabel(rawTitle, bookTitle) {
   const raw = toComparable(rawTitle);
   if (!raw) return '';
 
@@ -552,16 +552,6 @@ function uniqueSearchTexts(values) {
     out.push(text);
   }
   return out;
-}
-
-/** 상단바: 제N장 · 이름 (이름 없으면 제N장) */
-export function formatChapterOrderAndName(orderOneBased, chapterTitle) {
-  const fallback = formatFallbackChapterLabel(orderOneBased);
-  const name = collapseWhitespace(String(chapterTitle ?? ''));
-  if (!name || isFallbackChapterLabel(name) || normalizeLabel(name) === normalizeLabel(fallback)) {
-    return fallback;
-  }
-  return `${fallback} · ${name}`;
 }
 
 /** 단순 챕터 번호 라벨 (`Chapter 3` / `Chapter ?`) */

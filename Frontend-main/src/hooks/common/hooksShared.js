@@ -3,8 +3,7 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { getBookManifest } from '../../utils/api/booksApi';
 import { getManifestFromCache } from '../../utils/common/cache/manifestCache';
-import { toPositiveNumberOrNull } from '../../utils/common/valueUtils';
-import { errorUtils } from '../../utils/common/urlUtils';
+import { toPositiveNumberOrNull, errorUtils } from '../../utils/common/valueUtils';
 import { resolveServerBookId } from '../../utils/viewer/viewerCore';
 
 export function useLatestRef(value) {
@@ -14,7 +13,7 @@ export function useLatestRef(value) {
 }
 
 /** 뷰어·그래프 공통 모바일 브레이크포인트 */
-export const NARROW_VIEWPORT_MQ = '(max-width: 767px)';
+const NARROW_VIEWPORT_MQ = '(max-width: 767px)';
 
 export function useIsNarrowViewport(mediaQuery = NARROW_VIEWPORT_MQ) {
   const [isNarrow, setIsNarrow] = useState(() =>
@@ -41,7 +40,7 @@ export function readSessionHintSeen(key) {
   }
 }
 
-export function markSessionHintSeen(key) {
+function markSessionHintSeen(key) {
   try {
     sessionStorage.setItem(key, '1');
   } catch {
@@ -321,7 +320,7 @@ export function useLocalStorageNumber(key, initialValue, options = {}) {
  *   error?: Error,
  * }>}
  */
-export async function ensureBookManifest(bookId) {
+async function ensureBookManifest(bookId) {
   const numericBookId = Number(bookId);
   if (!Number.isFinite(numericBookId) || numericBookId < 1) {
     return { manifest: null, ok: true, skipped: true };
