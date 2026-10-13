@@ -1,23 +1,18 @@
 import { useEffect, useState } from 'react';
-import PropTypes from 'prop-types';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import useAuth from '../../hooks/auth/useAuth';
 import {
   validateUserData,
   verifyGoogleOAuthState,
   clearGoogleOAuthStateSession,
-} from '../../utils/security/oauthSecurity';
-import {
-  getApiBaseUrl,
-  getGoogleOAuthRedirectUri,
   resolveOAuthUrlError,
   resolveOAuthApiBodyError,
   resolveOAuthHttpError,
   normalizeOAuthFetchError,
   getOAuthErrorTip,
-  takePostLoginPath,
-} from '../../utils/common/urlUtils';
-import { errorUtils } from '../../utils/common/valueUtils';
+} from '../../utils/security/oauthSecurity';
+import { getApiBaseUrl, getGoogleOAuthRedirectUri, takePostLoginPath } from '../../utils/common/urlUtils';
+import { errorUtils, sleep } from '../../utils/common/valueUtils';
 import './OAuthCallback.css';
 
 export function GoogleIcon({ className, ...props }) {
@@ -30,10 +25,6 @@ export function GoogleIcon({ className, ...props }) {
     </svg>
   );
 }
-
-GoogleIcon.propTypes = {
-  className: PropTypes.string,
-};
 
 const LOADING_PHASES = [
   { title: 'Google 로그인 처리 중', detail: '계정 정보를 확인하고 있어요.' },
@@ -86,11 +77,6 @@ function SentenceLines({ text, className }) {
   );
 }
 
-SentenceLines.propTypes = {
-  text: PropTypes.string,
-  className: PropTypes.string,
-};
-
 function splitOAuthErrorDisplay(error) {
   const cleaned = String(error || '')
     .replace(/^로그인 실패:\s*/i, '')
@@ -135,14 +121,6 @@ function OAuthCallbackShell({ variant = '', role, ariaLive, ariaBusy, children }
     </div>
   );
 }
-
-OAuthCallbackShell.propTypes = {
-  variant: PropTypes.string,
-  role: PropTypes.string,
-  ariaLive: PropTypes.string,
-  ariaBusy: PropTypes.oneOfType([PropTypes.bool, PropTypes.string]),
-  children: PropTypes.node,
-};
 
 function tagOAuthError(error, tags = {}) {
   const err = error instanceof Error ? error : new Error(String(error ?? 'OAuth 오류'));
@@ -243,6 +221,9 @@ async function exchangeGoogleAuthCode(code) {
   }
 }
 
+const isServerNotReady = (err) =>
+  err?.phase === 'network' || err?.phase === 'timeout' || [502, 503, 504].includes(err?.status);
+
 function stripOAuthCallbackParams() {
   if (!window.history?.replaceState) return;
   const cleanUrl = new URL(window.location.href);
@@ -341,7 +322,18 @@ const OAuthCallback = () => {
 
       try {
         stripOAuthCallbackParams();
-        const frontendUserData = await exchangeGoogleAuthCode(code);
+        let frontendUserData;
+        // 서버가 깨어날 때까지 무한 재시도 (code를 서버가 아직 소비하지 않은 실패만)
+        for (let attempt = 1; ; attempt += 1) {
+          try {
+            frontendUserData = await exchangeGoogleAuthCode(code);
+            break;
+          } catch (err) {
+            if (cancelled || !isServerNotReady(err)) throw err;
+            await sleep(Math.min(1000 * attempt, 5000));
+            if (cancelled) return;
+          }
+        }
         if (cancelled) return;
         login(frontendUserData);
         clearOAuthAttemptArtifacts();

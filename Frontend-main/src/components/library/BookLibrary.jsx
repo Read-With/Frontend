@@ -6,10 +6,9 @@ import BookDetailModal, { AuthenticatedImage } from './BookDetailModal';
 import ConfirmDialog from './ConfirmDialog';
 import './BookLibrary.css';
 import { USER_VIEWER_PREFIX, USER_GRAPH_PREFIX } from '../../utils/common/urlUtils';
-import { errorUtils } from '../../utils/common/valueUtils';
+import { errorUtils, formatRelativeTime } from '../../utils/common/valueUtils';
 import { resolveServerBookId } from '../../utils/viewer/viewerCore';
 import {
-  formatLibraryRelativeDate,
   makeOpeningTargetKey,
   getOpeningMode,
   HIDE_BOOK_COPY,
@@ -238,7 +237,7 @@ const BookCard = memo(({ book, onToggleFavorite, onOpenBook, onBookDetailClick, 
           {book.updatedAt && (
             <span className="book-meta-item">
               <Clock size={14} aria-hidden />
-              {formatLibraryRelativeDate(book.updatedAt)}
+              {formatRelativeTime(book.updatedAt, { withTime: false })}
             </span>
           )}
         </div>

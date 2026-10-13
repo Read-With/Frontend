@@ -33,21 +33,21 @@ const friendlyError = (err, fallback) => {
 
 export const useBookmarks = (bookId, options = {}) => {
   const { viewerRef = null, setFailCount = null, sortOrder = 'recent' } = options;
-  const apiBookId = useMemo(() => toPositiveNumberOrNull(bookId), [bookId]);
+  const serverBookId = useMemo(() => toPositiveNumberOrNull(bookId), [bookId]);
   const apiSort = clientSortToApiSort(sortOrder);
 
   const queryClient = useQueryClient();
-  const queryKey = useMemo(() => ['bookmarks', apiBookId, apiSort], [apiBookId, apiSort]);
+  const queryKey = useMemo(() => ['bookmarks', serverBookId, apiSort], [serverBookId, apiSort]);
   const query = useQuery({
     queryKey,
-    enabled: apiBookId != null,
+    enabled: serverBookId != null,
     queryFn: async () => {
       try {
-        return await loadBookmarksFromApi(apiBookId, apiSort);
+        return await loadBookmarksFromApi(serverBookId, apiSort);
       } catch (err) {
         errorUtils.logWarning(LOG, friendlyError(err, '북마크 목록을 불러오지 못했습니다.'), {
           action: 'fetch',
-          bookId: apiBookId,
+          bookId: serverBookId,
           sort: apiSort,
           message: err?.message,
           status: err?.status ?? err?.statusCode,
@@ -61,14 +61,10 @@ export const useBookmarks = (bookId, options = {}) => {
     retry: false,
   });
   const { refetch } = query;
-  const bookmarks = useMemo(() => (apiBookId == null ? [] : query.data ?? []), [apiBookId, query.data]);
+  const bookmarks = useMemo(() => (serverBookId == null ? [] : query.data ?? []), [serverBookId, query.data]);
   // 이미 목록이 있으면 백그라운드 재조회 실패는 숨김
   const loadError =
-    apiBookId == null
-      ? (bookId ? '유효한 책 ID가 없어 북마크를 불러올 수 없습니다.' : null)
-      : query.error && !query.data
-        ? friendlyError(query.error, '북마크 목록을 불러오지 못했습니다.')
-        : null;
+    query.error && !query.data ? friendlyError(query.error, '북마크 목록을 불러오지 못했습니다.') : null;
 
   const setBookmarks = useCallback(
     (updater) => {
@@ -98,7 +94,7 @@ export const useBookmarks = (bookId, options = {}) => {
         const msg = response.message || messages.fail;
         errorUtils.logWarning(LOG, msg, {
           action: messages.action,
-          bookId: apiBookId,
+          bookId: serverBookId,
           softFail: true,
         });
         toast.error(msg);
@@ -109,7 +105,7 @@ export const useBookmarks = (bookId, options = {}) => {
       const result = onSuccess(response);
       // 다른 정렬 키 캐시는 이번 변경이 빠져 있으므로 제거 (재진입 시 삭제된 북마크 노출·중복 판정 오류 방지)
       queryClient.removeQueries({
-        queryKey: ['bookmarks', apiBookId],
+        queryKey: ['bookmarks', serverBookId],
         predicate: (q) => q.queryKey[2] !== apiSort,
       });
       toast.success(messages.success, {
@@ -121,7 +117,7 @@ export const useBookmarks = (bookId, options = {}) => {
       // API 레이어가 이미 logError한 경우 많음 → UI는 컨텍스트 warn만
       errorUtils.logWarning(LOG, friendlyError(err, messages.error), {
         action: messages.action,
-        bookId: apiBookId,
+        bookId: serverBookId,
         message: err?.message,
         status: err?.status ?? err?.statusCode,
       });
@@ -132,7 +128,7 @@ export const useBookmarks = (bookId, options = {}) => {
       mutatingRef.current = false;
       setIsMutating(false);
     }
-  }, [apiBookId, apiSort, queryClient, queryKey]);
+  }, [serverBookId, apiSort, queryClient, queryKey]);
 
   const addBookmark = useCallback(
     (bookmarkData) =>
@@ -207,7 +203,7 @@ export const useBookmarks = (bookId, options = {}) => {
     if (!viewerRef?.current) {
       errorUtils.logWarning(LOG, '뷰어 미준비로 북마크 추가 불가', {
         action: 'addFromViewer',
-        bookId: apiBookId,
+        bookId: serverBookId,
         reason: 'viewer_not_ready',
       });
       toast.error('페이지가 아직 준비되지 않았어요. 다시 불러옵니다...');
@@ -215,7 +211,7 @@ export const useBookmarks = (bookId, options = {}) => {
       return { success: false };
     }
 
-    if (apiBookId == null) {
+    if (serverBookId == null) {
       errorUtils.logWarning(LOG, 'bookId 없음으로 북마크 추가 불가', {
         action: 'addFromViewer',
         reason: 'missing_book_id',
@@ -236,7 +232,7 @@ export const useBookmarks = (bookId, options = {}) => {
     } catch (err) {
       errorUtils.logWarning(LOG, 'locator 해석 실패', {
         action: 'addFromViewer',
-        bookId: apiBookId,
+        bookId: serverBookId,
         message: err?.message,
       });
     }
@@ -244,7 +240,7 @@ export const useBookmarks = (bookId, options = {}) => {
     if (!rawStart) {
       errorUtils.logWarning(LOG, '현재 위치 locator 없음', {
         action: 'addFromViewer',
-        bookId: apiBookId,
+        bookId: serverBookId,
         reason: 'missing_locator',
       });
       toast.error('페이지 정보를 읽을 수 없습니다. 다시 불러옵니다...');
@@ -252,11 +248,11 @@ export const useBookmarks = (bookId, options = {}) => {
       return { success: false };
     }
 
-    const axisReady = await waitForBookmarkAxisReady(apiBookId, rawStart);
+    const axisReady = await waitForBookmarkAxisReady(serverBookId, rawStart);
     if (!axisReady) {
       errorUtils.logWarning(LOG, '북마크 axis 미준비', {
         action: 'addFromViewer',
-        bookId: apiBookId,
+        bookId: serverBookId,
         reason: 'axis_not_ready',
       });
       toast.error('책 위치 정보가 아직 준비되지 않았어요. 잠시 후 다시 시도해 주세요.');
@@ -265,11 +261,11 @@ export const useBookmarks = (bookId, options = {}) => {
 
     setFailCount?.(0);
 
-    const bookmarkData = createBookmarkData(apiBookId, rawStart, rawEnd);
+    const bookmarkData = createBookmarkData(serverBookId, rawStart, rawEnd);
     if (!bookmarkData.startLocator) {
       errorUtils.logWarning(LOG, '북마크 데이터 locator 생성 실패', {
         action: 'addFromViewer',
-        bookId: apiBookId,
+        bookId: serverBookId,
         reason: 'create_data_failed',
       });
       toast.error('페이지 정보를 읽을 수 없습니다. 다시 불러옵니다...');
@@ -291,24 +287,24 @@ export const useBookmarks = (bookId, options = {}) => {
     }
 
     return addBookmark(bookmarkData);
-  }, [apiBookId, viewerRef, setFailCount, addBookmark, queryClient, queryKey, refetch]);
+  }, [serverBookId, viewerRef, setFailCount, addBookmark, queryClient, queryKey, refetch]);
 
   // bfcache 복원 시 재동기화 (visibilitychange는 refetchOnWindowFocus가 처리)
   useEffect(() => {
-    if (apiBookId == null) return undefined;
+    if (serverBookId == null) return undefined;
     const onPageShow = (event) => {
       if (event.persisted) refetch();
     };
     window.addEventListener('pageshow', onPageShow);
     return () => window.removeEventListener('pageshow', onPageShow);
-  }, [apiBookId, refetch]);
+  }, [serverBookId, refetch]);
 
   return {
     bookmarks,
     loading: query.isLoading,
     loadError,
     isMutating,
-    apiBookId,
+    serverBookId,
     fetchBookmarks: refetch,
     removeBookmark,
     patchBookmark,

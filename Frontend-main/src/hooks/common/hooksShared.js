@@ -3,8 +3,7 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { getBookManifest } from '../../utils/api/booksApi';
 import { getManifestFromCache } from '../../utils/common/cache/manifestCache';
-import { toPositiveNumberOrNull, errorUtils } from '../../utils/common/valueUtils';
-import { resolveServerBookId } from '../../utils/viewer/viewerCore';
+import { errorUtils } from '../../utils/common/valueUtils';
 import { lockBodyScroll } from '../../utils/styles/styles';
 
 /** body 스크롤 잠금 (중첩 안전 — lockBodyScroll 참고) */
@@ -35,48 +34,6 @@ export function useIsNarrowViewport(mediaQuery = NARROW_VIEWPORT_MQ) {
   }, [mediaQuery]);
 
   return isNarrow;
-}
-
-/** 세션 1회성 온보딩 힌트의 sessionStorage 읽기·기록 공통화 */
-export function readSessionHintSeen(key) {
-  try {
-    return sessionStorage.getItem(key) === '1';
-  } catch {
-    return true;
-  }
-}
-
-function markSessionHintSeen(key) {
-  try {
-    sessionStorage.setItem(key, '1');
-  } catch {
-    /* ignore */
-  }
-}
-
-/** 세션 1회성 온보딩 힌트 open/dismiss 상태 머신 — 그래프·뷰어 공통 */
-export function useSessionHint(storageKey, { autoOpen = true } = {}) {
-  const [hintSeen, setHintSeen] = useState(() => readSessionHintSeen(storageKey));
-  const [open, setOpen] = useState(() => autoOpen && !readSessionHintSeen(storageKey));
-
-  const markSeen = useCallback(() => {
-    markSessionHintSeen(storageKey);
-    setHintSeen(true);
-  }, [storageKey]);
-
-  const dismiss = useCallback(() => {
-    markSeen();
-    setOpen(false);
-  }, [markSeen]);
-
-  const toggle = useCallback(() => {
-    setOpen((v) => {
-      markSeen();
-      return !v;
-    });
-  }, [markSeen]);
-
-  return { hintSeen, open, setOpen, dismiss, toggle, markSeen };
 }
 
 const MODAL_FOCUS_TRAP_SELECTOR =
@@ -229,10 +186,6 @@ export function useErrorHandler(context = '알 수 없는 컨텍스트') {
   }, [context]);
 
   return { handleError };
-}
-
-export function resolveServerBookIdOrFallback(book, routeBookId = null) {
-  return resolveServerBookId(book) ?? toPositiveNumberOrNull(routeBookId);
 }
 
 export function useLocalStorageNumber(key, initialValue, options = {}) {

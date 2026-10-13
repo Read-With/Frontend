@@ -1,14 +1,15 @@
 /** 도서 응답 정규화 — API·캐시 계층 공용 (순환 import 방지용 순수 모듈) */
 
 import { sanitizeAssetUrl } from './urlUtils';
+import { stringOrEmpty } from './valueUtils';
 
 export const normalizeBookCore = (book) => {
   const coverImgUrl =
     typeof book.coverImgUrl === 'string' ? sanitizeAssetUrl(book.coverImgUrl) : '';
   return {
     id: book.id,
-    title: typeof book.title === 'string' ? book.title : '',
-    author: typeof book.author === 'string' ? book.author : '',
+    title: stringOrEmpty(book.title),
+    author: stringOrEmpty(book.author),
     language: book.language != null ? String(book.language) : undefined,
     coverImgUrl,
     epubPath: book.epubPath != null ? String(book.epubPath) : undefined,

@@ -2,7 +2,7 @@
 
 import { PanelsTopLeft, FileText } from 'lucide-react';
 import { toast } from 'react-toastify';
-import { loadFromStorage, saveToStorage } from '../common/cache/cacheManager';
+import { loadFromStorage, saveToStorage, readRaw, writeRaw } from '../common/cache/cacheManager';
 import {
   toLocator,
   progressResultToViewerAnchor,
@@ -11,12 +11,13 @@ import {
   anchorToLocators,
   resolveChapterIndex,
   toPositiveNumberOrNull,
+  toNumberOrNull,
   errorUtils,
 } from '../common/valueUtils';
 import {
   findManifestEventInChapter,
   getLastManifestEventInChapter,
-  resolveLocatorToEventParams as resolveManifestLocatorToEventParams,
+  resolveLocatorToEventParams,
   resolveProgressMetricsFromLocator,
 } from '../common/cache/manifestCache';
 import { getProgressFromCache, resolveProgressEventName } from '../common/cache/progressCache';
@@ -42,17 +43,12 @@ export const viewerFontStack = (fontFamily) =>
 
 export const SETTINGS_STORAGE_KEY = 'xhtml_viewer_settings';
 
-function toFiniteOr(value, fallback) {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : fallback;
-}
-
 export function normalizeSettings(settings = {}) {
   const merged = { ...defaultSettings, ...settings };
   return {
-    fontSize: toFiniteOr(merged.fontSize, defaultSettings.fontSize),
-    lineHeight: toFiniteOr(merged.lineHeight, defaultSettings.lineHeight),
-    margin: toFiniteOr(merged.margin, defaultSettings.margin),
+    fontSize: toNumberOrNull(merged.fontSize) ?? defaultSettings.fontSize,
+    lineHeight: toNumberOrNull(merged.lineHeight) ?? defaultSettings.lineHeight,
+    margin: toNumberOrNull(merged.margin) ?? defaultSettings.margin,
     fontFamily:
       typeof merged.fontFamily === 'string' && merged.fontFamily.trim()
         ? merged.fontFamily
@@ -84,10 +80,6 @@ export function saveSettings(settings) {
     errorUtils.logError('saveSettings', error, { settings });
     return { success: false, message: '설정 저장 중 오류가 발생했습니다.' };
   }
-}
-
-function chapterIdxOf(source) {
-  return toPositiveNumberOrNull(eventUtils.resolveChapterIdx(source));
 }
 
 function positiveEventNum(source) {
@@ -165,7 +157,7 @@ function pickEventIdentityPayload(event) {
 function resolveManifestEventMatch(event, bookId) {
   const identity = pickEventIdentityPayload(event);
   const eventId = eventUtils.resolveEventId(identity);
-  const chapterIdx = chapterIdxOf(identity) ?? chapterIdxOf(event);
+  const chapterIdx = eventUtils.resolveChapterIdx(identity) ?? eventUtils.resolveChapterIdx(event);
   const normalizedEventId = eventId == null ? '' : String(eventId).trim();
   const normalizedBookId = toPositiveNumberOrNull(bookId);
   if (!normalizedBookId || !chapterIdx || !normalizedEventId) {
@@ -200,12 +192,12 @@ export function resolveServerEventMatch({
   event,
   atLocator = null,
 }) {
-  const bookId = resolveServerBookId(book) ?? toPositiveNumberOrNull(fallbackBookId);
+  const bookId = resolveServerBookId(book, fallbackBookId);
   const anchorLocators = anchorToLocators(event?.anchor);
   const locator = toLocator(atLocator) ?? anchorLocators.startLocator;
   const endLocator = atLocator ? locator : anchorLocators.endLocator;
   const rawEventIdx = positiveEventNum(event);
-  const rawChapter = chapterIdxOf(event) ?? toPositiveNumberOrNull(currentChapter);
+  const rawChapter = eventUtils.resolveChapterIdx(event) ?? toPositiveNumberOrNull(currentChapter);
   const locatorChapter = toPositiveNumberOrNull(resolveChapterIndex(locator));
   const endChapter = toPositiveNumberOrNull(resolveChapterIndex(endLocator));
   const spansFromPreviousChapter =
@@ -240,7 +232,7 @@ export function resolveServerEventMatch({
   }
 
   if (locator) {
-    const resolved = resolveManifestLocatorToEventParams(bookId, locator, rawEventIdx ?? 1);
+    const resolved = resolveLocatorToEventParams(bookId, locator, rawEventIdx ?? 1);
     const locatorEventIdx = toPositiveNumberOrNull(resolved?.eventIdx);
     if (resolved?.resolved && locatorEventIdx) {
       return eventMatchResult({
@@ -278,8 +270,7 @@ function applyChapterEventIndex(eventObj, eventIdx) {
     eventNum: normalizedEventIdx,
     eventIdx: normalizedEventIdx,
     eventId: normalizedEventIdx,
-    resolvedEventIdx: normalizedEventIdx,
-    ...(eventChanged ? { eventName: '', eventTitle: '', name: '', title: '' } : {}),
+    ...(eventChanged ? { eventName: '', name: '', title: '' } : {}),
   };
 }
 
@@ -290,7 +281,7 @@ function applyResolvedEventMetadata(eventObj, manifestEvent) {
   return {
     ...eventObj,
     ...(eventId != null ? { eventId } : {}),
-    ...(eventName ? { eventName, eventTitle: eventName, name: eventName, title: eventName } : {}),
+    ...(eventName ? { eventName, name: eventName, title: eventName } : {}),
   };
 }
 
@@ -307,7 +298,7 @@ export function resolveViewerLineEvent({ receivedEvent, book, bookKey }) {
   });
   const resolvedEventIdx = toPositiveNumberOrNull(match.eventIdx) ?? 0;
   const resolvedChapter = toPositiveNumberOrNull(match.chapterIdx) ?? 0;
-  const resolvedBookId = resolveServerBookId(book) ?? toPositiveNumberOrNull(bookKey);
+  const resolvedBookId = resolveServerBookId(book, bookKey);
 
   let nextChapter = null;
   if (resolvedChapter > 0) {
@@ -329,7 +320,6 @@ export function resolveViewerLineEvent({ receivedEvent, book, bookKey }) {
     nextEvent,
     nextChapter,
     atLocator: match.atLocator,
-    resolvedEventIdx: eventUtils.resolveEventNum(nextEvent) || resolvedEventIdx,
   };
 }
 
@@ -366,30 +356,21 @@ export function parseReadingLocatorKey(readingLocatorKey) {
   }
 }
 
-export function resolveMetricsFromLocator(bookKey, locator, { metricsReady = true } = {}) {
-  if (!bookKey || !metricsReady || !locator) return null;
-  const start = toLocator(locator);
-  return start ? resolveProgressMetricsFromLocator(bookKey, start) : null;
-}
-
-export function resolveMetricsFromReadingLocatorKey(bookKey, readingLocatorKey, options = {}) {
-  if (!readingLocatorKey) return null;
+export function resolveMetricsFromReadingLocatorKey(bookKey, readingLocatorKey, { metricsReady = true } = {}) {
+  if (!readingLocatorKey || !metricsReady) return null;
   const { start } = parseReadingLocatorKey(readingLocatorKey);
-  return resolveMetricsFromLocator(bookKey, start, options);
+  return resolveProgressMetricsFromLocator(bookKey, start);
 }
 
 function progressRowToTopBar(row, bookId = null) {
   if (!row || typeof row !== 'object') return emptyTopBar();
 
-  const explicit = Number(row.eventNum);
-  const fromId = eventUtils.resolveEventNum(row);
-  const eventNum =
-    Number.isFinite(explicit) && explicit > 0 ? explicit : fromId > 0 ? fromId : null;
+  const eventNum = eventUtils.resolveEventNum(row, null);
 
   const loc = toLocator(row.startLocator ?? row.locator ?? row.anchor?.startLocator);
-  const metrics = resolveMetricsFromLocator(bookId, loc);
+  const metrics = resolveProgressMetricsFromLocator(bookId, loc);
   const chapterIdx =
-    chapterIdxOf(row) ?? toPositiveNumberOrNull(row.chapterNum) ?? toPositiveNumberOrNull(loc?.chapterIndex);
+    eventUtils.resolveChapterIdx(row) ?? toPositiveNumberOrNull(row.chapterNum) ?? toPositiveNumberOrNull(loc?.chapterIndex);
 
   return {
     eventNum,
@@ -404,7 +385,7 @@ export function patchTopBarFromLineEvent(prev, nextEvent, lineLocator = null) {
   const previous = prev != null && typeof prev === 'object' ? prev : emptyTopBar();
   const eventNum = eventUtils.resolveEventNum(nextEvent);
   const chapterIdx =
-    chapterIdxOf(nextEvent) ?? toPositiveNumberOrNull(resolveChapterIndex(lineLocator));
+    eventUtils.resolveChapterIdx(nextEvent) ?? toPositiveNumberOrNull(resolveChapterIndex(lineLocator));
 
   return {
     ...previous,
@@ -522,9 +503,8 @@ export function buildSaveLocationPayload(bookId, startLocator, endLocator, curre
   const base = buildLocatorPayloadBase(bookId, startLocator, endLocator, currentEvent, metrics);
   if (!base) return null;
 
-  const numericBookId = Number(bookId);
   return {
-    bookId: Number.isFinite(numericBookId) && numericBookId > 0 ? numericBookId : null,
+    bookId: toPositiveNumberOrNull(bookId),
     startLocator: base.startLocator,
     endLocator: base.endLocator,
     locator: base.locator,
@@ -540,21 +520,11 @@ export function buildSaveLocationPayload(bookId, startLocator, endLocator, curre
 
 
 export function saveViewerMode(mode) {
-  try {
-    if (!mode || typeof mode !== 'string') return;
-    localStorage.setItem('viewer_mode', mode);
-  } catch {
-    return;
-  }
+  if (!mode || typeof mode !== 'string') return;
+  writeRaw('viewer_mode', mode);
 }
 
-function loadViewerMode() {
-  try {
-    return localStorage.getItem('viewer_mode');
-  } catch {
-    return null;
-  }
-}
+const loadViewerMode = () => readRaw('viewer_mode');
 
 /** showGraph는 settings SSOT. viewer_mode는 전체화면(graph) 여부만 복원. */
 export function resolveInitialGraphFullScreen(showGraph = loadSettings().showGraph) {
@@ -571,16 +541,6 @@ export function isHardNavigationReload() {
   if (!performance?.getEntriesByType) return false;
   const [entry] = performance.getEntriesByType('navigation');
   return entry?.type === 'reload';
-}
-
-export function buildViewerActionError(message, details, retry) {
-  return { message, details, retry };
-}
-
-export function delay(ms) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
 }
 
 export function waitForPaint() {

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import useAuth from '../hooks/auth/useAuth';
 import { GoogleIcon } from '../components/auth/OAuthCallback';
-import { startGoogleOAuthLogin } from '../utils/common/urlUtils';
+import { startGoogleOAuthLogin } from '../utils/security/oauthSecurity';
 import { errorUtils } from '../utils/common/valueUtils';
 import landingHero from '../assets/landing-hero-book.jpg';
 import './HomePage.css';

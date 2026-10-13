@@ -8,12 +8,16 @@
  * 3. Elements build
  * 4. Diff / fingerprints
  * 5. Filter / subgraph / overlap
- * 6. Chapter cache payload / reconstruct / book summary
+ * 6. Chapter cache payload / reconstruct / book summary / cache → events
  * 7. Chapter discover / prefetch / ensure
- * 8. Book relationship deltas
+ * 8. Book relationship deltas / macro graph response
  */
 
-import { sanitizeAssetUrl, resolveApiArtifactUrl } from '../common/urlUtils';
+import {
+  sanitizeAssetUrl,
+  resolveApiArtifactUrl,
+  isProtectedPublicAsset,
+} from '../common/urlUtils';
 import {
   isGraphEdgeElement,
   isGraphNodeElement,
@@ -22,7 +26,6 @@ import {
   undirectedPairKey,
   directedEdgeElementId,
   uniqueStrings,
-  sortedUniqueJoin,
   normalizeRelation,
   pickLastRelationLabel,
   mergeRelationLabelHistory,
@@ -37,36 +40,40 @@ import {
   extractCharacterId,
   resolveManifestEventId,
   processRelations,
+  appendRelationLabelHistory,
 } from './graphCore';
-import { eventUtils, cacheKeyUtils } from '../viewer/viewerCore';
+import { eventUtils, cacheKeyUtils, ELEMENTS_TO_RELATIONS_OPTS } from '../viewer/viewerCore';
 import {
   asArray,
-  deepClone,
+  extractApiBookId,
   isPositiveFiniteNumberLiteral,
   resolveChapterIndex,
   toNumberOrNull,
   toPositiveInt,
   toPositiveNumberOrNull,
+  sleep,
   toTrimmedStringOrNull,
+  clampPositivity,
   errorUtils,
+  stringOrEmpty,
+  compareLocale,
 } from '../common/valueUtils';
-import {
-  sortDeltasForAccumulate,
-  createDeltaAccumulateWalker,
-  fetchRelationshipDeltasList,
-} from '../api/graphApi';
-import { getBookManifest } from '../api/booksApi';
+import { buildGraphEventMeta, fetchRelationshipDeltasList, FETCH_STATUS, hasGraphPayload } from '../api/graphApi';
+import { requireBookId, toUnifiedApiResponse } from '../api/authApi';
+import { getBookManifest, fetchAuthenticatedAssetBlobUrl } from '../api/booksApi';
 import {
   getChapterData,
   getManifestFromCache,
   calculateMaxChapterFromChapters,
   getLastManifestEventInChapter,
+  getFirstManifestEventInChapter,
   listBookManifestEventIds,
 } from '../common/cache/manifestCache';
 import {
   setBounded,
   loadTtlStorage,
   saveTtlStorage,
+  awaitTracked,
   saveToStorage,
   removeFromStorage,
   GRAPH_BOOK_CACHE_PREFIX,
@@ -192,6 +199,85 @@ function validateAndNormalizeProfileImageUrl(profileImage) {
     errorUtils.logDebug('graphModel', '유효하지 않은 이미지 URL 형식');
   }
   return null;
+}
+
+/* ─── 프로필 이미지 resolve (보호 자산 → blob, 직접 URL → 로드 프로브) ─── */
+
+export const GRAPH_IMAGE_DEFERRED_RETRY_MS = 1_500;
+
+const stillNeedsProtectedImageResolve = (image) =>
+  !!image && isProtectedPublicAsset(image) && !String(image).startsWith('blob:');
+
+/**
+ * /public/ 밖의 직접 URL(CDN 등)은 인증 없이 그대로 <img>/캔버스에 쓰인다 — CORS 차단이나
+ * 파일 부재 시 브라우저가 조용히 로드를 실패시켜, 그래프 노드에 이미지도 배경색도 없이
+ * 빈 원만 남는다. 실제 로드 가능 여부를 한 번 프로브해 실패분은 image 필드를 제거,
+ * 스타일시트의 기본 배경색(node 셀렉터)으로 폴백시킨다.
+ */
+const directImageLoadableCache = new Map();
+const DIRECT_IMAGE_PROBE_TIMEOUT_MS = 4_000;
+
+const needsDirectImageVerification = (image) =>
+  !!image && !isProtectedPublicAsset(image) && !String(image).startsWith('blob:');
+
+function probeImageLoadable(url) {
+  if (typeof Image === 'undefined') return Promise.resolve(true);
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (ok) => {
+      if (settled) return;
+      settled = true;
+      resolve(ok);
+    };
+    const img = new Image();
+    // Cytoscape는 background-image를 기본 crossOrigin='anonymous'로 로드한다(캔버스 오염 방지).
+    // 여기서도 동일하게 설정해야, CORS 헤더가 없는 origin의 이미지를 "로드 가능"으로 오판하지 않는다
+    // (crossOrigin 없는 <img> 프로브는 통과하지만 실제 캔버스 렌더링은 CORS로 차단되는 불일치 방지).
+    img.crossOrigin = 'anonymous';
+    img.onload = () => finish(true);
+    img.onerror = () => finish(false);
+    // 응답이 느릴 뿐 실패는 아닐 수 있으므로, 타임아웃은 실패로 단정하지 않고 통과시킨다.
+    setTimeout(() => finish(true), DIRECT_IMAGE_PROBE_TIMEOUT_MS);
+    img.src = url;
+  });
+}
+
+async function isDirectImageLoadable(url) {
+  if (directImageLoadableCache.has(url)) return directImageLoadableCache.get(url);
+  const ok = await probeImageLoadable(url);
+  directImageLoadableCache.set(url, ok);
+  return ok;
+}
+
+async function resolveOneGraphProfileImage(el, { force = false } = {}) {
+  const image = el?.data?.image;
+  if (!image) return el;
+
+  if (stillNeedsProtectedImageResolve(image)) {
+    const blobUrl = await fetchAuthenticatedAssetBlobUrl(image, { force });
+    if (!blobUrl || blobUrl === image) return el;
+    return { ...el, data: { ...el.data, image: blobUrl } };
+  }
+
+  if (needsDirectImageVerification(image)) {
+    const loadable = await isDirectImageLoadable(image);
+    if (loadable) return el;
+    const { image: _unused, ...restData } = el.data;
+    return { ...el, data: restData };
+  }
+
+  return el;
+}
+
+export function graphElementsHaveUnresolvedProfileImages(elements) {
+  if (!Array.isArray(elements) || elements.length === 0) return false;
+  return elements.some((el) => stillNeedsProtectedImageResolve(el?.data?.image));
+}
+
+export async function resolveGraphElementsProfileImages(elements, options = {}) {
+  if (!Array.isArray(elements) || elements.length === 0) return elements;
+  const { force = false } = options;
+  return Promise.all(elements.map((el) => resolveOneGraphProfileImage(el, { force })));
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -432,7 +518,7 @@ function mergeEdgeLabelFields(a = {}, b = {}) {
 }
 
 function normalizedRelationTagKey(data) {
-  return sortedUniqueJoin(Array.isArray(data?.relation) ? data.relation : []);
+  return uniqueStrings(asArray(data?.relation)).sort().join('\x1e');
 }
 
 function positivityToken(data) {
@@ -442,14 +528,10 @@ function positivityToken(data) {
 
 /** 역방향 두 간선의 관계(태그·positivity)가 동일한지 — 동일하면 `-` 한 줄로 합침 */
 function relationPayloadEquivalent(d0, d1) {
-  if (normalizedRelationTagKey(d0) !== normalizedRelationTagKey(d1)) {
-    return false;
-  }
-  const p0 = positivityToken(d0);
-  const p1 = positivityToken(d1);
-  if (p0 === null && p1 === null) return true;
-  if (p0 === null || p1 === null) return false;
-  return p0 === p1;
+  return (
+    normalizedRelationTagKey(d0) === normalizedRelationTagKey(d1) &&
+    positivityToken(d0) === positivityToken(d1)
+  );
 }
 
 function cloneEdgeData(el, extra = {}) {
@@ -513,7 +595,7 @@ function isRelationVisibleAtEvent(rel, eventData) {
     eventUtils.resolveChapterIdx(eventData) ?? eventData.chapterIdx ?? eventData.chapter,
     NaN
   );
-  const targetEventIdx = toPositiveInt(eventUtils.resolveEventOrdinal(eventData), NaN);
+  const targetEventIdx = toPositiveInt(eventUtils.resolveEventNum(eventData, null), NaN);
 
   const meta = relationEventMetaPassthrough(rel);
   const relationChapter = toPositiveInt(meta.chapterIdx, NaN);
@@ -548,8 +630,8 @@ function resolveEdgeDisplayLabel(r) {
 function resolveRelationEventOrdinal(rel, { fallback = 0 } = {}) {
   const meta = relationEventMetaPassthrough(rel);
   const candidates = [
-    eventUtils.resolveEventOrdinal(rel),
-    eventUtils.resolveEventOrdinal(meta),
+    eventUtils.resolveEventNum(rel, null),
+    eventUtils.resolveEventNum(meta, null),
     rel?.event_id,
     rel?.event?.event_id,
   ];
@@ -655,7 +737,7 @@ function buildVisibleNodes({
       isMainCharacter: idToMain[strId] || false,
       description: idToDesc[strId] || '',
       personalityText: idToDesc[strId] || '',
-      names: [commonName, ...(Array.isArray(idToNames[strId]) ? idToNames[strId] : [])],
+      names: [commonName, ...(asArray(idToNames[strId]))],
       common_name: commonName,
       weight: nodeWeight,
       count: nodeCount,
@@ -912,7 +994,7 @@ export function visualElementSignature(el) {
     const topo = d.bidirectional ? "b" : d.reciprocalPair ? "r" : "";
     return `e:${rel}:${d.label ?? ""}:${d.positivity ?? ""}:${d.lineStyle ?? ""}:${d.width ?? ""}:${topo}`;
   }
-  const image = typeof d.image === 'string' ? d.image : '';
+  const image = stringOrEmpty(d.image);
   return `n:${d.label ?? ""}:${d.weight ?? ""}:${d.count ?? ""}:${d.isMainCharacter ?? ""}:${d.positivity ?? ""}\x1e${image}`;
 }
 
@@ -1281,27 +1363,12 @@ export function detectAndResolveOverlap(
   }
 
   let hasOverlap = false;
+  const runPasses = (iterations) =>
+    runOverlapPushPasses(nodePositions, movableIdSet, padding, pushExtra, iterations, tolerance, severeOverlap);
   const apply = () => {
-    hasOverlap = runOverlapPushPasses(
-      nodePositions,
-      movableIdSet,
-      padding,
-      pushExtra,
-      maxIterations,
-      tolerance,
-      severeOverlap,
-    ) || hasOverlap;
-
+    hasOverlap = runPasses(maxIterations) || hasOverlap;
     if (pairStillOverlaps(nodePositions, movableIdSet, padding, tolerance) && extraPasses > 0) {
-      hasOverlap = runOverlapPushPasses(
-        nodePositions,
-        movableIdSet,
-        padding,
-        pushExtra,
-        extraPasses,
-        tolerance,
-        severeOverlap,
-      ) || hasOverlap;
+      hasOverlap = runPasses(extraPasses) || hasOverlap;
     }
   };
 
@@ -1375,7 +1442,7 @@ export function collectNeighborhoodNodeIds(cy, seedIds, hops = 1) {
  * 6. Chapter cache payload / reconstruct / book summary
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-const cloneArray = (arr) => (Array.isArray(arr) ? arr.map(deepClone) : []);
+const cloneArray = (arr) => (Array.isArray(arr) ? arr.map((item) => structuredClone(item)) : []);
 
 const computeCharacterDiff = (prevCharacters, nextCharacters) => {
   const prevMap = new Map();
@@ -1393,8 +1460,8 @@ const computeCharacterDiff = (prevCharacters, nextCharacters) => {
   const removedIds = [];
   nextMap.forEach((character, id) => {
     const prev = prevMap.get(id);
-    if (!prev) added.push(deepClone(character));
-    else if (!deepEqual(prev, character)) updated.push(deepClone(character));
+    if (!prev) added.push(structuredClone(character));
+    else if (!deepEqual(prev, character)) updated.push(structuredClone(character));
   });
   prevMap.forEach((_character, id) => {
     if (!nextMap.has(id)) removedIds.push(id);
@@ -1402,49 +1469,50 @@ const computeCharacterDiff = (prevCharacters, nextCharacters) => {
   return { added, updated, removedIds };
 };
 
-/** map → remove → update → add. getKey는 item → string id */
-const applyKeyedDiff = (prevItems, diff, getKey) => {
+const toKeyedMap = (items, getKey) => {
   const map = new Map();
-  asArray(prevItems).forEach((item) => {
+  for (const item of asArray(items)) {
     const id = getKey(item);
-    if (id) map.set(id, deepClone(item));
-  });
-  (diff?.removedIds || []).forEach((id) => id && map.delete(String(id)));
-  (diff?.updated || []).forEach((item) => {
-    const id = getKey(item);
-    if (id) map.set(id, deepClone(item));
-  });
-  (diff?.added || []).forEach((item) => {
-    const id = getKey(item);
-    if (id) map.set(id, deepClone(item));
-  });
+    if (id) map.set(id, item);
+  }
   return map;
 };
 
-const applyCharacterDiff = (prevCharacters, diff) =>
-  Array.from(applyKeyedDiff(prevCharacters, diff, extractCharacterId).values());
+/**
+ * remove → update → add 를 map에 제자리 반영. 항목은 복제하지 않고 참조 공유.
+ * Map.set은 기존 key 위치를 유지하므로 매 diff마다 배열에서 Map을 다시 만든 것과 순서가 같음.
+ */
+const applyKeyedDiffInPlace = (map, diff, getKey) => {
+  const put = (item) => {
+    const id = getKey(item);
+    if (id) map.set(id, item);
+  };
+  (diff?.removedIds || []).forEach((id) => id && map.delete(String(id)));
+  (diff?.updated || []).forEach(put);
+  (diff?.added || []).forEach(put);
+};
 
-const applyElementDiff = (prevElements, diff) => {
-  const map = applyKeyedDiff(prevElements, diff, normalizeElementId);
-  const result = Array.from(map.values());
-  result.sort((a, b) => {
-    const aIsEdge = Boolean(a?.data?.source);
-    const bIsEdge = Boolean(b?.data?.source);
-    if (aIsEdge !== bIsEdge) return aIsEdge ? 1 : -1;
-    return (normalizeElementId(a) || '').localeCompare(normalizeElementId(b) || '');
+/** 노드 먼저, 그다음 id 순 (Map key가 곧 id) */
+const sortedElementsOf = (elementMap) => {
+  const rows = Array.from(elementMap, ([id, el]) => ({ id, el, isEdge: Boolean(el?.data?.source) }));
+  rows.sort((a, b) => {
+    if (a.isEdge !== b.isEdge) return a.isEdge ? 1 : -1;
+    return compareLocale(a.id, b.id);
   });
-  return result;
+  return rows.map((row) => row.el);
 };
 
 /** 이벤트 1건 → elements/characters/summary (캐시 payload 루프용) */
 function buildEventSnapshotRow(bookId, chapterIdx, event) {
+  const inner = event.event ?? null;
+  const relations = asArray(event.relations);
   let convertedElements = [];
   let snapshotCharacters = [];
   try {
     const built = buildElementsFromGraphPayload({
-      characters: Array.isArray(event?.characters) ? event.characters : [],
-      relations: Array.isArray(event?.relations) ? event.relations : [],
-      eventData: event?.event ?? null,
+      characters: asArray(event.characters),
+      relations,
+      eventData: inner,
       bookId,
     });
     convertedElements = built.elements;
@@ -1453,20 +1521,19 @@ function buildEventSnapshotRow(bookId, chapterIdx, event) {
     errorUtils.logError('buildElementsFromGraphPayload', error);
   }
 
-  const summaryEventNum = Number(event.eventNum);
   const summaryIdx = Number(event.eventIdx) || 0;
   const summary = {
     bookId,
     chapterIdx,
     eventIdx: summaryIdx,
-    eventNum: Number.isFinite(summaryEventNum) && summaryEventNum > 0 ? summaryEventNum : summaryIdx,
-    eventId: eventUtils.resolveEventId(event) ?? eventUtils.resolveEventId(event?.event) ?? null,
-    startTxtOffset: event?.startTxtOffset ?? null,
-    endTxtOffset: event?.endTxtOffset ?? null,
-    title: event?.event?.name ?? event?.event?.title ?? event?.event?.eventName ?? null,
-    text: event?.event?.text ?? null,
+    eventNum: toPositiveNumberOrNull(event.eventNum) ?? summaryIdx,
+    eventId: eventUtils.resolveEventId(event) ?? eventUtils.resolveEventId(inner) ?? null,
+    startTxtOffset: event.startTxtOffset ?? null,
+    endTxtOffset: event.endTxtOffset ?? null,
+    title: inner?.name ?? inner?.title ?? inner?.eventName ?? null,
+    text: inner?.text ?? null,
     hasCharacters: snapshotCharacters.length > 0,
-    hasRelations: Array.isArray(event?.relations) && event.relations.length > 0,
+    hasRelations: relations.length > 0,
   };
 
   return { convertedElements, snapshotCharacters, summary };
@@ -1507,21 +1574,22 @@ const buildChapterCachePayload = (
       event
     );
 
-    const currentElements = cloneArray(convertedElements);
-    const currentCharacters = cloneArray(snapshotCharacters);
+    // 이벤트 객체는 normalizeEventFromDeltasGraphResult에서 한 번 복제된 뒤 변경되지 않음 — 여기선 참조 공유
+    const currentElements = convertedElements;
+    const currentCharacters = snapshotCharacters;
     if (index === 0) {
       baseSnapshot = {
         eventIdx: eventUtils.resolveEventNum(event) || 1,
         elements: currentElements,
         characters: currentCharacters,
-        eventMeta: event?.event ? deepClone(event.event) : null,
+        eventMeta: event?.event ? structuredClone(event.event) : null,
       };
     } else {
-      // currentElements는 이미 복제본 — diff 항목은 그대로 참조
+      // diff 항목은 currentElements를 그대로 참조 (읽기 전용)
       const { added, updated, removed } = calcGraphDiff(prevElements, currentElements);
       diffs.push({
         eventIdx: eventUtils.resolveEventNum(event) || (baseSnapshot?.eventIdx ?? 1),
-        eventMeta: event?.event ? deepClone(event.event) : null,
+        eventMeta: event?.event ? structuredClone(event.event) : null,
         elementDiff: {
           added,
           updated,
@@ -1549,54 +1617,100 @@ const buildChapterCachePayload = (
     diffs,
     timestamp,
     source,
-    rawEvents: sortedEvents.map((event) => deepClone(event)),
+    // sortEventsByIdx가 새 배열을 반환 — 항목은 불변이라 복제하지 않음
+    rawEvents: sortedEvents,
   };
 };
 
 /**
- * baseSnapshot + diffs → targetEventIdx 시점 그래프 상태.
- * @param {Object} cachePayload
- * @param {number} targetEventIdx
- * @returns {{ elements: Array, characters: Array, eventMeta: Object|null, eventIdx: number }|null}
+ * baseSnapshot + diffs → 시점별 그래프 상태를 돌려주는 조회 함수.
+ * 오름차순으로 조회하면 diff를 한 번만 순회 (이벤트마다 처음부터 재생하면 O(k²)).
+ * 내림차순 조회는 base부터 다시 재생 — 결과는 같고 느릴 뿐. 반환값은 매번 독립 복제본.
+ * diff는 Map에 O(Δ)로 반영하고, 배열 변환·정렬은 조회 시 1회 (diff마다 O(N log N) 하지 않음).
+ * readOnly: 반환값을 읽기만 할 때 복제 생략 (캐시 항목을 그대로 노출 — 변경 금지)
+ * sortElements=false: elements를 정렬하지 않고 Map 순서로 (순서 무관한 조회용, readOnly 전용)
  */
-export const reconstructChapterGraphState = (cachePayload, targetEventIdx) => {
-  if (!cachePayload || typeof cachePayload !== 'object') return null;
-  const baseSnapshot = cachePayload.baseSnapshot;
-  if (!baseSnapshot || !Array.isArray(baseSnapshot.elements)) return null;
+export const createChapterGraphStateCursor = (
+  cachePayload,
+  { readOnly = false, sortElements = true } = {}
+) => {
+  const baseSnapshot = cachePayload?.baseSnapshot;
+  if (!baseSnapshot || !Array.isArray(baseSnapshot.elements)) return () => null;
 
   const baseIdx = Number(baseSnapshot.eventIdx) || 1;
-  const normalizedTarget = Number(targetEventIdx);
-  // partial(through만 적재)은 base 이전 이벤트가 없음 — base를 돌려주면 이후 관계가 노출됨
-  if (cachePayload.partial && normalizedTarget < baseIdx) return null;
-  let currentElements = cloneArray(baseSnapshot.elements);
-  let currentCharacters = cloneArray(baseSnapshot.characters || []);
-  let currentEventMeta = baseSnapshot.eventMeta ? deepClone(baseSnapshot.eventMeta) : null;
-  let appliedEventIdx = baseIdx;
-
-  if (!Number.isFinite(normalizedTarget) || normalizedTarget <= baseIdx) {
-    return {
-      elements: currentElements,
-      characters: currentCharacters,
-      eventMeta: currentEventMeta,
-      eventIdx: appliedEventIdx,
-    };
-  }
-
-  eventUtils.sortEventsByIdx(cachePayload.diffs || []).forEach((diff) => {
-    const diffIdx = Number(diff?.eventIdx);
-    if (!Number.isFinite(diffIdx) || diffIdx > normalizedTarget) return;
-    currentElements = applyElementDiff(currentElements, diff?.elementDiff);
-    currentCharacters = applyCharacterDiff(currentCharacters, diff?.characterDiff);
-    currentEventMeta = diff?.eventMeta ? deepClone(diff.eventMeta) : currentEventMeta;
-    appliedEventIdx = diffIdx;
-  });
-
-  return {
-    elements: currentElements,
-    characters: currentCharacters,
-    eventMeta: currentEventMeta,
-    eventIdx: appliedEventIdx,
+  // diffs는 eventIdx 오름차순으로 생성됨 — 정렬 키와 비교 키가 같아 break로 끊어도 결과 동일
+  const diffs = eventUtils.sortEventsByIdx(cachePayload.diffs || []);
+  // null이면 diff 미적용 — base 배열을 그대로 사용
+  let elementMap;
+  let characterMap;
+  let eventMeta;
+  let appliedEventIdx;
+  let nextDiff;
+  // 마지막 diff 적용 이후 만든 출력 배열 (다음 diff 전까지 재사용, 반환 후 변경하지 않음)
+  let outElements;
+  let outCharacters;
+  const reset = () => {
+    elementMap = null;
+    characterMap = null;
+    eventMeta = baseSnapshot.eventMeta ?? null;
+    appliedEventIdx = baseIdx;
+    nextDiff = 0;
+    outElements = null;
+    outCharacters = null;
   };
+  reset();
+  let lastTarget = -Infinity;
+
+  const snapshot = (els, chars, meta, eventIdx) =>
+    readOnly
+      ? { elements: els, characters: chars, eventMeta: meta ?? null, eventIdx }
+      : {
+          elements: cloneArray(els),
+          characters: cloneArray(chars),
+          eventMeta: meta ? structuredClone(meta) : null,
+          eventIdx,
+        };
+
+  return (targetEventIdx) => {
+    const target = Number(targetEventIdx);
+    // partial(through만 적재)은 base 이전 이벤트가 없음 — base를 돌려주면 이후 관계가 노출됨
+    if (cachePayload.partial && target < baseIdx) return null;
+    if (!Number.isFinite(target) || target <= baseIdx) {
+      return snapshot(baseSnapshot.elements, baseSnapshot.characters || [], baseSnapshot.eventMeta, baseIdx);
+    }
+
+    if (target < lastTarget) reset();
+    lastTarget = target;
+    for (; nextDiff < diffs.length; nextDiff += 1) {
+      const diff = diffs[nextDiff];
+      const diffIdx = Number(diff?.eventIdx);
+      if (!Number.isFinite(diffIdx)) continue;
+      if (diffIdx > target) break;
+      if (!elementMap) {
+        elementMap = toKeyedMap(baseSnapshot.elements, normalizeElementId);
+        characterMap = toKeyedMap(baseSnapshot.characters, extractCharacterId);
+      }
+      applyKeyedDiffInPlace(elementMap, diff?.elementDiff, normalizeElementId);
+      applyKeyedDiffInPlace(characterMap, diff?.characterDiff, extractCharacterId);
+      if (diff?.eventMeta) eventMeta = diff.eventMeta;
+      appliedEventIdx = diffIdx;
+      outElements = null;
+      outCharacters = null;
+    }
+    if (!elementMap) {
+      return snapshot(baseSnapshot.elements, baseSnapshot.characters || [], eventMeta, appliedEventIdx);
+    }
+    outElements ??=
+      sortElements || !readOnly ? sortedElementsOf(elementMap) : Array.from(elementMap.values());
+    outCharacters ??= Array.from(characterMap.values());
+    return snapshot(outElements, outCharacters, eventMeta, appliedEventIdx);
+  };
+};
+
+/** 단건 조회. 여러 시점을 볼 때는 createChapterGraphStateCursor 사용 */
+export const reconstructChapterGraphState = (cachePayload, targetEventIdx) => {
+  if (!cachePayload || typeof cachePayload !== 'object') return null;
+  return createChapterGraphStateCursor(cachePayload)(targetEventIdx);
 };
 
 const graphBookMemoryCache = new Map();
@@ -1633,16 +1747,6 @@ const readTtlCache = (memoryCache, maxSize, key, label) => {
   } catch (error) {
     errorUtils.logDebug('graphModel', `${label} 로드 실패`, { message: error?.message });
     return null;
-  }
-};
-
-/** inflight 등록 후 완료 시 해제 (forceRefresh 등으로 덮어쓴 다른 요청의 등록은 지우지 않음) */
-const awaitTracked = async (map, key, promise, entry = promise) => {
-  map.set(key, entry);
-  try {
-    return await promise;
-  } finally {
-    if (map.get(key) === entry) map.delete(key);
   }
 };
 
@@ -1788,8 +1892,8 @@ const normalizeEventFromDeltasGraphResult = (
     chapterIdx: resolvedChapterIdx,
     eventIdx,
     eventNum: resolvedEventNum,
-    characters: hasCharacters ? characters.map((character) => deepClone(character)) : [],
-    relations: hasRelations ? relations.map((relation) => deepClone(relation)) : [],
+    characters: hasCharacters ? characters.map((character) => structuredClone(character)) : [],
+    relations: hasRelations ? relations.map((relation) => structuredClone(relation)) : [],
     event: {
       idx: eventIdx,
       chapterIdx: resolvedChapterIdx,
@@ -1859,6 +1963,212 @@ const setCachedChapterEvents = (bookId, chapterIdx, eventData) => {
   }
 };
 
+export function getCachedChapterMaxEventIdx(bookId, chapter) {
+  return Number(getCachedChapterEvents(bookId, chapter)?.maxEventIdx) || 0;
+}
+
+/* ─── 챕터 캐시 → events state (뷰어·툴팁 조회용) ─── */
+
+/**
+ * readOnly cursor 결과 → 외부로 나가는 payload. relations는 변환 시 새 객체(relation 배열도 복사)라
+ * elements는 복제할 필요 없음 — 캐시와 공유되는 characters만 복제
+ */
+const graphPayloadFromReconstructed = (reconstructed) => ({
+  characters: cloneArray(reconstructed?.characters),
+  relations: eventUtils.convertElementsToRelations(
+    asArray(reconstructed?.elements),
+    ELEMENTS_TO_RELATIONS_OPTS
+  ),
+});
+
+const isLegacyRawEventRow = (event) =>
+  Boolean(
+    (event?.event && typeof event.event === 'object') ||
+    Array.isArray(event?.relations) ||
+    Array.isArray(event?.characters)
+  );
+
+const withEventTitleAliases = (title) => {
+  const t = title ?? null;
+  return { title: t, name: t, eventName: t };
+};
+
+const withEventOffsetFields = (start, end, { alsoTxtOffset = false } = {}) => {
+  const s = start ?? null;
+  const e = end ?? null;
+  return alsoTxtOffset
+    ? { startTxtOffset: s, endTxtOffset: e, start: s, end: e }
+    : { start: s, end: e };
+};
+
+function baseChapterEventFields(targetChapter, eventIdx, eventNum, eventId) {
+  return {
+    chapter: targetChapter,
+    chapterIdx: targetChapter,
+    eventIdx,
+    eventNum,
+    eventId,
+  };
+}
+
+const mapLegacyOrSummaryEvent = (event, targetChapter) => {
+  const eventIdx = eventUtils.resolveEventNum(event, null);
+  if (eventIdx == null || eventIdx <= 0) return null;
+
+  const eventNum = toPositiveInt(event.eventNum, eventIdx);
+  const eventId = eventUtils.resolveEventId(event) ?? event.eventId ?? eventIdx;
+  const base = baseChapterEventFields(targetChapter, eventIdx, eventNum, eventId);
+
+  if (isLegacyRawEventRow(event)) {
+    return {
+      ...(event.event && typeof event.event === 'object' ? event.event : {}),
+      ...event,
+      ...base,
+      relations: asArray(event.relations),
+      characters: asArray(event.characters),
+      ...withEventOffsetFields(
+        event?.startPos ?? event?.start ?? event?.startTxtOffset,
+        event?.endPos ?? event?.end ?? event?.endTxtOffset
+      ),
+    };
+  }
+
+  return {
+    ...base,
+    ...withEventOffsetFields(event.startTxtOffset, event.endTxtOffset, { alsoTxtOffset: true }),
+    ...withEventTitleAliases(event.title ?? null),
+    text: event.text ?? null,
+    relations: [],
+    characters: [],
+  };
+};
+
+function buildEventsFromChapterCache(chapterPayload, targetChapter, throughEventIdx = null) {
+  if (!chapterPayload?.events?.length) return [];
+
+  const hasDiffCache = chapterPayload.baseSnapshot && Array.isArray(chapterPayload.diffs);
+  const through = Number(throughEventIdx);
+  const eventMetas = Number.isFinite(through) && through > 0
+    ? chapterPayload.events.filter((event) => {
+        const idx = Number(event?.eventIdx) || 0;
+        return idx > 0 && idx <= through;
+      })
+    : chapterPayload.events;
+
+  if (!hasDiffCache) {
+    return eventMetas.map((event) => mapLegacyOrSummaryEvent(event, targetChapter)).filter(Boolean);
+  }
+
+  // 이벤트마다 그래프 전체를 복제하지 않음 — 밖으로 나가는 값만 graphPayloadFromReconstructed·eventMeta에서 복제
+  const stateAt = createChapterGraphStateCursor(chapterPayload, { readOnly: true });
+  return eventMetas.map((eventMeta) => {
+    const eventIdx = Number(eventMeta?.eventIdx) || 0;
+    const eventNum = toPositiveInt(eventMeta?.eventNum, eventIdx);
+    const reconstructed = stateAt(eventIdx);
+    const { characters, relations } = graphPayloadFromReconstructed(reconstructed);
+    const reconstructedMeta = reconstructed?.eventMeta ? structuredClone(reconstructed.eventMeta) : null;
+    const title = eventMeta.title ?? reconstructedMeta?.name ?? reconstructedMeta?.title ?? null;
+
+    return {
+      ...eventMeta,
+      ...baseChapterEventFields(targetChapter, eventIdx, eventNum, (
+        eventUtils.resolveEventId(reconstructedMeta) ??
+        eventUtils.resolveEventId(eventMeta) ??
+        eventIdx
+      )),
+      event: reconstructedMeta ?? eventMeta?.event ?? null,
+      ...withEventTitleAliases(title),
+      relations,
+      characters,
+      ...withEventOffsetFields(
+        eventMeta.startTxtOffset ?? reconstructedMeta?.startTxtOffset,
+        eventMeta.endTxtOffset ?? reconstructedMeta?.endTxtOffset
+      ),
+    };
+  });
+}
+
+/** diff 캐시 행의 표시 순번 — buildEventsFromChapterCache 결과의 eventNum과 같은 규칙 */
+const diffCacheRowEventNum = (eventMeta) =>
+  toPositiveInt(eventMeta?.eventNum, Number(eventMeta?.eventIdx) || 0);
+
+function getEventsForChapter(chapter, folderKey, eventIndex) {
+  const bookId = extractApiBookId(folderKey);
+  if (!bookId || !chapter || chapter < 1) return [];
+
+  const snapshot = getCachedChapterEvents(bookId, chapter);
+  if (!snapshot?.events?.length || isUnusableChapterGraphCacheSource(snapshot.source)) {
+    return [];
+  }
+
+  // 한 건만 필요하면 그 이벤트만 재구성 (전체 재구성 후 find 하지 않음).
+  // 순번이 없는 행은 재구성 후 eventId로 매칭될 수 있으므로 남김
+  const hasDiffCache = snapshot.baseSnapshot && Array.isArray(snapshot.diffs);
+  const scoped = hasDiffCache
+    ? {
+        ...snapshot,
+        events: snapshot.events.filter((meta) => {
+          const num = diffCacheRowEventNum(meta);
+          return !num || num === eventIndex;
+        }),
+      }
+    : snapshot;
+  return buildEventsFromChapterCache(scoped, chapter);
+}
+
+export function getEventDataByIndex(folderKey, chapter, eventIndex) {
+  const bookId = extractApiBookId(folderKey);
+  if (!bookId || !chapter || chapter < 1 || !eventIndex || eventIndex < 1) {
+    return null;
+  }
+
+  const events = getEventsForChapter(chapter, folderKey, toNumberOrNull(eventIndex));
+  if (!events.length) {
+    return null;
+  }
+
+  const event = events.find(
+    (entry) => eventUtils.resolveEventNum(entry) === toNumberOrNull(eventIndex)
+  );
+  if (!event) {
+    return null;
+  }
+
+  const resolvedEventIdx = eventUtils.resolveEventNum(event) || Number(eventIndex);
+  return {
+    ...baseChapterEventFields(chapter, resolvedEventIdx, resolvedEventIdx, (
+      eventUtils.resolveEventId(event) ?? resolvedEventIdx
+    )),
+    relations: asArray(event.relations),
+    characters: asArray(event.characters),
+    event: event.event || null,
+  };
+}
+
+/** 챕터 이벤트 캐시 → events state에 병합 (React setState용) */
+export function applyChapterEventsFromCache(
+  prevEvents,
+  bookId,
+  targetChapter,
+  throughEventIdx = null
+) {
+  const chapterPayload = getCachedChapterEvents(bookId, targetChapter);
+  if (!chapterPayload?.events) {
+    return { applied: false, hasPayload: false, isEmpty: false, events: prevEvents };
+  }
+  if (!chapterPayload.events.length) {
+    return { applied: false, hasPayload: true, isEmpty: true, events: prevEvents };
+  }
+
+  const enrichedEvents = buildEventsFromChapterCache(chapterPayload, targetChapter, throughEventIdx);
+  if (!enrichedEvents.length) {
+    return { applied: false, hasPayload: true, isEmpty: false, events: prevEvents };
+  }
+
+  const events = eventUtils.mergeEventsInState(prevEvents, enrichedEvents, targetChapter);
+  return { applied: true, hasPayload: true, isEmpty: false, events };
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
  * 7. Chapter discover / prefetch / ensure
  * ═══════════════════════════════════════════════════════════════════════════ */
@@ -1870,8 +2180,7 @@ function loadManifestEventStructures(bookId, chapterIdx) {
     return manifestChapter.events
       .map((rawEvent, index) => {
         const eventIdx = eventUtils.resolveEventNum(rawEvent) || Number(index + 1);
-        const fromApi = Number(rawEvent.eventNum);
-        const eventNum = Number.isFinite(fromApi) && fromApi > 0 ? fromApi : eventIdx;
+        const eventNum = toPositiveNumberOrNull(rawEvent.eventNum) ?? eventIdx;
         return {
           eventIdx,
           eventNum,
@@ -1944,7 +2253,7 @@ function findPreviousApiEventBeforeIdx(apiEvents, eventIdx) {
 }
 
 /** 매크로태스크로 양보 — 마이크로태스크(Promise.resolve)로는 렌더·타이머가 끼어들지 못함 */
-const yieldToMainThread = () => new Promise((resolve) => setTimeout(resolve, 0));
+const yieldToMainThread = () => sleep(0);
 
 /** 정렬된 deltas → 이벤트 스냅샷 증분 적재 (through 우선 + 백필) */
 async function appendEventsFromSortedDeltas(ctx, sourceBookId, sortedDeltas, eventEntries, chapterEventIdOrder) {
@@ -1990,8 +2299,9 @@ async function appendEventsFromSortedDeltas(ctx, sourceBookId, sortedDeltas, eve
         bookId: sourceBookId,
         chapterIndex: chapterIdx,
         eventId: null,
-        characters: Array.isArray(prev?.characters) ? deepClone(prev.characters) : [],
-        relations: Array.isArray(prev?.relations) ? deepClone(prev.relations) : [],
+        // normalizeEventFromDeltasGraphResult가 복제하므로 여기선 참조만 넘김
+        characters: Array.isArray(prev?.characters) ? prev.characters : [],
+        relations: Array.isArray(prev?.relations) ? prev.relations : [],
         event: {
           chapterIndex: chapterIdx,
           chapterIdx,
@@ -2122,7 +2432,7 @@ const discoverChapterEvents = async (
   const discoverPromise = (async () => {
     const existingCache = !forceRefresh ? getCachedChapterEvents(bookId, chapterIdx) : null;
     const apiEvents = Array.isArray(existingCache?.rawEvents)
-      ? existingCache.rawEvents.map((event) => deepClone(event))
+      ? [...existingCache.rawEvents] // push용 배열 복사 — 이벤트 항목은 불변
       : [];
     const fetchedEventIdxSet = new Set(
       apiEvents.map((event) => eventUtils.resolveEventNum(event) || 0).filter((idx) => idx > 0)
@@ -2249,6 +2559,23 @@ export const hasUsableChapterCacheThrough = (bookId, chapterIdx, throughEventIdx
  * @param {number|null} [options.throughEventIdx]
  * @returns {Promise<{ success: boolean, reason?: string, error?: Error }>}
  */
+/**
+ * 16ms마다 isReady 확인. 작업이 끝나기 전에 준비되면 true, 끝났는데도 준비 안 됐으면 false.
+ * promise가 실패하면 throw.
+ */
+async function waitUntilReady(promise, isReady) {
+  for (;;) {
+    if (isReady()) return true;
+    const race = await Promise.race([
+      promise.then(() => 'done'),
+      new Promise((resolve) => {
+        setTimeout(() => resolve('tick'), 16);
+      }),
+    ]);
+    if (race === 'done') return isReady();
+  }
+}
+
 export async function ensureChapterEventsDiscovered(
   bookId,
   chapter,
@@ -2261,6 +2588,7 @@ export async function ensureChapterEventsDiscovered(
     return { success: true };
   }
 
+  const isReady = () => hasUsableChapterCacheThrough(bookId, chapter, throughEventIdx);
   const maxAttempts = 2;
   let lastError = null;
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
@@ -2273,24 +2601,8 @@ export async function ensureChapterEventsDiscovered(
       discoverPromise.catch(() => {});
 
       // through 캐시가 생기는 순간 반환 (전체 이벤트 백필 완료를 기다리지 않음)
-      for (;;) {
-        if (hasUsableChapterCacheThrough(bookId, chapter, throughEventIdx)) {
-          return { success: true };
-        }
-
-        const race = await Promise.race([
-          discoverPromise.then((payload) => ({ type: 'done', payload })),
-          new Promise((resolve) => {
-            setTimeout(() => resolve({ type: 'tick' }), 16);
-          }),
-        ]);
-
-        if (race.type === 'done') {
-          if (hasUsableChapterCacheThrough(bookId, chapter, throughEventIdx)) {
-            return { success: true };
-          }
-          break;
-        }
+      if (await waitUntilReady(discoverPromise, isReady)) {
+        return { success: true };
       }
     } catch (error) {
       // clearBookRelationshipDeltas로 취소됨 — 재시도하면 떠난 책을 다시 받음
@@ -2310,6 +2622,264 @@ export async function ensureChapterEventsDiscovered(
 /* ═══════════════════════════════════════════════════════════════════════════
  * 8. Book relationship deltas
  * ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ─── relationship-deltas 누적 (graphApi에서 이동) ─── */
+
+const orderIndexOf = (orderIndex, eventId) => {
+  const id = toTrimmedStringOrNull(eventId);
+  if (id == null || !orderIndex?.has(id)) return null;
+  return orderIndex.get(id);
+};
+
+const resolveManifestCharacterMeta = (bookId) => {
+  const byId = new Map();
+  for (const character of asArray(getManifestFromCache(bookId)?.characters)) {
+    const id = Number(character?.id);
+    if (Number.isFinite(id)) byId.set(id, character);
+  }
+  return byId;
+};
+
+const normalizeEventIdOrder = (chapterEventIdOrder) =>
+  asArray(chapterEventIdOrder).map((id) => toTrimmedStringOrNull(id)).filter(Boolean);
+
+const compareDeltasForAccumulate = (a, b, orderIndex = null) => {
+  const chapterA = Number(a?.chapterIndex);
+  const chapterB = Number(b?.chapterIndex);
+  const hasA = Number.isFinite(chapterA);
+  const hasB = Number.isFinite(chapterB);
+  if (hasA && hasB && chapterA !== chapterB) return chapterA - chapterB;
+  if (hasA !== hasB) return hasA ? -1 : 1;
+
+  if (!orderIndex?.size) return 0;
+  const ia = orderIndexOf(orderIndex, a?.eventId);
+  const ib = orderIndexOf(orderIndex, b?.eventId);
+  if (ia != null && ib != null) return ia - ib;
+  if (ia != null) return -1;
+  if (ib != null) return 1;
+  // eventId 문자열 비교는 시간 순서와 어긋날 수 있어 사용하지 않음 (안정 정렬)
+  return 0;
+};
+
+/** deltas를 챕터·manifest 이벤트 순으로 정렬 (export: discovery 공용) */
+const sortDeltasForAccumulate = (deltas, chapterEventIdOrder = null) => {
+  const list = asArray(deltas).filter((d) => d && typeof d === 'object');
+  const order = normalizeEventIdOrder(chapterEventIdOrder);
+  const orderIndex = order.length > 0 ? new Map(order.map((id, i) => [id, i])) : null;
+  return [...list].sort((a, b) => compareDeltasForAccumulate(a, b, orderIndex));
+};
+
+const createEmptyDeltaAccumulateState = () => ({
+  relationMap: new Map(),
+  weightMap: new Map(),
+  characterIds: new Set(),
+  lastDelta: null,
+});
+
+const applyNodeWeights = (state, weights) => {
+  if (!weights || typeof weights !== 'object') return;
+  for (const [rawId, meta] of Object.entries(weights)) {
+    const idNum = Number(rawId);
+    if (!Number.isFinite(idNum)) continue;
+    state.characterIds.add(idNum);
+    if (Number.isFinite(meta?.weight)) state.weightMap.set(idNum, meta.weight);
+  }
+};
+
+const mergeRelationItem = (state, item, deltaEventId) => {
+  if (!item || typeof item !== 'object') return;
+  const id1 = Number(item.fromCharacterId);
+  const id2 = Number(item.toCharacterId);
+  if (!Number.isFinite(id1) || !Number.isFinite(id2)) return;
+
+  state.characterIds.add(id1);
+  state.characterIds.add(id2);
+  const key = directedEdgeElementId(id1, id2);
+  const prev = state.relationMap.get(key);
+  const labels = asArray(item.labels);
+  const evidence = Number.isFinite(item.evidenceCount) ? item.evidenceCount : 1;
+  const positivity = toNumberOrNull(item.positivity) ?? clampPositivity(prev?.positivity);
+
+  state.relationMap.set(key, {
+    id1,
+    id2,
+    positivity,
+    count: (prev?.count ?? 0) + evidence,
+    relation: uniqueStrings([...asArray(prev?.relation), ...labels], { caseInsensitive: true }),
+    latestLabels: labels,
+    labelHistory: appendRelationLabelHistory(prev?.labelHistory, labels, deltaEventId, positivity),
+    latestReason: typeof item.reason === 'string' ? item.reason : prev?.latestReason ?? '',
+    latestEventId: deltaEventId ?? prev?.latestEventId ?? null,
+  });
+};
+
+const applyDeltasToAccumulateState = (state, deltas) => {
+  if (!state || !deltas?.length) return state;
+
+  for (const delta of deltas) {
+    if (!delta || typeof delta !== 'object') continue;
+    state.lastDelta = delta;
+    const deltaEventId = toTrimmedStringOrNull(delta.eventId);
+    applyNodeWeights(state, delta.nodeWeights);
+    for (const item of asArray(delta.items)) mergeRelationItem(state, item, deltaEventId);
+  }
+  return state;
+};
+
+const finalizeAccumulateStateToGraphResult = (
+  bookId,
+  state,
+  { chapterIndex = null, eventId = null } = {}
+) => {
+  const last = state.lastDelta;
+  const stampedId = toTrimmedStringOrNull(eventId);
+  // through 스냅샷: chapterIndex 인자 우선 / 전체 누적: last delta 우선
+  const resolvedChapter = stampedId
+    ? toNumberOrNull(chapterIndex) ?? last?.chapterIndex ?? null
+    : last?.chapterIndex ?? toNumberOrNull(chapterIndex);
+  const resolvedEventId = stampedId ?? toTrimmedStringOrNull(last?.eventId) ?? null;
+
+  const manifestChars = resolveManifestCharacterMeta(bookId);
+  const characters = [...state.characterIds]
+    .sort((a, b) => a - b)
+    .map((id) => {
+      const meta = manifestChars.get(id);
+      const commonName = pickCharacterDisplayName(meta) || '';
+      if (commonName) rememberCharacterDisplayName(bookId, id, commonName);
+      return {
+        id,
+        weight: toPositiveNumberOrNull(state.weightMap.get(id)) ?? 1,
+        count: 1,
+        common_name: commonName,
+        name: commonName,
+        names: asArray(meta?.names),
+        // 인물 소개는 personalityText (profileText는 이미지 프롬프트 등 별도 용도)
+        personalityText: stringOrEmpty(meta?.personalityText),
+        profileText: stringOrEmpty(meta?.profileText),
+        description: stringOrEmpty(meta?.personalityText),
+        profileImage: stringOrEmpty(meta?.profileImage),
+        isMainCharacter: Boolean(meta?.isMainCharacter),
+      };
+    });
+
+  return {
+    bookId: Number(bookId) || bookId || null,
+    chapterIndex: resolvedChapter,
+    eventId: resolvedEventId,
+    characters,
+    relations: [...state.relationMap.values()],
+    event: buildGraphEventMeta(resolvedEventId, resolvedChapter),
+  };
+};
+
+/** throughEventId까지 포함한 end index (exclusive). 목록에 없으면 order로 근사. */
+const resolveThroughEndExclusive = (
+  sortedDeltas,
+  throughEventId,
+  { chapterIndex = null, chapterEventIdOrder = null } = {}
+) => {
+  const list = asArray(sortedDeltas);
+  const through = toTrimmedStringOrNull(throughEventId);
+  if (!through || list.length === 0) return 0;
+
+  const cut = list.findIndex((d) => toTrimmedStringOrNull(d.eventId) === through);
+  if (cut >= 0) return cut + 1;
+
+  const targetChapter = toNumberOrNull(chapterIndex);
+  const order = normalizeEventIdOrder(chapterEventIdOrder);
+  const throughPos = order.indexOf(through);
+  if (targetChapter == null || throughPos < 0) return list.length;
+
+  const allowedInChapter = new Set(order.slice(0, throughPos + 1));
+  const orderSet = new Set(order);
+  let end = 0;
+  for (let i = 0; i < list.length; i += 1) {
+    const d = list[i];
+    const ch = Number(d?.chapterIndex);
+    const id = toTrimmedStringOrNull(d?.eventId);
+    let include = false;
+    if (Number.isFinite(ch) && ch < targetChapter) include = true;
+    else if (Number.isFinite(ch) && ch > targetChapter) include = false;
+    else if (Number.isFinite(ch) && ch === targetChapter) include = id ? allowedInChapter.has(id) : false;
+    else include = id ? !orderSet.has(id) : false;
+    if (include) end = i + 1;
+  }
+  return end;
+};
+
+/**
+ * 정렬된 deltas를 이벤트 순으로 증분 누적.
+ * discovery에서 phase1/phase2가 동일 walker를 재사용.
+ * appliedEnd는 항상 원본 sortedDeltas 기준 exclusive index.
+ */
+const createDeltaAccumulateWalker = (
+  bookId,
+  sortedDeltas,
+  { chapterIndex = null, chapterEventIdOrder = null } = {}
+) => {
+  const state = createEmptyDeltaAccumulateState();
+  let appliedEnd = 0;
+  const deltas = asArray(sortedDeltas);
+  const cutOpts = {
+    chapterIndex,
+    chapterEventIdOrder: normalizeEventIdOrder(chapterEventIdOrder),
+  };
+
+  const applyUpTo = (endExclusive) => {
+    const end = Math.max(0, Math.min(endExclusive, deltas.length));
+    if (end <= appliedEnd) return;
+    applyDeltasToAccumulateState(state, deltas.slice(appliedEnd, end));
+    appliedEnd = end;
+  };
+
+  const advanceThrough = (eventId) => {
+    const id = toTrimmedStringOrNull(eventId);
+    if (!id) return;
+    applyUpTo(resolveThroughEndExclusive(deltas, id, cutOpts));
+  };
+
+  const snapshot = (eventId) =>
+    finalizeAccumulateStateToGraphResult(bookId, state, { chapterIndex, eventId });
+
+  return {
+    advanceThrough,
+    snapshotThrough(eventId) {
+      const id = toTrimmedStringOrNull(eventId);
+      advanceThrough(id);
+      return snapshot(id);
+    },
+    snapshotAll() {
+      applyUpTo(deltas.length);
+      return snapshot(null);
+    },
+  };
+};
+
+/**
+ * relationship-deltas → 기존 그래프 소비자용 characters/relations 누적.
+ * @param {{ chapterIndex?: number|null, throughEventId?: string|null, chapterEventIdOrder?: string[]|null }} [options]
+ */
+export const accumulateDeltasToGraphResult = (
+  bookId,
+  deltas,
+  { chapterIndex = null, throughEventId = null, chapterEventIdOrder = null } = {}
+) => {
+  const through = toTrimmedStringOrNull(throughEventId);
+  const order = normalizeEventIdOrder(chapterEventIdOrder);
+  const walker = createDeltaAccumulateWalker(
+    bookId,
+    sortDeltasForAccumulate(deltas, order),
+    { chapterIndex, chapterEventIdOrder: order }
+  );
+  return through ? walker.snapshotThrough(through) : walker.snapshotAll();
+};
+
+export const resolveChapterEventIdOrder = (bookId, chapterIndex) => {
+  if (toNumberOrNull(chapterIndex) == null) return [];
+  return asArray(getChapterData(bookId, chapterIndex)?.events)
+    .map(resolveManifestEventId)
+    .filter(Boolean);
+};
 
 const bookDeltasCache = new Map();
 const bookDeltasInflight = new Map();
@@ -2380,44 +2950,81 @@ const buildCacheEntry = (
   };
 };
 
+/** clearBookRelationshipDeltas 이후 끝난 요청이면 결과를 버림 */
+const throwIfCleared = (key, generation) => {
+  if ((bookDeltasGeneration.get(key) ?? 0) !== generation) {
+    throw new DOMException('Aborted', 'AbortError');
+  }
+};
+
+/** 챕터 단위 조회 실패 (hard/soft fail) → throw용 Error */
+const deltasFetchError = (fetched) => {
+  const err = new Error(fetched.response?.message || '관계 델타 조회에 실패했습니다.');
+  err.code = fetched.response?.code || 'ERROR';
+  err.response = fetched.response;
+  return err;
+};
+
+/**
+ * 여러 챕터를 manifest eventId 범위로 1회 요청 (챕터별 N요청은 BE 커넥션 풀에서 줄 섬).
+ * 성공해 캐시에 반영하면 새 항목, 범위를 못 정했거나 빈 결과·실패면 null (챕터별 폴백).
+ */
+const fetchChapterRangeOnce = async (key, chapters, uptoChapter, current, generation) => {
+  const fromId = chapters
+    .map((ch) => resolveManifestEventId(getFirstManifestEventInChapter(key, ch)))
+    .find(Boolean);
+  const toId = resolveManifestEventId(getLastManifestEventInChapter(key, uptoChapter));
+  if (!fromId || !toId) return null;
+
+  try {
+    const fetched = await fetchRelationshipDeltasList(key, { fromEventId: fromId, toEventId: toId });
+    throwIfCleared(key, generation);
+    // 빈 결과는 eventId 불일치(404→soft-empty)일 수 있어 챕터별 조회로 확인
+    if (fetched.isSuccess === false || fetched.deltas.length === 0) return null;
+    const entry = buildCacheEntry(
+      fetched.bookId ?? key,
+      mergeDeltasByEventId(current?.deltas, fetched.deltas),
+      { toEventId: toId, coveredThroughChapter: uptoChapter, response: fetched.response }
+    );
+    bookDeltasCache.set(key, entry);
+    return entry;
+  } catch (error) {
+    if (error?.name === 'AbortError') throw error;
+    // 범위 조회 실패(400 등) → 챕터별 조회로 폴백
+    return null;
+  }
+};
+
 const fetchAndStoreByChapter = async (key, uptoChapter) => {
   const generation = bookDeltasGeneration.get(key) ?? 0;
   let current = bookDeltasCache.get(key);
   if (current && cacheCoversChapter(current, uptoChapter, key)) return current;
 
   const covered = toPositiveInt(current?.coveredThroughChapter) ?? 0;
-  const startChapter = Math.max(1, covered + 1);
-
   const chapters = [];
-  for (let ch = startChapter; ch <= uptoChapter; ch += 1) {
+  for (let ch = Math.max(1, covered + 1); ch <= uptoChapter; ch += 1) {
     if (!(current && cacheCoversChapter(current, ch, key))) chapters.push(ch);
   }
+
+  if (chapters.length > 1) {
+    const ranged = await fetchChapterRangeOnce(key, chapters, uptoChapter, current, generation);
+    if (ranged) return ranged;
+  }
+
   // 챕터 요청은 병렬로 보내고, 병합은 챕터 순서대로 (순차 요청 시 N챕터 = N 왕복 대기)
   const results = await Promise.allSettled(
     chapters.map((ch) => fetchRelationshipDeltasList(key, { chapterIndex: ch }))
   );
   // 일부만 받은 deltas를 성공으로 넘기면 discover가 관계 빠진 챕터 캐시를 저장함
-  if ((bookDeltasGeneration.get(key) ?? 0) !== generation) {
-    throw new DOMException('Aborted', 'AbortError');
-  }
+  throwIfCleared(key, generation);
 
-  for (let i = 0; i < chapters.length; i += 1) {
-    const ch = chapters[i];
+  chapters.forEach((ch, i) => {
     if (results[i].status === 'rejected') throw results[i].reason;
     const fetched = results[i].value;
-    const chapterLastId = resolveManifestEventId(getLastManifestEventInChapter(key, ch));
-    const chapterOk = fetched.isSuccess !== false;
-
     // hard/soft fail을 빈 성공·커버리지로 캐시하지 않음 (재시도 가능, noRelation과 구분)
-    if (!chapterOk) {
-      const err = new Error(
-        fetched.response?.message || '관계 델타 조회에 실패했습니다.'
-      );
-      err.code = fetched.response?.code || 'ERROR';
-      err.response = fetched.response;
-      throw err;
-    }
+    if (fetched.isSuccess === false) throw deltasFetchError(fetched);
 
+    const chapterLastId = resolveManifestEventId(getLastManifestEventInChapter(key, ch));
     current = buildCacheEntry(
       fetched.bookId ?? key,
       mergeDeltasByEventId(current?.deltas, fetched.deltas),
@@ -2428,7 +3035,7 @@ const fetchAndStoreByChapter = async (key, uptoChapter) => {
       }
     );
     bookDeltasCache.set(key, current);
-  }
+  });
 
   return current ?? buildCacheEntry(key, []);
 };
@@ -2440,7 +3047,7 @@ const fetchAndStoreByChapter = async (key, uptoChapter) => {
  * @returns {Promise<{ bookId: *, deltas: Array, toEventId: string|null, coveredThroughChapter: number|null, response: *, isSuccess: boolean }>}
  */
 export async function ensureBookRelationshipDeltas(bookId, { chapterIndex = null } = {}) {
-  if (!bookId) throw new Error('bookId는 필수 매개변수입니다.');
+  requireBookId(bookId);
 
   const key = toPositiveNumberOrNull(bookId) ?? bookId;
   const ch = toPositiveInt(chapterIndex);
@@ -2470,3 +3077,134 @@ export async function ensureBookRelationshipDeltas(bookId, { chapterIndex = null
     return awaitTracked(bookDeltasInflight, key, fetchAndStoreByChapter(key, ch));
   }
 }
+
+/* ─── 매크로 그래프 응답 (책 전체 누적 → API 응답 shape) ─── */
+
+const handleApiError = (error, context) => {
+  const statusMessages = {
+    400: '잘못된 요청입니다',
+    401: '인증이 필요합니다',
+    403: '접근 권한이 없습니다',
+    404: '요청한 리소스를 찾을 수 없습니다',
+    500: '서버 내부 오류가 발생했습니다',
+    502: '게이트웨이 오류가 발생했습니다',
+    503: '서비스를 일시적으로 사용할 수 없습니다',
+  };
+  const statusCode = error.status || 'unknown';
+  const statusMessage = statusMessages[statusCode] || 'API 요청 중 오류가 발생했습니다';
+  errorUtils.logError('graphApi', error, { context, status: statusCode });
+  throw new Error(
+    `${context}: ${statusMessage} (${statusCode}) - ${error.message || '알 수 없는 오류'}`
+  );
+};
+
+const emptyAccumulatedGraphResult = (overrides = {}) => ({
+  bookId: null,
+  chapterIndex: null,
+  eventId: null,
+  characters: [],
+  relations: [],
+  event: null,
+  ...overrides,
+});
+
+const normalizeAccumulatedGraphResult = (payload) => {
+  if (!payload || typeof payload !== 'object') return emptyAccumulatedGraphResult();
+  const eventId = toTrimmedStringOrNull(payload.eventId);
+  const chapterIndex = payload.chapterIndex ?? null;
+  return {
+    ...payload,
+    bookId: payload.bookId ?? null,
+    chapterIndex,
+    eventId,
+    characters: asArray(payload.characters),
+    relations: asArray(payload.relations),
+    event:
+      payload.event && typeof payload.event === 'object'
+        ? payload.event
+        : buildGraphEventMeta(eventId, chapterIndex),
+  };
+};
+
+const createRelationshipDeltasResponse = (isSuccess, code, message, result, status = null) => {
+  const normalized = normalizeAccumulatedGraphResult(result);
+  const hasPayload =
+    normalized.characters.length > 0 || normalized.relations.length > 0 || Boolean(normalized.eventId);
+  let resolvedStatus = status;
+  if (!resolvedStatus) {
+    if (!isSuccess) resolvedStatus = FETCH_STATUS.ERROR;
+    else if (!hasPayload) resolvedStatus = FETCH_STATUS.EMPTY;
+    else resolvedStatus = FETCH_STATUS.OK;
+  }
+  return {
+    isSuccess,
+    code,
+    message,
+    status: resolvedStatus,
+    result: normalized,
+  };
+};
+
+const toGraphApiResponse = ({ response, result, empty }) => {
+  const resolved = result || empty;
+  const hasPayload = hasGraphPayload(resolved);
+  // soft-empty는 fetch 단계에서 success로 정규화됨. 여기선 누적 payload로 부분 실패 보정.
+  const failed = (!response || response.isSuccess === false) && !hasPayload;
+  const code = failed ? response?.code || 'ERROR' : hasPayload ? 'SUCCESS' : 'NOT_FOUND';
+  const message = failed
+    ? response?.message || '관계 델타 조회에 실패했습니다.'
+    : hasPayload
+      ? '관계 델타를 성공적으로 조회했습니다.'
+      : '관계 델타를 찾을 수 없습니다.';
+  return toUnifiedApiResponse(
+    createRelationshipDeltasResponse(
+      !failed,
+      code,
+      message,
+      failed ? empty : resolved,
+      failed ? FETCH_STATUS.ERROR : null
+    )
+  );
+};
+
+const relationshipDeltasInvalidParams = (empty, message = 'chapterIndex가 필요합니다.') =>
+  toUnifiedApiResponse(
+    createRelationshipDeltasResponse(false, 'INVALID_PARAMS', message, empty)
+  );
+
+/** 매크로 그래프: 해당 챕터까지(챕터 단위) 책 전체 누적 */
+export const getBookScopeRelationshipGraph = async (bookId, uptoChapter = null) => {
+  requireBookId(bookId);
+
+  const chapterIndex = toNumberOrNull(uptoChapter);
+  const bookIdNum = Number(bookId) || null;
+  if (chapterIndex == null) {
+    return relationshipDeltasInvalidParams(
+      emptyAccumulatedGraphResult({ bookId: bookIdNum })
+    );
+  }
+
+  const resolvedTo = resolveManifestEventId(getLastManifestEventInChapter(bookId, chapterIndex));
+  const empty = emptyAccumulatedGraphResult({
+    bookId: bookIdNum,
+    chapterIndex,
+    eventId: resolvedTo,
+  });
+
+  try {
+    const fetched = await ensureBookRelationshipDeltas(bookId, {
+      chapterIndex,
+    });
+    return toGraphApiResponse({
+      response: fetched.response,
+      result: accumulateDeltasToGraphResult(fetched.bookId, fetched.deltas, {
+        chapterIndex,
+        throughEventId: resolvedTo,
+        chapterEventIdOrder: resolveChapterEventIdOrder(bookId, chapterIndex),
+      }),
+      empty,
+    });
+  } catch (error) {
+    handleApiError(error, '관계 델타 조회 실패');
+  }
+};

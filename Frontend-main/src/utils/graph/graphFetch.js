@@ -1,212 +1,31 @@
-/** 챕터·이벤트 스냅샷, 매크로 그래프 캐시 로더, relation timeline fetch */
-import { toNumberOrNull, toPositiveInt, toTrimmedStringOrNull, asArray, clampPositivity, errorUtils } from '../common/valueUtils';
-import { extractApiBookId, isSamePair, isGraphEdgeElement } from './graphCore';
+/** 매크로 그래프 캐시 로더, relation timeline fetch */
+import { toPositiveInt, toTrimmedStringOrNull, asArray, clampPositivity, errorUtils, compareLocale } from '../common/valueUtils';
+import { isSamePair, isGraphEdgeElement, normalizeElementId } from './graphCore';
 import {
-  loadFromStorage,
-  saveToStorage,
-  removeFromStorage,
+  loadTtlStorage,
+  saveTtlStorage,
   setBounded,
-  isUnusableChapterGraphCacheSource,
+  withInflight,
 } from '../common/cache/cacheManager';
 import { eventUtils, cacheKeyUtils, MACRO_GRAPH_STORAGE_KEY_RE, ELEMENTS_TO_RELATIONS_OPTS } from '../viewer/viewerCore';
-import {
-  accumulateDeltasToGraphResult,
-  resolveChapterEventIdOrder,
-  FETCH_STATUS,
-  hasGraphPayload,
-} from '../api/graphApi';
+import { FETCH_STATUS, hasGraphPayload } from '../api/graphApi';
 import {
   findManifestEventInChapter,
   resolveLastEventIdxForChapter,
 } from '../common/cache/manifestCache';
-import { pickGraphApiResult } from '../viewer/viewerGraph';
 
 import {
   getCachedChapterEvents,
-  reconstructChapterGraphState,
+  createChapterGraphStateCursor,
   ensureBookRelationshipDeltas,
+  accumulateDeltasToGraphResult,
+  resolveChapterEventIdOrder,
 } from './graphModel';
 
-const graphPayloadFromReconstructed = (reconstructed) => ({
-  characters: asArray(reconstructed?.characters),
-  relations: eventUtils.convertElementsToRelations(
-    asArray(reconstructed?.elements),
-    ELEMENTS_TO_RELATIONS_OPTS
-  ),
-});
-
-const isLegacyRawEventRow = (event) =>
-  Boolean(
-    (event?.event && typeof event.event === 'object') ||
-    Array.isArray(event?.relations) ||
-    Array.isArray(event?.characters)
-  );
-
-const withEventTitleAliases = (title) => {
-  const t = title ?? null;
-  return { title: t, name: t, eventName: t, eventTitle: t };
-};
-
-const withEventOffsetFields = (start, end, { alsoTxtOffset = false } = {}) => {
-  const s = start ?? null;
-  const e = end ?? null;
-  return alsoTxtOffset
-    ? { startTxtOffset: s, endTxtOffset: e, start: s, end: e }
-    : { start: s, end: e };
-};
-
-function baseChapterEventFields(targetChapter, eventIdx, eventNum, eventId) {
-  return {
-    chapter: targetChapter,
-    chapterIdx: targetChapter,
-    eventIdx,
-    eventNum,
-    eventId,
-    resolvedEventIdx: eventIdx,
-    originalEventIdx: eventIdx,
-  };
-}
-
-const mapLegacyOrSummaryEvent = (event, targetChapter) => {
-  const eventIdx = eventUtils.resolveEventOrdinal(event);
-  if (eventIdx == null || eventIdx <= 0) return null;
-
-  const eventNum = toPositiveInt(event.eventNum, eventIdx);
-  const eventId = eventUtils.resolveEventId(event) ?? event.eventId ?? eventIdx;
-  const base = baseChapterEventFields(targetChapter, eventIdx, eventNum, eventId);
-
-  if (isLegacyRawEventRow(event)) {
-    return {
-      ...(event.event && typeof event.event === 'object' ? event.event : {}),
-      ...event,
-      ...base,
-      relations: asArray(event.relations),
-      characters: asArray(event.characters),
-      ...withEventOffsetFields(
-        event?.startPos ?? event?.start ?? event?.startTxtOffset,
-        event?.endPos ?? event?.end ?? event?.endTxtOffset
-      ),
-    };
-  }
-
-  return {
-    ...base,
-    ...withEventOffsetFields(event.startTxtOffset, event.endTxtOffset, { alsoTxtOffset: true }),
-    ...withEventTitleAliases(event.title ?? null),
-    text: event.text ?? null,
-    relations: [],
-    characters: [],
-  };
-};
-
-function buildEventsFromChapterCache(chapterPayload, targetChapter, throughEventIdx = null) {
-  if (!chapterPayload?.events?.length) return [];
-
-  const hasDiffCache = chapterPayload.baseSnapshot && Array.isArray(chapterPayload.diffs);
-  const through = Number(throughEventIdx);
-  const eventMetas = Number.isFinite(through) && through > 0
-    ? chapterPayload.events.filter((event) => {
-        const idx = Number(event?.eventIdx) || 0;
-        return idx > 0 && idx <= through;
-      })
-    : chapterPayload.events;
-
-  if (!hasDiffCache) {
-    return eventMetas.map((event) => mapLegacyOrSummaryEvent(event, targetChapter)).filter(Boolean);
-  }
-
-  return eventMetas.map((eventMeta) => {
-    const eventIdx = Number(eventMeta?.eventIdx) || 0;
-    const eventNum = toPositiveInt(eventMeta?.eventNum, eventIdx);
-    const reconstructed = reconstructChapterGraphState(chapterPayload, eventIdx);
-    const { characters, relations } = graphPayloadFromReconstructed(reconstructed);
-    const title = eventMeta.title ?? reconstructed?.eventMeta?.name ?? reconstructed?.eventMeta?.title ?? null;
-
-    return {
-      ...eventMeta,
-      ...baseChapterEventFields(targetChapter, eventIdx, eventNum, (
-        eventUtils.resolveEventId(reconstructed?.eventMeta) ??
-        eventUtils.resolveEventId(eventMeta) ??
-        eventIdx
-      )),
-      event: reconstructed?.eventMeta ?? eventMeta?.event ?? null,
-      ...withEventTitleAliases(title),
-      relations,
-      characters,
-      ...withEventOffsetFields(
-        eventMeta.startTxtOffset ?? reconstructed?.eventMeta?.startTxtOffset,
-        eventMeta.endTxtOffset ?? reconstructed?.eventMeta?.endTxtOffset
-      ),
-    };
-  });
-}
-
-function getEventsForChapter(chapter, folderKey) {
-  const bookId = extractApiBookId(folderKey);
-  if (!bookId || !chapter || chapter < 1) return [];
-
-  const snapshot = getCachedChapterEvents(bookId, chapter);
-  if (!snapshot?.events?.length || isUnusableChapterGraphCacheSource(snapshot.source)) {
-    return [];
-  }
-
-  return buildEventsFromChapterCache(snapshot, chapter);
-}
-
-export function getEventDataByIndex(folderKey, chapter, eventIndex) {
-  const bookId = extractApiBookId(folderKey);
-  if (!bookId || !chapter || chapter < 1 || !eventIndex || eventIndex < 1) {
-    return null;
-  }
-
-  const events = getEventsForChapter(chapter, folderKey);
-  if (!events.length) {
-    return null;
-  }
-
-  const event = events.find(
-    (entry) => eventUtils.resolveEventNum(entry) === toNumberOrNull(eventIndex)
-  );
-  if (!event) {
-    return null;
-  }
-
-  const resolvedEventIdx = eventUtils.resolveEventNum(event) || Number(eventIndex);
-  return {
-    ...baseChapterEventFields(chapter, resolvedEventIdx, resolvedEventIdx, (
-      eventUtils.resolveEventId(event) ?? resolvedEventIdx
-    )),
-    relations: asArray(event.relations),
-    characters: asArray(event.characters),
-    event: event.event || null,
-  };
-}
-
-/** 챕터 이벤트 캐시 → events state에 병합 (React setState용) */
-export function applyChapterEventsFromCache(
-  prevEvents,
-  bookId,
-  targetChapter,
-  throughEventIdx = null
-) {
-  const chapterPayload = getCachedChapterEvents(bookId, targetChapter);
-  if (!chapterPayload?.events) {
-    return { applied: false, hasPayload: false, isEmpty: false, events: prevEvents };
-  }
-  if (!chapterPayload.events.length) {
-    return { applied: false, hasPayload: true, isEmpty: true, events: prevEvents };
-  }
-
-  const enrichedEvents = buildEventsFromChapterCache(chapterPayload, targetChapter, throughEventIdx);
-  if (!enrichedEvents.length) {
-    return { applied: false, hasPayload: true, isEmpty: false, events: prevEvents };
-  }
-
-  const events = enrichedEvents.reduce(
-    (acc, normalizedEvent) => eventUtils.updateEventsInState(acc, normalizedEvent, targetChapter),
-    prevEvents
-  );
-  return { applied: true, hasPayload: true, isEmpty: false, events };
+/** API 응답에서 result 객체 추출 */
+function pickGraphApiResult(response) {
+  const result = response?.result;
+  return result && typeof result === 'object' ? result : null;
 }
 
 // --- 매크로 그래프 세션·localStorage 캐시 ---
@@ -215,22 +34,6 @@ const GRAPH_CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6h — stale 매크로 고착 
 const macroSessionCache = new Map();
 const inflightRequests = new Map();
 const timelineInflight = new Map();
-
-function withInflight(map, cacheKey, run) {
-  if (!cacheKey) return Promise.resolve().then(run);
-  const existing = map.get(cacheKey);
-  if (existing) return existing;
-
-  const pending = Promise.resolve()
-    .then(run)
-    .finally(() => {
-      if (map.get(cacheKey) === pending) {
-        map.delete(cacheKey);
-      }
-    });
-  map.set(cacheKey, pending);
-  return pending;
-}
 
 const isValidChapterRef = (bookId, chapter) =>
   toPositiveInt(bookId) !== null && toPositiveInt(chapter) !== null;
@@ -244,18 +47,10 @@ const getMacroFromSessionCache = (bookId, chapter) =>
 const saveMacroToSessionCache = (bookId, chapter, data) =>
   macroSessionCache.set(cacheKeyUtils.macroSession(bookId, chapter), data);
 
-const checkLocalStorageCache = (cacheKey) => {
-  const data = loadFromStorage(cacheKey, 'localStorage');
-  if (!data) return null;
-  if (data._savedAt && Date.now() - data._savedAt > GRAPH_CACHE_TTL_MS) {
-    removeFromStorage(cacheKey, 'localStorage');
-    return null;
-  }
-  return data;
-};
+const checkLocalStorageCache = (cacheKey) => loadTtlStorage(cacheKey, GRAPH_CACHE_TTL_MS);
 
 const saveToLocalStorageCache = (cacheKey, data) => {
-  saveToStorage(cacheKey, { ...data, _savedAt: Date.now() }, 'localStorage');
+  saveTtlStorage(cacheKey, data);
 };
 
 function resolveMacroCacheRefs(bookId, chapter) {
@@ -310,9 +105,8 @@ export const prefetchMacroGraphToCache = async (bookId, chapter, apiCall) => {
   if (hasGraphPayload(checkLocalStorageCache(refs.storageKey))) return;
   try {
     const response = await withInflight(inflightRequests, refs.storageKey, apiCall);
-    if (response?.isSuccess && response?.result && hasGraphPayload(response.result)) {
-      saveToLocalStorageCache(refs.storageKey, response.result);
-      saveMacroToSessionCache(refs.bookId, refs.chapter, response.result);
+    if (response?.isSuccess && response?.result) {
+      handleLoaderSuccess(response.result, null, refs.storageKey);
     }
   } catch {
     /* 프리페치 실패 무시 */
@@ -348,7 +142,6 @@ export const loadGraphDataWithCache = async ({
     const response = await withInflight(inflightRequests, cacheKey, apiCall);
     return processApiResponse(response, cacheKey, onSuccess, bookId, chapter, onError);
   } catch (error) {
-    if (cacheKey) inflightRequests.delete(cacheKey);
     errorUtils.logError('GraphDataLoader', error, { bookId, chapter, cacheKey });
     onError?.(error);
     return null;
@@ -419,19 +212,23 @@ function findRelationInResult(relations, id1, id2) {
   return list.find((rel) => isSamePair(rel, id1, id2)) ?? null;
 }
 
+/** 양방향 간선이 둘 다 있으면 id 정렬상 앞선 쪽 — 정렬된 elements에서 find한 결과와 동일 (입력 순서 무관) */
 function findRelationInElements(elements, id1, id2) {
   if (!Array.isArray(elements)) return null;
-  return (
-    elements.find((element) => {
-      if (!isGraphEdgeElement(element)) return false;
-      return isSamePair(eventUtils.resolveRelationNodeIds(element.data), id1, id2);
-    }) ?? null
-  );
+  let best = null;
+  for (const element of elements) {
+    if (!isGraphEdgeElement(element)) continue;
+    if (!isSamePair(eventUtils.resolveRelationNodeIds(element.data), id1, id2)) continue;
+    if (!best || compareLocale(String(normalizeElementId(element)), String(normalizeElementId(best))) < 0) {
+      best = element;
+    }
+  }
+  return best;
 }
 
 function withNoRelation(result, fallbackNoRelation = true) {
   const safeResult = result ?? { points: [], labelInfo: [] };
-  const points = Array.isArray(safeResult.points) ? safeResult.points : [];
+  const points = asArray(safeResult.points);
   const status = safeResult.status ?? (points.length === 0 ? FETCH_STATUS.EMPTY : FETCH_STATUS.OK);
   // 네트워크/로드 에러는 noRelation으로 취급하지 않음
   const noRelation =
@@ -441,24 +238,13 @@ function withNoRelation(result, fallbackNoRelation = true) {
   return {
     ...safeResult,
     points,
-    labelInfo: Array.isArray(safeResult.labelInfo) ? safeResult.labelInfo : [],
+    labelInfo: asArray(safeResult.labelInfo),
     noRelation,
     status,
     incomplete: Boolean(safeResult.incomplete),
     failedIds: Array.isArray(safeResult.failedIds) ? safeResult.failedIds : null,
     error: safeResult.error ?? null,
     usedProbe: Boolean(safeResult.usedProbe),
-  };
-}
-
-export function padSingleEvent(points, labels) {
-  if (!Array.isArray(points) || !Array.isArray(labels) || points.length !== 1) {
-    return { points, labels };
-  }
-
-  return {
-    points: Array.from({ length: 11 }, (_, index) => (index === 5 ? points[0] : null)),
-    labels: Array.from({ length: 11 }, (_, index) => (index === 5 ? labels[0] : '')),
   };
 }
 
@@ -511,17 +297,18 @@ function relationEventFromApiResult(fineData, id1, id2, idx) {
   return { idx, positivity };
 }
 
-function findEdgeInReconstructedChapter(chapterPayload, eventIdx, id1, id2) {
+/** 챕터 캐시에서 idx 시점의 id1–id2 간선 조회 함수 (diff 순회를 조회 간에 이어감) */
+function createReconstructedEdgeFinder(chapterPayload, id1, id2) {
   const maxIdx = Number(chapterPayload?.maxEventIdx);
-  // 캐시에 없는 이벤트는 마지막 스냅샷을 반복하지 않음 (잘못된 평탄 차트 방지)
-  if (Number.isFinite(maxIdx) && maxIdx >= 1 && Number(eventIdx) > maxIdx) {
-    return null;
-  }
-  return findRelationInElements(
-    reconstructChapterGraphState(chapterPayload, eventIdx)?.elements,
-    id1,
-    id2
-  );
+  // 간선 조회만 하므로 시점마다 전체 복제·정렬하지 않음 (O(k·N log N) → O(k·N))
+  const stateAt = createChapterGraphStateCursor(chapterPayload, { readOnly: true, sortElements: false });
+  return (eventIdx) => {
+    // 캐시에 없는 이벤트는 마지막 스냅샷을 반복하지 않음 (잘못된 평탄 차트 방지)
+    if (Number.isFinite(maxIdx) && maxIdx >= 1 && Number(eventIdx) > maxIdx) {
+      return null;
+    }
+    return findRelationInElements(stateAt(eventIdx)?.elements, id1, id2);
+  };
 }
 
 function readEdgePositivityValue(edgeOrRelation) {
@@ -552,11 +339,10 @@ function collectIndexedRelationEvents(lastEventIdx, lastOnly, getEdgeAt) {
 }
 
 function collectRelationEventsFromChapterCache(chapterPayload, id1, id2, lastEventIdx, lastOnly) {
-  return collectIndexedRelationEvents(
-    lastEventIdx,
-    lastOnly,
-    (idx) => findEdgeInReconstructedChapter(chapterPayload, idx, id1, id2)
-  );
+  const findEdgeAt = createReconstructedEdgeFinder(chapterPayload, id1, id2);
+  const events = collectIndexedRelationEvents(lastEventIdx, false, findEdgeAt);
+  // lastOnly: 커서는 오름차순 조회만 빠름 — 내려가며 찾으면 단계마다 base부터 재생하므로 한 번 훑고 마지막 것만
+  return lastOnly ? events.slice(-1) : events;
 }
 
 function buildEventTimeline(eventCount, getPointAt, { fillGaps = true } = {}) {
@@ -591,8 +377,9 @@ function buildRelationTimelineFromChapterCache(bookId, id1, id2, chapterNum, eve
   const chapterPayload = getCachedChapterEvents(bookId, chapterNum);
   if (!chapterPayload?.baseSnapshot) return null;
 
+  const findEdgeAt = createReconstructedEdgeFinder(chapterPayload, id1, id2);
   return buildEventTimeline(eventNum, (idx, started) => {
-    const edge = findEdgeInReconstructedChapter(chapterPayload, idx, id1, id2);
+    const edge = findEdgeAt(idx);
     if (!edge) return started ? null : undefined;
     const positivity = readEdgePositivityValue(edge);
     if (positivity == null) return started ? null : undefined;
@@ -681,10 +468,8 @@ async function resolveChapterLastEventIdx(bookId, chapter, fetchEventData) {
   return { lastEventIdx: probed, usedProbe: true };
 }
 
+/** fetchRelationTimelineCumulative가 bookId·selectedChapter 검증 후 호출 */
 async function fetchRelationTimelineCumulativeUncached(bookId, id1, id2, selectedChapter) {
-  if (!bookId || selectedChapter < 1) {
-    return emptyTimeline({ noRelation: true, status: FETCH_STATUS.EMPTY });
-  }
   try {
     const eventCache = new Map();
     const chapterRelationCache = new Map();

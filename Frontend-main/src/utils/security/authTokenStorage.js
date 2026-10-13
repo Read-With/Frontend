@@ -3,7 +3,7 @@
  * 리프레시 토큰: localStorage (멀티 탭·재방문). 완전한 XSS 방어는 httpOnly·Secure 쿠키 세션이 필요하다.
  */
 
-import { clearBooksCache } from '../common/cache/cacheManager';
+import { clearBooksCache, readRaw, writeRaw, removeKeys } from '../common/cache/cacheManager';
 import { errorUtils } from '../common/valueUtils';
 
 export const AUTH_CLEARED_EVENT = 'readwith:auth-cleared';
@@ -16,69 +16,20 @@ const KEY_GOOGLE_USER = 'google_user';
 let memoryAccessToken = null;
 let legacyAccessMigrated = false;
 
-function lsGet(key) {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-function lsSet(key, value) {
-  try {
-    if (value == null || value === '') localStorage.removeItem(key);
-    else localStorage.setItem(key, value);
-  } catch {
-    /* ignore */
-  }
-}
-
-function lsRemove(...keys) {
-  try {
-    keys.forEach((key) => localStorage.removeItem(key));
-  } catch {
-    /* ignore */
-  }
-}
-
-function ssGet(key) {
-  try {
-    return sessionStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-function ssSet(key, value) {
-  try {
-    sessionStorage.setItem(key, value);
-  } catch {
-    /* ignore */
-  }
-}
-
-function ssRemove(...keys) {
-  try {
-    keys.forEach((key) => sessionStorage.removeItem(key));
-  } catch {
-    /* ignore */
-  }
-}
-
 function migrateLegacyAccessFromLocalStorage() {
   if (legacyAccessMigrated) return;
   legacyAccessMigrated = true;
-  const fromLs = lsGet(KEY_ACCESS);
+  const fromLs = readRaw(KEY_ACCESS);
   if (fromLs) {
     memoryAccessToken = fromLs;
-    lsRemove(KEY_ACCESS);
+    removeKeys('localStorage', KEY_ACCESS);
   }
 }
 
 export function getStoredAccessToken() {
   migrateLegacyAccessFromLocalStorage();
   if (memoryAccessToken) return memoryAccessToken;
-  const fromSs = ssGet(KEY_SESSION_ACCESS);
+  const fromSs = readRaw(KEY_SESSION_ACCESS, 'sessionStorage');
   if (fromSs) {
     memoryAccessToken = fromSs;
     return fromSs;
@@ -90,33 +41,33 @@ export function setStoredAccessToken(token) {
   migrateLegacyAccessFromLocalStorage();
   if (token == null || token === '') {
     memoryAccessToken = null;
-    lsRemove(KEY_ACCESS);
-    ssRemove(KEY_SESSION_ACCESS);
+    removeKeys('localStorage', KEY_ACCESS);
+    removeKeys('sessionStorage', KEY_SESSION_ACCESS);
     return;
   }
   memoryAccessToken = token;
-  lsRemove(KEY_ACCESS);
-  ssSet(KEY_SESSION_ACCESS, token);
+  removeKeys('localStorage', KEY_ACCESS);
+  writeRaw(KEY_SESSION_ACCESS, token, 'sessionStorage');
 }
 
 export function getStoredRefreshToken() {
-  return lsGet(KEY_REFRESH);
+  return readRaw(KEY_REFRESH);
 }
 
 export function setStoredRefreshToken(token) {
-  lsSet(KEY_REFRESH, token);
+  writeRaw(KEY_REFRESH, token);
 }
 
 export function getStoredGoogleUserJson() {
-  return lsGet(KEY_GOOGLE_USER);
+  return readRaw(KEY_GOOGLE_USER);
 }
 
 export function setStoredGoogleUserJson(jsonString) {
-  lsSet(KEY_GOOGLE_USER, jsonString);
+  writeRaw(KEY_GOOGLE_USER, jsonString);
 }
 
 export function removeStoredGoogleUser() {
-  lsRemove(KEY_GOOGLE_USER);
+  removeKeys('localStorage', KEY_GOOGLE_USER);
 }
 
 /** authApi·urlUtils 순환 없이 로그아웃/세션 초기화 */
@@ -124,15 +75,10 @@ export function clearAuthData() {
   memoryAccessToken = null;
   legacyAccessMigrated = false;
   clearBooksCache();
-  try {
-    localStorage.removeItem(KEY_ACCESS);
-    localStorage.removeItem(KEY_REFRESH);
-    localStorage.removeItem(KEY_GOOGLE_USER);
-    sessionStorage.removeItem(KEY_SESSION_ACCESS);
-  } catch (error) {
-    errorUtils.logWarning('authTokenStorage', 'localStorage 접근 실패', {
-      message: error?.message,
-    });
+  const lsCleared = removeKeys('localStorage', KEY_ACCESS, KEY_REFRESH, KEY_GOOGLE_USER);
+  const ssCleared = removeKeys('sessionStorage', KEY_SESSION_ACCESS);
+  if (!lsCleared || !ssCleared) {
+    errorUtils.logWarning('authTokenStorage', '스토리지 접근 실패 — 토큰 삭제 불완전', { lsCleared, ssCleared });
   }
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new Event(AUTH_CLEARED_EVENT));

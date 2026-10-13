@@ -281,7 +281,6 @@ function GraphCanvas({
                     onToggleEdgeLabel={floatingControls.onToggleEdgeLabel}
                     filterStage={floatingControls.filterStage}
                     onFilterChange={floatingControls.onFilterChange}
-                    showLegend
                   />
                 ) : null}
                 {floatingControls && pageChromeStart ? (

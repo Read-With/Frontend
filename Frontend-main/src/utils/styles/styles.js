@@ -1,6 +1,6 @@
 /** 공통 UI 색상·애니메이션·ref 유틸 */
 
-import { GRAPH_COLORS, STYLE_DURATION } from './graphStyles';
+import { STYLE_DURATION } from './graphStyles';
 
 export const ANIMATION_VALUES = {
   EASE_OUT: 'cubic-bezier(0.4, 0, 0.2, 1)',
@@ -23,9 +23,6 @@ export function mergeRefs(...refs) {
 export function joinClasses(...parts) {
   return parts.filter(Boolean).join(' ');
 }
-
-/** GRAPH_COLORS 재export (소비자는 COLORS 또는 GRAPH_COLORS) */
-export const COLORS = GRAPH_COLORS;
 
 const opacityTransition = `opacity ${ANIMATION_VALUES.DURATION.NORMAL}`;
 

@@ -1,10 +1,12 @@
 /** progress/reader 캐시 + 서버 locator 정규화 */
 
 import {
+  asArray,
   resolveChapterIndex,
   clampPercent,
   toStringOrNull,
   toTrimmedStringOrNull,
+  toPositiveNumberOrNull,
   toLocator,
   locatorsEqual,
   resolveProgressLocator,
@@ -34,7 +36,7 @@ const normalizeLocatorForServerProgress = (bookId, locator, manifestOverride = u
   if (!loc) return null;
   const chapter = getChapterData(bookId, loc.chapterIndex, manifestOverride);
   if (!chapter) return loc;
-  const starts = Array.isArray(chapter.paragraphStarts) ? chapter.paragraphStarts : [];
+  const starts = asArray(chapter.paragraphStarts);
   if (starts.length === 0) return loc;
   const local = chapterLocalOffsetFromLocator(chapter, loc);
   const out = locatorFromChapterLocalOffset(chapter, local);
@@ -150,13 +152,13 @@ const progressToReaderLocation = (progress) => {
   const chapterIdx = resolveChapterIndex(startLocator);
   if (chapterIdx == null || chapterIdx < 1) return null;
   const endLocator = progress.endLocator ?? startLocator;
-  const eventNum = Number(progress.eventNum);
+  const eventNum = toPositiveNumberOrNull(progress.eventNum);
   return {
     key: String(progress.bookId),
     bookId: progress.bookId,
     chapterIdx: progress.chapterIdx ?? chapterIdx,
-    eventIdx: Number.isFinite(eventNum) && eventNum > 0 ? eventNum : null,
-    eventNum: Number.isFinite(eventNum) && eventNum > 0 ? eventNum : null,
+    eventIdx: eventNum,
+    eventNum,
     eventId: progress.eventId ?? null,
     startLocator,
     endLocator,
@@ -185,9 +187,7 @@ const normalizeReaderLocationPayload = (bookKey, payload) => {
   const endRaw =
     payload.endLocator ?? payload.anchor?.endLocator ?? payload.anchor?.end ?? startL;
   const endL = toLocator(endRaw) ?? startL;
-  const eventNumCandidate = Number(payload.eventNum ?? payload.eventIdx);
-  const normalizedEventNum =
-    Number.isFinite(eventNumCandidate) && eventNumCandidate > 0 ? eventNumCandidate : null;
+  const normalizedEventNum = toPositiveNumberOrNull(payload.eventNum ?? payload.eventIdx);
   const chapterProgressCandidate = Number(payload.chapterProgress);
   const normalizedChapterProgress = Number.isFinite(chapterProgressCandidate)
     ? clampPercent(chapterProgressCandidate)
@@ -247,19 +247,22 @@ const fromStoredProgress = (stored) => {
 
   const bookIdStr = String(stored.bookId);
   const row = ensureProgressRowLocator(bookIdStr, stored);
+  // 전체·챕터 진도를 한 번에 계산 (각각 구하면 전체 진도 계산이 두 번 돎)
+  const rowLocator = resolveProgressLocator(row);
+  const metrics = rowLocator ? resolveProgressMetricsFromLocator(bookIdStr, rowLocator) : null;
   const pct =
-    normalizeReadingProgressPercent(row, { bookId: bookIdStr }) ??
+    metrics?.readingProgressPercent ??
     (Number.isFinite(Number(row.readingProgressPercent))
       ? clampPercent(row.readingProgressPercent)
       : null);
   const chp =
-    normalizeChapterProgressPercent(row, { bookId: bookIdStr }) ??
+    metrics?.chapterProgress ??
     (Number.isFinite(Number(row.chapterProgress)) ? clampPercent(row.chapterProgress) : null);
   const anchor = progressResultToViewerAnchor(row);
 
   if (anchor) {
     const locator = anchor.startLocator;
-    const evn = Number(row.eventNum);
+    const evn = toPositiveNumberOrNull(row.eventNum);
     const evName = resolveProgressEventName(row);
 
     return {
@@ -272,7 +275,7 @@ const fromStoredProgress = (stored) => {
       updatedAt: row.updatedAt,
       timestamp: stored.timestamp,
       ...(pct != null ? { readingProgressPercent: pct } : {}),
-      ...(Number.isFinite(evn) && evn > 0 ? { eventNum: evn } : {}),
+      ...(evn ? { eventNum: evn } : {}),
       ...(chp != null ? { chapterProgress: chp } : {}),
       ...(evName ? { eventName: evName } : {}),
     };
@@ -336,8 +339,8 @@ export const setProgressToCache = (progressData) => {
       timestamp: Date.now(),
     };
     if (pct != null) progress.readingProgressPercent = pct;
-    const evn = Number(withLoc.eventNum);
-    if (Number.isFinite(evn) && evn > 0) progress.eventNum = evn;
+    const evn = toPositiveNumberOrNull(withLoc.eventNum);
+    if (evn) progress.eventNum = evn;
     if (chpFromLoc != null) progress.chapterProgress = chpFromLoc;
     const evName = resolveProgressEventName(withLoc);
     if (evName) progress.eventName = evName;

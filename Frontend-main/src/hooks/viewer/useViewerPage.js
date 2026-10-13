@@ -6,8 +6,8 @@ import { toast } from 'react-toastify';
 import { useServerBookMatching } from '../books/bookHooks';
 import { useViewerProgress, useProgressAutoSave } from './useViewerProgress';
 import { useViewerGraphState, useViewerGraphPipeline } from './useViewerGraph';
-import { useManifestLoaded, useLatestRef, useBodyScrollLock, resolveServerBookIdOrFallback } from '../common/hooksShared';
-import { bookUtils, resolveViewerBookKey } from '../../utils/viewer/viewerCore';
+import { useManifestLoaded, useLatestRef, useBodyScrollLock } from '../common/hooksShared';
+import { createBookObject, resolveServerBookId, resolveViewerBookKey } from '../../utils/viewer/viewerCore';
 import {
   loadSettings,
   normalizeSettings,
@@ -19,7 +19,6 @@ import {
 } from '../../utils/viewer/viewerSession';
 import { toViewerResumeAnchor, resolveChapterIndex, errorUtils } from '../../utils/common/valueUtils';
 import { useBookmarks } from '../bookmarks/bookmarkHooks';
-import { resolveBookmarkApiBookId } from '../../utils/bookmarks/bookmarkUtils';
 import {
   parseViewerReaderSplat,
   resolveViewerReadingPosition,
@@ -259,7 +258,7 @@ export function useViewerPage() {
 
   const book = useMemo(
     () =>
-      bookUtils.createBookObject({
+      createBookObject({
         stateBook: location.state?.book,
         matchedServerBook,
         serverBook,
@@ -292,7 +291,7 @@ export function useViewerPage() {
   });
 
   const manifestServerBookId = useMemo(
-    () => resolveServerBookIdOrFallback(book, bookId),
+    () => resolveServerBookId(book, bookId),
     [book, bookId]
   );
   const { loaded: manifestLoaded, ready: manifestReady } = useManifestLoaded(manifestServerBookId);
@@ -385,7 +384,7 @@ export function useViewerPage() {
   });
 
   const bookmarkBookId = useMemo(
-    () => resolveBookmarkApiBookId(book, bookKey || bookId),
+    () => resolveServerBookId(book, bookKey || bookId),
     [book, bookKey, bookId]
   );
 
@@ -454,7 +453,7 @@ export function useViewerPage() {
   }, [setProgress]);
 
   const onToggleBookmarkList = useCallback(() => {
-    const apiId = resolveBookmarkApiBookId(book, bookKey || bookId);
+    const apiId = resolveServerBookId(book, bookKey || bookId);
     const path = userViewerBookmarksPath(apiId);
     if (!path) {
       errorUtils.logWarning('useViewerPage', '북마크 목록 경로 생성 실패', {

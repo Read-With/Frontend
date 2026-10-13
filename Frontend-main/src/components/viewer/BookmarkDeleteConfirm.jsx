@@ -1,5 +1,4 @@
 import { useCallback, useId, useRef } from 'react';
-import PropTypes from 'prop-types';
 import { useModalFocusTrap, useLatestRef, useBodyScrollLock } from '../../hooks/common/hooksShared';
 import '../../pages/BookmarksPage.css';
 
@@ -71,13 +70,5 @@ function BookmarkDeleteConfirm({
     </div>
   );
 }
-
-BookmarkDeleteConfirm.propTypes = {
-  open: PropTypes.bool.isRequired,
-  busy: PropTypes.bool,
-  description: PropTypes.node.isRequired,
-  onCancel: PropTypes.func.isRequired,
-  onConfirm: PropTypes.func.isRequired,
-};
 
 export default BookmarkDeleteConfirm;

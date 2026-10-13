@@ -3,24 +3,31 @@
 import {
   authenticatedRequest,
   makeSilentError,
-  isForbiddenError,
-  isNotFoundError,
   isTokenValid,
   mapSoftFailResponse,
   SOFT_FAIL_403_404,
   requireBookId,
   pickResponseResult,
   toUnifiedApiResponse,
+  authenticatedFetch,
 } from './authApi';
 import {
+  asArray,
   toOneBasedChapterIndexOrNull,
   toPositiveNumberOrNull,
   progressPayloadFromData,
   resolveProgressLocator,
   locatorsEqual,
   errorUtils,
+  sleep,
+  stringOrEmpty,
 } from '../common/valueUtils';
-import { getApiBaseUrl } from '../common/urlUtils';
+import {
+  getApiBaseUrl,
+  sanitizeAssetUrl,
+  isProtectedPublicAsset,
+  resolveApiArtifactUrl,
+} from '../common/urlUtils';
 import {
   normalizeStartEndLocatorsForServer,
   withNormalizedProgressLocators,
@@ -31,8 +38,9 @@ import {
   normalizeReadingProgressPercent,
 } from '../common/cache/progressCache';
 import { setManifestData, getManifestFromCache } from '../common/cache/manifestCache';
+import { withInflight } from '../common/cache/cacheManager';
 import { normalizeBookCore } from '../common/bookNormalize';
-import { getStoredAccessToken } from '../security/authTokenStorage';
+import { getStoredAccessToken, AUTH_CLEARED_EVENT } from '../security/authTokenStorage';
 import {
   DEFAULT_BOOKMARK_COLOR,
   BOOKMARK_UPDATABLE_FIELDS,
@@ -103,7 +111,12 @@ export const getBooks = async (params = {}) => {
 /** getBooks 응답에서 책 배열만 추출 (실패 시 빈 배열) */
 export const getBooksArray = async (params = {}) => {
   const res = await getBooks(params);
-  return res?.isSuccess && Array.isArray(res.result) ? res.result : [];
+  return res?.isSuccess && asArray(res.result);
+};
+
+const BOOK_SOFT_FAIL_MESSAGES = {
+  forbiddenMessage: '접근 권한이 없습니다',
+  notFoundMessage: '도서를 찾을 수 없거나 아직 노출 가능한 상태가 아닙니다.',
 };
 
 export const getBook = async (bookId) => {
@@ -112,24 +125,15 @@ export const getBook = async (bookId) => {
     return makeSilentError('INVALID_INPUT', 'bookId는 1 이상의 정수여야 합니다.');
   }
 
-  try {
-    const data = await authenticatedRequest(`/v2/books/${normalizedBookId}`, {
-      softFailStatuses: SOFT_FAIL_403_404,
-    });
-    const softFail = mapSoftFailResponse(data, {
-      mode: 'error',
-      forbiddenMessage: '접근 권한이 없습니다',
-      notFoundMessage: '도서를 찾을 수 없거나 아직 노출 가능한 상태가 아닙니다.',
-    });
-    if (softFail) return softFail;
-    return withNormalizedResult(data, normalizeV2Book);
-  } catch (error) {
-    if (isNotFoundError(error)) {
-      return makeSilentError('NOT_FOUND', '도서를 찾을 수 없거나 아직 노출 가능한 상태가 아닙니다.');
-    }
-    if (isForbiddenError(error)) return makeSilentError('FORBIDDEN', '접근 권한이 없습니다');
-    throw error;
-  }
+  const data = await authenticatedRequest(`/v2/books/${normalizedBookId}`, {
+    softFailStatuses: SOFT_FAIL_403_404,
+  });
+  const softFail = mapSoftFailResponse(data, {
+    mode: 'error',
+    ...BOOK_SOFT_FAIL_MESSAGES,
+  });
+  if (softFail) return softFail;
+  return withNormalizedResult(data, normalizeV2Book);
 };
 
 export const uploadBook = async (file, metadata = {}) => {
@@ -172,7 +176,7 @@ export function normalizeChapterPovSummariesResult(raw) {
       povSummaries: [],
     };
   }
-  const rows = Array.isArray(raw.povSummaries) ? raw.povSummaries : [];
+  const rows = asArray(raw.povSummaries);
   const povSummaries = rows
     .map((row) => {
       if (!row || typeof row !== 'object') return null;
@@ -180,8 +184,8 @@ export function normalizeChapterPovSummariesResult(raw) {
       if (!Number.isFinite(characterId)) return null;
       return {
         characterId,
-        characterName: typeof row.characterName === 'string' ? row.characterName : '',
-        summaryText: typeof row.summaryText === 'string' ? row.summaryText : '',
+        characterName: stringOrEmpty(row.characterName),
+        summaryText: stringOrEmpty(row.summaryText),
         isMainCharacter: Boolean(row.isMainCharacter),
       };
     })
@@ -191,7 +195,7 @@ export function normalizeChapterPovSummariesResult(raw) {
   return {
     bookId: Number.isFinite(bookIdNum) && bookIdNum >= 1 ? bookIdNum : null,
     chapterIdx: Number.isFinite(chapterIdxNum) && chapterIdxNum >= 1 ? chapterIdxNum : null,
-    chapterTitle: typeof raw.chapterTitle === 'string' ? raw.chapterTitle : '',
+    chapterTitle: stringOrEmpty(raw.chapterTitle),
     povSummaries,
   };
 }
@@ -208,25 +212,15 @@ export const getChapterPovSummaries = async (bookId, chapterIdx) => {
     throw new Error('chapterIdx는 1 이상의 정수여야 합니다.');
   }
 
-  const key = `${normalizedBookId}:${normalizedChapterIdx}`;
-  const existing = chapterPovSummariesInflight.get(key);
-  if (existing) return existing;
-
-  const pending = authenticatedRequest(
-    `/v2/books/${normalizedBookId}/chapters/${normalizedChapterIdx}/pov-summaries`,
-    { softFailStatuses: SOFT_FAIL_403_404 }
-  ).catch((error) => {
-    errorUtils.logError('getChapterPovSummaries', error);
-    throw error;
-  });
-
-  chapterPovSummariesInflight.set(key, pending);
-  pending.finally(() => {
-    if (chapterPovSummariesInflight.get(key) === pending) {
-      chapterPovSummariesInflight.delete(key);
-    }
-  });
-  return pending;
+  return withInflight(chapterPovSummariesInflight, `${normalizedBookId}:${normalizedChapterIdx}`, () =>
+    authenticatedRequest(
+      `/v2/books/${normalizedBookId}/chapters/${normalizedChapterIdx}/pov-summaries`,
+      { softFailStatuses: SOFT_FAIL_403_404 }
+    ).catch((error) => {
+      errorUtils.logError('getChapterPovSummaries', error);
+      throw error;
+    })
+  );
 };
 
 const normalizeBookmarkDto = (b) => {
@@ -278,7 +272,7 @@ const getBookmarks = async (bookId, sort = 'time_desc') => {
 export const loadBookmarks = async (bookId, sort = 'time_desc') => {
   const response = await getBookmarks(bookId, sort);
   if (response?.isSuccess) {
-    return Array.isArray(response.result) ? response.result : [];
+    return asArray(response.result);
   }
   throw new Error(response?.message || '북마크 목록을 불러오지 못했습니다.');
 };
@@ -365,23 +359,16 @@ export const deleteBookmark = async (bookmarkId) => {
 
 // ─── progress ──────────────────────────────────────────────────────────────
 
-const PROGRESS_FORBIDDEN = makeSilentError('FORBIDDEN', '해당 책에 접근할 권한이 없습니다');
-const PROGRESS_NOT_FOUND = makeSilentError('NOT_FOUND', '진도 정보를 찾을 수 없습니다');
-
-const handleProgressApiError = (error, logContext) => {
-  if (isForbiddenError(error)) return PROGRESS_FORBIDDEN;
-  if (isNotFoundError(error)) return PROGRESS_NOT_FOUND;
-  if (logContext) errorUtils.logError(logContext, error);
-  throw error;
-};
+const PROGRESS_FORBIDDEN_MESSAGE = '해당 책에 접근할 권한이 없습니다';
+const PROGRESS_NOT_FOUND_MESSAGE = '진도 정보를 찾을 수 없습니다';
 
 /** softFail 응답 → progress silent error (해당 없으면 null) */
 const mapProgressSoftFailCode = (response, { includeNotFound = true } = {}) =>
   mapSoftFailResponse(response, {
     mode: 'error',
     includeNotFound,
-    forbiddenMessage: PROGRESS_FORBIDDEN.message,
-    notFoundMessage: PROGRESS_NOT_FOUND.message,
+    forbiddenMessage: PROGRESS_FORBIDDEN_MESSAGE,
+    notFoundMessage: PROGRESS_NOT_FOUND_MESSAGE,
   });
 
 const buildProgressSavePayload = (progressData) =>
@@ -412,7 +399,6 @@ export const saveProgress = async (progressData) => {
     if (!response?.isSuccess) {
       const error = new Error(response?.message || '독서 진도 저장 실패');
       if (response?.code === 'NOT_FOUND') error.status = 404;
-      if (response?.code === 'FORBIDDEN') error.status = 403;
       throw error;
     }
     const serverResult =
@@ -428,7 +414,6 @@ export const saveProgress = async (progressData) => {
       { defaultMessage: '독서 진도를 저장했습니다.' }
     );
   } catch (error) {
-    if (isForbiddenError(error)) return PROGRESS_FORBIDDEN;
     errorUtils.logError('saveProgress', error);
     throw error;
   }
@@ -478,6 +463,16 @@ export const getBookProgress = async (bookId, options = {}) => {
     if (response?.isSuccess && response.result) {
       const base = { ...response.result };
       const prev = getProgressFromCache(bookId);
+      // setProgressToCache는 locator로 진도를 다시 계산하므로 행의 readingProgressPercent는 쓰지 않음
+      setProgressToCache(base);
+      const hydrated = getProgressFromCache(bookId);
+      if (hydrated) {
+        return toUnifiedApiResponse(
+          { ...response, result: hydrated },
+          { defaultMessage: '진도 정보를 조회했습니다.' }
+        );
+      }
+      // 캐시에 못 넣은 행: 진도를 여기서 채워 반환 (같은 위치면 이전 캐시 진도 유지)
       const newLoc = resolveProgressLocator(ensureProgressRowLocator(String(bookId), base));
       const prevLoc = resolveProgressLocator(prev ?? {});
       const sameLoc = newLoc && prevLoc && locatorsEqual(newLoc, prevLoc);
@@ -485,10 +480,8 @@ export const getBookProgress = async (bookId, options = {}) => {
         normalizeReadingProgressPercent(base, { bookId }) ??
         (sameLoc ? normalizeReadingProgressPercent(prev ?? {}, { bookId }) : null);
       const row = pct != null ? { ...base, readingProgressPercent: pct } : base;
-      setProgressToCache(row);
-      const hydrated = getProgressFromCache(bookId);
       return toUnifiedApiResponse(
-        { ...response, result: hydrated ?? row },
+        { ...response, result: row },
         { defaultMessage: '진도 정보를 조회했습니다.' }
       );
     }
@@ -506,7 +499,7 @@ export const getBookProgress = async (bookId, options = {}) => {
         });
       }
     }
-    return handleProgressApiError(error);
+    throw error;
   }
 };
 
@@ -525,39 +518,46 @@ export const deleteBookProgress = async (bookId) => {
       defaultResult: null,
     });
   } catch (error) {
-    return handleProgressApiError(error, '독서 진도 삭제 실패:');
+    errorUtils.logError('독서 진도 삭제 실패:', error);
+    throw error;
   }
 };
 
 // ─── manifest ──────────────────────────────────────────────────────────────
 
+const manifestInflight = new Map();
+
+/** 캐시 히트 → 즉시 반환, 아니면 같은 bookId 동시 요청을 하나로 합침. forceRefresh는 항상 새 요청 */
 export const getBookManifest = async (bookId, { forceRefresh = false } = {}) => {
   const numericBookId = Number(bookId);
   if (!Number.isFinite(numericBookId) || numericBookId < 1) {
     return makeSilentError('INVALID_INPUT', 'bookId는 1 이상의 정수여야 합니다.');
   }
 
-  try {
-    if (!forceRefresh) {
-      const cached = getManifestFromCache(numericBookId);
-      if (cached) {
-        return toUnifiedApiResponse({
-          isSuccess: true,
-          code: 'CACHE_HIT',
-          message: 'Manifest loaded from cache',
-          result: cached,
-          fromCache: true,
-        });
-      }
+  if (!forceRefresh) {
+    const cached = getManifestFromCache(numericBookId);
+    if (cached) {
+      return toUnifiedApiResponse({
+        isSuccess: true,
+        code: 'CACHE_HIT',
+        message: 'Manifest loaded from cache',
+        result: cached,
+        fromCache: true,
+      });
     }
+    return withInflight(manifestInflight, numericBookId, () => requestBookManifest(numericBookId));
+  }
+  return requestBookManifest(numericBookId);
+};
 
+const requestBookManifest = async (numericBookId) => {
+  try {
     const response = await authenticatedRequest(`/v2/books/${numericBookId}/manifest`, {
       softFailStatuses: SOFT_FAIL_403_404,
     });
     const softFail = mapSoftFailResponse(response, {
       mode: 'error',
-      forbiddenMessage: '접근 권한이 없습니다',
-      notFoundMessage: '도서를 찾을 수 없거나 아직 노출 가능한 상태가 아닙니다.',
+      ...BOOK_SOFT_FAIL_MESSAGES,
     });
     if (softFail) return softFail;
 
@@ -574,13 +574,164 @@ export const getBookManifest = async (bookId, { forceRefresh = false } = {}) => 
     if (Number(error?.status) === 400) {
       return makeSilentError('BAD_REQUEST', '잘못된 요청입니다.');
     }
-    if (isNotFoundError(error)) {
-      return makeSilentError(
-        'NOT_FOUND',
-        '도서를 찾을 수 없거나 아직 노출 가능한 상태가 아닙니다.'
-      );
-    }
     errorUtils.logError('getBookManifest', error);
     throw error;
   }
 };
+
+/* ─── 인증 필요 공개 자산 blob URL ─── */
+
+const blobUrlCache = new Map();
+const inFlightRequests = new Map();
+const failedFetchUrls = new Map();
+let blobCacheGeneration = 0;
+/** 최종 실패 후 짧은 쿨다운만 (데이터는 존재한다고 가정 — 일시적 fetch 실패 대비) */
+const FAILED_FETCH_TTL_MS = 5_000;
+const ASSET_FETCH_MAX_ATTEMPTS = 3;
+const ASSET_FETCH_RETRY_BASE_MS = 400;
+
+function clearAuthenticatedAssetBlobCache() {
+  blobCacheGeneration += 1;
+  for (const blobUrl of blobUrlCache.values()) {
+    URL.revokeObjectURL(blobUrl);
+  }
+  blobUrlCache.clear();
+  failedFetchUrls.clear();
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener(AUTH_CLEARED_EVENT, clearAuthenticatedAssetBlobCache);
+}
+
+const isFailedRecently = (fetchUrl) => {
+  const failedAt = failedFetchUrls.get(fetchUrl);
+  if (!failedAt) return false;
+  if (Date.now() - failedAt > FAILED_FETCH_TTL_MS) {
+    failedFetchUrls.delete(fetchUrl);
+    return false;
+  }
+  return true;
+};
+
+const markFetchFailed = (fetchUrl) => {
+  failedFetchUrls.set(fetchUrl, Date.now());
+};
+
+const clearFetchFailed = (fetchUrl) => {
+  if (fetchUrl) failedFetchUrls.delete(fetchUrl);
+};
+
+const isRetryableAssetStatus = (status) =>
+  status === 404 || status === 408 || status === 429 || status >= 500;
+
+function extractBookIdFromPublicAssetUrl(url) {
+  const s = sanitizeAssetUrl(url);
+  if (!s) return null;
+  const match = s.match(/\/books\/(\d+)\//);
+  if (!match) return null;
+  return toPositiveNumberOrNull(match[1]);
+}
+
+function isPublicCoverAssetPath(url) {
+  const s = sanitizeAssetUrl(url);
+  return !!s && /\/covers\//.test(s);
+}
+
+const buildCoverRefreshSource = (sanitized) => {
+  if (!isPublicCoverAssetPath(sanitized)) return null;
+  const bookId = extractBookIdFromPublicAssetUrl(sanitized);
+  if (!bookId) return null;
+  return async () => {
+    const res = await getBook(bookId);
+    return res?.isSuccess ? res.result?.coverImgUrl : null;
+  };
+};
+
+const fetchProtectedBlobUrl = async (sourceUrl, { force = false } = {}) => {
+  const sanitized = sanitizeAssetUrl(sourceUrl);
+  if (!sanitized) return null;
+
+  if (!isProtectedPublicAsset(sanitized)) {
+    return sanitized;
+  }
+
+  const fetchUrl = resolveApiArtifactUrl(sanitized);
+  if (!fetchUrl) return null;
+
+  if (blobUrlCache.has(fetchUrl)) {
+    return blobUrlCache.get(fetchUrl);
+  }
+
+  if (!force && isFailedRecently(fetchUrl)) {
+    return null;
+  }
+  if (force) clearFetchFailed(fetchUrl);
+
+  return withInflight(inFlightRequests, fetchUrl, async () => {
+    const requestGeneration = blobCacheGeneration;
+
+    for (let attempt = 1; attempt <= ASSET_FETCH_MAX_ATTEMPTS; attempt++) {
+      try {
+        const res = await authenticatedFetch(fetchUrl);
+        if (res.ok) {
+          const blob = await res.blob();
+          const blobUrl = URL.createObjectURL(blob);
+          if (requestGeneration !== blobCacheGeneration) {
+            URL.revokeObjectURL(blobUrl);
+            return null;
+          }
+          blobUrlCache.set(fetchUrl, blobUrl);
+          clearFetchFailed(fetchUrl);
+          return blobUrl;
+        }
+
+        if (!isRetryableAssetStatus(res.status) || attempt === ASSET_FETCH_MAX_ATTEMPTS) {
+          break;
+        }
+      } catch {
+        if (attempt === ASSET_FETCH_MAX_ATTEMPTS) break;
+      }
+
+      await sleep(ASSET_FETCH_RETRY_BASE_MS * attempt);
+    }
+
+    markFetchFailed(fetchUrl);
+    return null;
+  });
+};
+
+export async function fetchAuthenticatedAssetBlobUrl(sourceUrl, options = {}) {
+  const sanitized = sanitizeAssetUrl(sourceUrl);
+  if (!sanitized) return null;
+
+  const { force = false, refreshSource } = options;
+  const result = await fetchProtectedBlobUrl(sourceUrl, { force });
+  if (result) return result;
+
+  const refresh = refreshSource ?? buildCoverRefreshSource(sanitized);
+  if (typeof refresh !== 'function') {
+    return null;
+  }
+
+  try {
+    const refreshed = await refresh();
+    if (typeof refreshed !== 'string' || !refreshed.trim()) {
+      return null;
+    }
+
+    const prevFetchUrl = resolveApiArtifactUrl(sanitized);
+    const nextSanitized = sanitizeAssetUrl(refreshed);
+    const nextFetchUrl = resolveApiArtifactUrl(nextSanitized);
+    clearFetchFailed(prevFetchUrl);
+    if (nextFetchUrl !== prevFetchUrl) {
+      clearFetchFailed(nextFetchUrl);
+    }
+
+    if (nextSanitized === sanitized) {
+      return fetchProtectedBlobUrl(sourceUrl, { force: true });
+    }
+    return fetchProtectedBlobUrl(refreshed, { force: true });
+  } catch {
+    return null;
+  }
+}

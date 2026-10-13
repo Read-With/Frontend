@@ -1,6 +1,7 @@
 /** XHTML 본문·locator·페이지 매핑 */
 
-import { resolveChapterIndex, errorUtils } from '../common/valueUtils';
+import { resolveChapterIndex, errorUtils, clamp01 } from '../common/valueUtils';
+import { setBounded } from '../common/cache/cacheManager';
 import { resolveApiArtifactUrl } from '../common/urlUtils';
 import { authenticatedFetch } from '../api/authApi';
 import { getBookManifest } from '../api/booksApi';
@@ -83,8 +84,7 @@ export function loadCachedXhtmlContent(bid, loader, parse) {
 
   const cached = xhtmlLoadCache.get(cacheKey);
   if (cached) {
-    xhtmlLoadCache.delete(cacheKey);
-    xhtmlLoadCache.set(cacheKey, cached);
+    setBounded(xhtmlLoadCache, cacheKey, cached, MAX_CACHED_BOOKS);
     return cached;
   }
 
@@ -96,10 +96,7 @@ export function loadCachedXhtmlContent(bid, loader, parse) {
       throw err;
     });
 
-  xhtmlLoadCache.set(cacheKey, loadPromise);
-  if (xhtmlLoadCache.size > MAX_CACHED_BOOKS) {
-    xhtmlLoadCache.delete(xhtmlLoadCache.keys().next().value);
-  }
+  setBounded(xhtmlLoadCache, cacheKey, loadPromise, MAX_CACHED_BOOKS);
   return loadPromise;
 }
 
@@ -157,10 +154,6 @@ export async function loadCombinedXhtml(bookId) {
   const message = 'combined.xhtml URL을 찾을 수 없습니다. 서버 아티팩트 경로를 확인해주세요.';
   errorUtils.logError('loadCombinedXhtml', new Error(message), { bookId });
   throw new Error(message);
-}
-
-function clamp01(n) {
-  return Math.min(1, Math.max(0, Number(n) || 0));
 }
 
 function safePageTotal(totalPages) {
@@ -240,6 +233,68 @@ export function collectBlockEntries(root) {
     nextSynthetic.set(ch, next + 1);
     return { el, syntheticBlock: next };
   });
+}
+
+const blockRow = ({ el, syntheticBlock }, viewportRect) => {
+  const rect = el.getBoundingClientRect();
+  const top = rect.top - viewportRect.top;
+  const bottom = rect.bottom - viewportRect.top;
+  const overlap = Math.min(bottom, viewportRect.height) - Math.max(top, 0);
+  // display:none 등 배치 안 된 요소 — 좌표가 0이라 세로 순서 판단에 쓰면 안 됨
+  const hidden = !rect.width && !rect.height;
+  return { el, syntheticBlock, top, bottom, overlap, hidden };
+};
+
+const visibleRowsByFullScan = (blockEntries, viewportRect) =>
+  blockEntries
+    .map((entry) => blockRow(entry, viewportRect))
+    .filter((row) => row.overlap > 0)
+    .sort((a, b) => a.top - b.top);
+
+// 블록끼리 중첩이 없으면 문서 순서 = 세로 순서 → 이분 탐색 가능. 배열 identity 기준 메모
+const sequentialBlocksMemo = new WeakMap();
+const isSequentialBlockList = (blockEntries) => {
+  let sequential = sequentialBlocksMemo.get(blockEntries);
+  if (sequential === undefined) {
+    // 전위 순회 순서라 조상은 바로 다음 항목도 포함 — 이웃끼리만 보면 됨
+    sequential = blockEntries.every(
+      (entry, i) => i === 0 || !blockEntries[i - 1].el.contains(entry.el)
+    );
+    sequentialBlocksMemo.set(blockEntries, sequential);
+  }
+  return sequential;
+};
+
+/**
+ * 뷰포트와 겹치는 블록 (위→아래). 중첩 없는 목록은 이분 탐색으로 O(log B + 보이는 블록 수),
+ * 그 외(중첩 마커)나 이분 탐색 결과가 비면 전체 측정으로 폴백.
+ * ponytail: float·absolute 배치로 세로 순서가 문서 순서와 어긋나면 폴백에만 의존 — 그런 EPUB이 보이면 전체 스캔으로 고정
+ */
+function findVisibleBlockRows(blockEntries, viewportRect) {
+  if (!isSequentialBlockList(blockEntries)) return visibleRowsByFullScan(blockEntries, viewportRect);
+
+  // 첫 번째로 아래쪽 경계가 뷰포트 상단 아래에 있는 블록 (숨김 블록은 건너뛰고 판단)
+  let lo = 0;
+  let hi = blockEntries.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    let probe = mid;
+    let row = blockRow(blockEntries[probe], viewportRect);
+    while (row.hidden && probe + 1 < hi) {
+      probe += 1;
+      row = blockRow(blockEntries[probe], viewportRect);
+    }
+    if (row.hidden || row.bottom > 0) hi = mid;
+    else lo = probe + 1;
+  }
+  const rows = [];
+  for (let i = lo; i < blockEntries.length; i += 1) {
+    const row = blockRow(blockEntries[i], viewportRect);
+    if (row.hidden) continue;
+    if (row.top >= viewportRect.height) break;
+    if (row.overlap > 0) rows.push(row);
+  }
+  return rows.length ? rows : visibleRowsByFullScan(blockEntries, viewportRect);
 }
 
 function getBlockLocator(el, offset = 0, syntheticBlock = null) {
@@ -340,6 +395,9 @@ function findChapterBlockElement(root, chapter, block = 0) {
   if (!Number.isFinite(ch) || !root?.querySelector) return null;
 
   const tryChapter = (c) => {
+    // 대부분 속성 그대로 일치 — 챕터 블록 전체를 배열로 만들지 않고 바로 조회
+    const direct = root.querySelector(`[data-chapter-index="${c}"][data-block-index="${safeB}"]`);
+    if (direct) return direct;
     const list = Array.from(root.querySelectorAll(`[data-chapter-index="${c}"]`));
     if (!list.length) return null;
     if (list.some(hasBlockIndexAttr)) {
@@ -389,9 +447,8 @@ export function resolvePageIndexFromLocator({
   const block = Number(locator.blockIndex ?? 0);
   if (!Number.isFinite(chapter)) return null;
 
-  const ph = pageHeightPx;
   const total = safePageTotal(totalPages);
-  if (!(ph > 0)) return null;
+  if (!(pageHeightPx > 0)) return null;
 
   const chapterData = getChapterDataFromManifest(manifest, chapter);
   const totalCp = chapterData
@@ -403,21 +460,21 @@ export function resolvePageIndexFromLocator({
   // 단일 blob / 블록 미매칭: 챕터 로컬 비율을 해당 챕터 요소 구간으로 매핑
   if (totalCp > 1 && el0 && (isSingleChapterMarkerBlob(el0, ruler) || !elBlock)) {
     const ratio = localRatioFromLocator(chapterData, locator, el0, totalCp);
-    if (ratio != null) return pageIndexFromElementLocalRatio(el0, ratio, ph, total);
-    return pageIndexFromScrollY(el0.offsetTop, ph, total);
+    if (ratio != null) return pageIndexFromElementLocalRatio(el0, ratio, pageHeightPx, total);
+    return pageIndexFromScrollY(el0.offsetTop, pageHeightPx, total);
   }
 
   const el = elBlock ?? el0;
   if (!el) return null;
 
-  if (el.offsetHeight > ph) {
+  if (el.offsetHeight > pageHeightPx) {
     const ratio = localRatioFromLocator(chapterData, locator, el, totalCp, {
       requirePositiveOffset: true,
     });
-    if (ratio != null) return pageIndexFromElementLocalRatio(el, ratio, ph, total);
+    if (ratio != null) return pageIndexFromElementLocalRatio(el, ratio, pageHeightPx, total);
   }
 
-  return pageIndexFromScrollY(el.offsetTop, ph, total);
+  return pageIndexFromScrollY(el.offsetTop, pageHeightPx, total);
 }
 
 export function computeLineBoundsFromRuler(ruler) {
@@ -504,16 +561,7 @@ export function resolveViewportLocatorEmit({
   }
 
   const phForBlob = typeof pageHeight === 'number' && pageHeight > 0 ? pageHeight : 0;
-  const visible = blockEntries
-    .map(({ el, syntheticBlock }) => {
-      const rect = el.getBoundingClientRect();
-      const top = rect.top - viewportRect.top;
-      const bottom = rect.bottom - viewportRect.top;
-      const overlap = Math.min(bottom, viewportRect.height) - Math.max(top, 0);
-      return { el, syntheticBlock, top, bottom, overlap };
-    })
-    .filter((item) => item.overlap > 0)
-    .sort((a, b) => a.top - b.top);
+  const visible = findVisibleBlockRows(blockEntries, viewportRect);
 
   if (!visible.length) return buildFallbackResult();
 

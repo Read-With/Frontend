@@ -92,9 +92,7 @@
 }
 
 /* 단독 페이지: 상단바 도구 · 돌아가기 (오른쪽). 줌은 캔버스 우측 상단 */
-.graph-page-topbar .graph-hint-panel,
 .graph-page-topbar .graph-floating-options-panel,
-.graph-split-topbar .graph-hint-panel,
 .graph-split-topbar .graph-floating-options-panel {
   top: calc(100% + 0.375rem);
   bottom: auto;
@@ -133,9 +131,7 @@
 }
 
 @media (max-width: 720px) {
-  .graph-page-topbar .graph-hint-panel,
   .graph-page-topbar .graph-floating-options-panel,
-  .graph-split-topbar .graph-hint-panel,
   .graph-split-topbar .graph-floating-options-panel {
     top: auto;
     bottom: calc(100% + 0.375rem);
@@ -181,7 +177,7 @@
 }
 
 /* ============================================================
-   Viewer split: legend, status, search, chrome
+   Viewer split: status, search, chrome
    ============================================================ */
 .graph-fullscreen-btn,
 .graph-floating-btn,
@@ -219,7 +215,6 @@
   pointer-events: auto;
 }
 
-.graph-hint,
 .graph-floating-options {
   position: relative;
   display: flex;
@@ -362,135 +357,6 @@
   top: 0.5rem;
   right: 0.75rem;
   z-index: 2;
-}
-
-/* 뷰어 viewer-mode-hint 와 동일한 버튼+패널 패턴 */
-.graph-hint-panel {
-  position: absolute;
-  top: calc(100% + 0.375rem);
-  right: 0;
-  z-index: 40;
-  margin: 0;
-  width: max-content;
-  min-width: 12rem;
-  max-width: min(18rem, 80vw);
-  padding: 0.65rem 0.75rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
-  box-sizing: border-box;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  line-height: 1.45;
-  word-break: keep-all;
-  color: var(--rg-text);
-  background: var(--rg-surface);
-  border: 0.0625rem solid var(--rg-border);
-  border-radius: var(--rg-radius-md);
-  box-shadow: 0 0.25rem 0.75rem rgba(45, 63, 31, 0.12);
-}
-
-.graph-hint-panel-title {
-  margin: 0;
-  font-size: 0.8125rem;
-  font-weight: 700;
-  line-height: 1.4;
-  color: var(--rg-text);
-}
-
-.graph-hint-legend-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  white-space: nowrap;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  color: var(--rg-text-muted);
-}
-
-.graph-hint-legend-tone {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  width: 100%;
-  min-width: 14rem;
-}
-
-.graph-hint-legend-tone-end {
-  flex-shrink: 0;
-  font-size: 0.6875rem;
-  font-weight: 700;
-  color: var(--rg-text-subtle);
-  letter-spacing: -0.01em;
-  white-space: nowrap;
-}
-
-.graph-hint-legend-swatch,
-.relation-modal-legend-gradient {
-  flex: 1;
-  height: 0.4rem;
-  border-radius: var(--rg-radius-pill);
-  background: var(--rg-positivity-gradient);
-  box-shadow: inset 0 0 0 0.0625rem var(--brand-alpha-08);
-}
-
-.graph-hint-legend-swatch {
-  min-width: 4rem;
-}
-
-.graph-hint-legend-size,
-.graph-hint-legend-main {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2.5rem;
-  flex-shrink: 0;
-}
-
-.graph-hint-legend-size {
-  gap: 0.25rem;
-}
-
-.graph-hint-legend-dot {
-  display: inline-block;
-  border-radius: 50%;
-  background: var(--rg-brand-tint);
-  border: 0.09375rem solid var(--rg-brand);
-}
-
-.graph-hint-legend-dot--lg {
-  width: 0.75rem;
-  height: 0.75rem;
-}
-
-.graph-hint-legend-dot--sm {
-  width: 0.4rem;
-  height: 0.4rem;
-}
-
-.graph-hint-legend-main-ring {
-  width: 0.75rem;
-  height: 0.75rem;
-  border-radius: 50%;
-  background: var(--rg-surface-slate);
-  border: 0.14rem solid var(--rg-brand);
-  box-shadow: 0 0 0 0.12rem var(--brand-alpha-22);
-}
-
-.graph-floating-btn.has-hint {
-  position: relative;
-}
-
-.graph-hint-dot {
-  position: absolute;
-  top: 0.2rem;
-  right: 0.2rem;
-  width: 0.375rem;
-  height: 0.375rem;
-  border-radius: 50%;
-  background: var(--rg-brand);
-  box-shadow: 0 0 0 0.1rem var(--rg-surface);
-  pointer-events: none;
 }
 
 /* Page / split shell — CSS 정본 (inline graphStyles 대체) */
@@ -784,14 +650,14 @@
   padding: 0.375rem 0.75rem;
   border-bottom: 0.0625rem solid var(--rg-border-soft);
   background: var(--rg-surface);
-  /* 드롭다운(범례·옵션)이 잘리지 않도록 — 한 줄은 제목 ellipsis로 유지 */
+  /* 옵션 드롭다운이 잘리지 않도록 — 한 줄은 제목 ellipsis로 유지 */
   overflow: visible;
   z-index: 20;
 }
 
 .graph-split-topbar {
   justify-content: space-between;
-  /* floating zoom(z-index:20)보다 위 — 범례/옵션 드롭다운이 줌 버튼에 가려지지 않게 */
+  /* floating zoom(z-index:20)보다 위 — 옵션 드롭다운이 줌 버튼에 가려지지 않게 */
   z-index: 30;
 }
 

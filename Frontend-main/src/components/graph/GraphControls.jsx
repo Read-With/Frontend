@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { List, Search, SearchX, SlidersHorizontal } from "lucide-react";
+import { Search, SearchX, SlidersHorizontal } from "lucide-react";
 import { useClickOutside } from "../../hooks/ui/tooltipHooks";
-import { readSessionHintSeen, useSessionHint } from "../../hooks/common/hooksShared";
 import { findExactSuggestionMatch } from "../../utils/graph/graphCy.js";
 import {
   GRAPH_CHARACTER_FILTER_STAGE_OPTIONS,
@@ -10,7 +9,7 @@ import {
   formatGraphEventMetaLabel,
 } from "../../utils/graph/graphCore.js";
 import { resolveEventOrdinalForDisplay } from "../../utils/viewer/viewerSession";
-import { GRAPH_COLORS, getPositivityGradientCss } from "../../utils/styles/graphStyles.js";
+import { GRAPH_COLORS } from "../../utils/styles/graphStyles.js";
 import { joinClasses } from "../../utils/styles/styles.js";
 import "./RelationGraph.css";
 
@@ -268,90 +267,9 @@ function CharacterFilterSegmented({ value, onChange }) {
   );
 }
 
-const LEGEND_HINT_SESSION_KEY = "rw-graph-legend-hint-seen";
-const POSITIVITY_GRADIENT = getPositivityGradientCss();
 
 function getSuggestionDisplayName(suggestion) {
   return suggestion?.label || suggestion?.common_name || "Unknown";
-}
-
-function GraphHintShell({
-  open,
-  hintSeen,
-  onToggle,
-  onDismiss,
-  buttonLabel,
-  buttonTitle,
-  panelId,
-  icon,
-  children,
-}) {
-  const Icon = icon;
-  const rootRef = useClickOutside(() => {
-    if (open) onDismiss();
-  }, open);
-
-  return (
-    <div className="graph-hint" ref={rootRef}>
-      <button
-        type="button"
-        className={`graph-floating-btn${!hintSeen ? " has-hint" : ""}${open ? " is-active" : ""}`}
-        aria-label={open ? `${buttonLabel} 닫기` : buttonLabel}
-        title={buttonTitle}
-        aria-expanded={open}
-        aria-controls={open ? panelId : undefined}
-        onClick={onToggle}
-      >
-        <Icon size={18} aria-hidden />
-        {!hintSeen ? <span className="graph-hint-dot" aria-hidden /> : null}
-      </button>
-      {open ? (
-        <div id={panelId} className="graph-hint-panel" role="status">
-          {children}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function GraphCanvasLegend({ hint }) {
-  const panelId = "graph-canvas-legend-panel";
-
-  return (
-    <GraphHintShell
-      open={hint.open}
-      hintSeen={hint.hintSeen}
-      onToggle={hint.toggle}
-      onDismiss={hint.dismiss}
-      buttonLabel="범례"
-      buttonTitle="범례"
-      panelId={panelId}
-      icon={List}
-    >
-      <p className="graph-hint-panel-title">범례</p>
-      <div className="graph-hint-legend-tone" aria-hidden>
-        <span className="graph-hint-legend-tone-end">부정 (−100%)</span>
-        <span
-          className="graph-hint-legend-swatch"
-          style={{ background: POSITIVITY_GRADIENT }}
-        />
-        <span className="graph-hint-legend-tone-end">긍정 (+100%)</span>
-      </div>
-      <div className="graph-hint-legend-row">
-        <span className="graph-hint-legend-size" aria-hidden>
-          <span className="graph-hint-legend-dot graph-hint-legend-dot--lg" />
-          <span className="graph-hint-legend-dot graph-hint-legend-dot--sm" />
-        </span>
-        <span>크기 = 중요도</span>
-      </div>
-      <div className="graph-hint-legend-row">
-        <span className="graph-hint-legend-main" aria-hidden>
-          <span className="graph-hint-legend-main-ring" />
-        </span>
-        <span>굵은 테두리 = 주요 인물</span>
-      </div>
-    </GraphHintShell>
-  );
 }
 
 function useModKeyLabel() {
@@ -584,7 +502,7 @@ function GraphSearchPalette({
 }
 
 /**
- * 검색 팔레트 · 필터 · 간선 라벨 · (선택) 범례
+ * 검색 팔레트 · 필터 · 간선 라벨
  */
 export function GraphFloatingControls({
   searchState,
@@ -593,18 +511,11 @@ export function GraphFloatingControls({
   onToggleEdgeLabel,
   filterStage,
   onFilterChange,
-  showLegend = true,
 }) {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const optionsRef = useClickOutside(() => setOptionsOpen(false), optionsOpen);
   const modKey = useModKeyLabel();
-
-  // 마운트 시 1회만 sessionStorage를 읽는다(매 리렌더마다 동기 I/O 재실행 방지).
-  const legendSeenInitially = useMemo(() => readSessionHintSeen(LEGEND_HINT_SESSION_KEY), []);
-  const legendHint = useSessionHint(LEGEND_HINT_SESSION_KEY, {
-    autoOpen: showLegend && !legendSeenInitially,
-  });
 
   const {
     searchTerm,
@@ -701,7 +612,6 @@ export function GraphFloatingControls({
           ) : null}
         </div>
 
-        {showLegend ? <GraphCanvasLegend hint={legendHint} /> : null}
       </div>
 
       <GraphSearchPalette

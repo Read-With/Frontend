@@ -6,13 +6,14 @@ import ViewerSettings from './ViewerSettings';
 import { useViewerPage } from '../../hooks/viewer/useViewerPage';
 import { useLatestRef } from '../../hooks/common/hooksShared';
 import { useTooltipState } from '../../hooks/ui/tooltipHooks';
-import { anchorToLocators, resolveChapterIndex, errorUtils } from '../../utils/common/valueUtils';
+import { anchorToLocators, resolveChapterIndex, errorUtils, toPositiveNumberOrNull } from '../../utils/common/valueUtils';
 import {
   resolveViewerLineEvent,
   parseReadingLocatorKey,
   patchTopBarFromLineEvent,
 } from '../../utils/viewer/viewerSession';
-import { isSameBookmarkPosition, normalizeBookmarkLocators } from '../../utils/bookmarks/bookmarkUtils';
+import { isSameBookmarkPosition } from '../../utils/bookmarks/bookmarkUtils';
+import { normalizeStartEndLocatorsForServer } from '../../utils/common/cache/progressCache';
 import GraphSplitArea from './GraphSplitArea';
 import BookmarkDeleteConfirm from './BookmarkDeleteConfirm';
 import '../../pages/BookmarksPage.css';
@@ -175,7 +176,7 @@ const ViewerPage = () => {
     if (!bookmarks?.length || !readingLocatorKey || !bookKey) return false;
     const { start, end } = parseReadingLocatorKey(readingLocatorKey);
     if (!start) return false;
-    const { startLocator, endLocator } = normalizeBookmarkLocators(
+    const { startLocator, endLocator } = normalizeStartEndLocatorsForServer(
       bookKey,
       start,
       end ?? start
@@ -206,9 +207,7 @@ const ViewerPage = () => {
       );
 
       const locatorChapter = resolveChapterIndex(startLocator);
-      const resolvedChapter =
-        nextChapter ??
-        (Number.isFinite(locatorChapter) && locatorChapter > 0 ? locatorChapter : null);
+      const resolvedChapter = nextChapter ?? toPositiveNumberOrNull(locatorChapter);
 
       if (resolvedChapter && resolvedChapter !== readingChapterRef.current) {
         setCurrentChapter(resolvedChapter);

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { constrainToGraphCanvas, constrainToWindow } from '../../utils/graph/graphCy';
 
-export function useCanvasAvoidPoint(center) {
+function useCanvasAvoidPoint(center) {
   const x = center?.x;
   const y = center?.y;
   return useMemo(
@@ -187,7 +187,7 @@ export function useTooltipState({
  *   bounds: 'canvas'(기본) 그래프 영역 / 'window' 뷰포트(뷰어 툴팁용)
  *   avoidPoint: 클릭/선택 focus를 가리지 않도록 실측 후 재배치
  */
-export function useTooltipPosition(initialX, initialY, options = {}) {
+function useTooltipPosition(initialX, initialY, options = {}) {
   const enabled = options.enabled !== false;
   const bounds = options.bounds === 'window' ? 'window' : 'canvas';
   const avoidPoint = options.avoidPoint ?? null;
@@ -351,14 +351,13 @@ export function useTooltipPosition(initialX, initialY, options = {}) {
         avoidY <= tip.bottom + avoidPad;
 
       if (overlaps) {
-        const gap = avoidPad;
         const candidates = [
-          { x: avoidX + gap, y: avoidY - height / 2 },
-          { x: avoidX - gap - width, y: avoidY - height / 2 },
-          { x: avoidX - width / 2, y: avoidY + gap },
-          { x: avoidX - width / 2, y: avoidY - gap - height },
-          { x: avoidX + gap, y: avoidY + gap },
-          { x: avoidX - gap - width, y: avoidY - gap - height },
+          { x: avoidX + avoidPad, y: avoidY - height / 2 },
+          { x: avoidX - avoidPad - width, y: avoidY - height / 2 },
+          { x: avoidX - width / 2, y: avoidY + avoidPad },
+          { x: avoidX - width / 2, y: avoidY - avoidPad - height },
+          { x: avoidX + avoidPad, y: avoidY + avoidPad },
+          { x: avoidX - avoidPad - width, y: avoidY - avoidPad - height },
         ];
         let best = next;
         let bestDist = Infinity;
@@ -420,4 +419,24 @@ export function useTooltipPosition(initialX, initialY, options = {}) {
     tooltipRef,
     handleMouseDown,
   };
+}
+
+/**
+ * 캔버스 위 플로팅 툴팁 공통: 위치(노드·간선 중심 회피) + 바깥 클릭 닫기.
+ * enabled=false(사이드바)면 둘 다 비활성. dismissBlocked: 중첩 모달 등이 열려 있을 때 바깥 클릭 무시.
+ */
+export function useFloatingTooltip(x, y, { enabled, center, boundsRef = null, onClose, dismissBlocked = false }) {
+  const avoidPoint = useCanvasAvoidPoint(center);
+  const tooltip = useTooltipPosition(x, y, {
+    enabled,
+    bounds: 'canvas',
+    avoidPoint,
+    boundsRef,
+  });
+  const clickOutsideRef = useClickOutside(
+    () => { if (onClose) onClose(); },
+    enabled && tooltip.showContent && !dismissBlocked,
+    true
+  );
+  return { ...tooltip, clickOutsideRef };
 }

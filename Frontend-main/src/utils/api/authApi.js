@@ -1,7 +1,7 @@
 /** 인증·토큰 갱신·authenticatedFetch */
 
-import { getApiBaseUrl, sleep } from '../common/urlUtils';
-import { errorUtils } from '../common/valueUtils';
+import { getApiBaseUrl } from '../common/urlUtils';
+import { errorUtils, sleep } from '../common/valueUtils';
 import {
   getStoredAccessToken,
   setStoredAccessToken,
@@ -17,12 +17,6 @@ export const makeSilentError = (code, message) => ({
   message,
   result: null,
 });
-
-export const isForbiddenError = (error) =>
-  Number(error?.status) === 403 || Number(error?.statusCode) === 403;
-
-export const isNotFoundError = (error) =>
-  Number(error?.status) === 404 || Number(error?.statusCode) === 404;
 
 export const SOFT_FAIL_403_404 = [403, 404];
 

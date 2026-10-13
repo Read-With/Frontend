@@ -1,5 +1,4 @@
 import { useState, useMemo, useCallback, useEffect, useId, useRef } from 'react';
-import PropTypes from 'prop-types';
 import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
 import { Book, Plus, Library, Heart, AlertCircle, Grid3X3, List, Upload, LogOut } from 'lucide-react';
@@ -43,10 +42,6 @@ function HeaderBrand({ userName = null }) {
     </div>
   );
 }
-
-HeaderBrand.propTypes = {
-  userName: PropTypes.string,
-};
 
 function LogoutConfirmDialog({ open, onConfirm, onCancel }) {
   const titleId = useId();
@@ -93,12 +88,6 @@ function LogoutConfirmDialog({ open, onConfirm, onCancel }) {
   );
 }
 
-LogoutConfirmDialog.propTypes = {
-  open: PropTypes.bool.isRequired,
-  onConfirm: PropTypes.func.isRequired,
-  onCancel: PropTypes.func.isRequired,
-};
-
 function Header({ userNickname }) {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
@@ -132,10 +121,6 @@ function Header({ userNickname }) {
     </div>
   );
 }
-
-Header.propTypes = {
-  userNickname: PropTypes.string,
-};
 
 function compareBooks(a, b, sortBy) {
   switch (sortBy) {

@@ -19,8 +19,7 @@ import {
   defaultSettings,
   viewerFontStack,
 } from '../../utils/viewer/viewerSession';
-import { resolveServerBookIdOrFallback } from '../../hooks/common/hooksShared';
-import { resolveViewerBookKey } from '../../utils/viewer/viewerCore';
+import { resolveServerBookId, resolveViewerBookKey } from '../../utils/viewer/viewerCore';
 import {
   collectBlockEntries,
   computeLineBoundsFromRuler,
@@ -119,6 +118,9 @@ const XhtmlViewer = forwardRef(
     );
 
     const contentHtml = useMemo(() => (xhtmlContent ? { __html: xhtmlContent.bodyHTML } : { __html: '' }), [xhtmlContent]);
+
+    // 본문 DOM은 xhtmlContent가 바뀔 때만 교체됨 — 페이지마다 블록 전체를 다시 querySelectorAll 하지 않음
+    const blockEntriesCacheRef = useRef({ root: null, content: null, entries: [] });
     const viewportStyle = useMemo(
       () => ({ height: currentSnap.visibleHeight || '100%', overflow: 'hidden' }),
       [currentSnap.visibleHeight]
@@ -131,7 +133,7 @@ const XhtmlViewer = forwardRef(
     const bid = useMemo(() => resolveViewerBookKey(book, bookKey), [book, bookKey]);
 
     const manifest = useMemo(() => {
-      const cacheId = resolveServerBookIdOrFallback(book, bid);
+      const cacheId = resolveServerBookId(book, bid);
       if (!cacheId) return null;
       return getManifestFromCache(cacheId);
     }, [book, bid]);
@@ -276,8 +278,17 @@ const XhtmlViewer = forwardRef(
       if (!xhtmlContent || !contentRef.current || !viewportRef.current) return;
       if (!layoutReady) return;
 
+      const cache = blockEntriesCacheRef.current;
+      if (cache.root !== contentRef.current || cache.content !== xhtmlContent) {
+        blockEntriesCacheRef.current = {
+          root: contentRef.current,
+          content: xhtmlContent,
+          entries: collectBlockEntries(contentRef.current),
+        };
+      }
+
       const result = resolveViewportLocatorEmit({
-        blockEntries: collectBlockEntries(contentRef.current),
+        blockEntries: blockEntriesCacheRef.current.entries,
         viewportRect: viewportRef.current.getBoundingClientRect(),
         rulerRoot: rulerRef.current,
         manifest,

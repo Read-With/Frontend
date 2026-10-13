@@ -1,7 +1,7 @@
 /** 라이브러리: 진행률·날짜 표시, EPUB 업로드 검증·메타 추출 */
 
 import { getProgressFromCache } from '../common/cache/progressCache';
-import { clampPercent } from '../common/valueUtils';
+import { clampPercent, compareKo } from '../common/valueUtils';
 import { lockBodyScroll } from '../styles/styles';
 
 /** 서재 숨기기 — 카드 메뉴(BookLibrary)와 상세 모달(BookDetailModal) 공용 문구 */
@@ -19,21 +19,7 @@ export function resolveLibraryReadingProgressPercent(book) {
   if (rawId == null) return 0;
   const bookIdStr = String(rawId);
   const cached = getProgressFromCache(bookIdStr);
-  const normalizedCachePct = clampPercent(cached?.readingProgressPercent);
-  if (normalizedCachePct != null) return Math.round(normalizedCachePct);
-  return 0;
-}
-
-export function formatLibraryRelativeDate(updatedAt) {
-  if (updatedAt == null) return '';
-  const date = new Date(updatedAt);
-  if (Number.isNaN(date.getTime())) return '';
-  const now = new Date();
-  const diffDays = Math.ceil(Math.abs(now - date) / (1000 * 60 * 60 * 24));
-  if (diffDays === 1) return '오늘';
-  if (diffDays === 2) return '어제';
-  if (diffDays <= 7) return `${diffDays - 1}일 전`;
-  return date.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' });
+  return clampPercent(cached?.readingProgressPercent, 0);
 }
 
 /** Escape 리스너 + body scroll lock. cleanup 함수 반환. */
@@ -67,11 +53,11 @@ export function dedupeAndSortCharacters(raw) {
   });
   const main = unique.filter((c) => c.isMainCharacter);
   const other = unique.filter((c) => !c.isMainCharacter);
-  const byName = (a, b) => String(a.name ?? '').localeCompare(String(b.name ?? ''), 'ko');
+  const byName = (a, b) => compareKo(String(a.name ?? ''), String(b.name ?? ''));
   return {
     unique,
-    sortedMain: [...main].sort(byName),
-    sortedOther: [...other].sort(byName),
+    sortedMain: main.sort(byName),
+    sortedOther: other.sort(byName),
   };
 }
 

@@ -4,18 +4,15 @@ import {
   aggregateCharactersFromEvents,
   buildElementsFromGraphPayload,
   getGraphEventState,
-  getCachedChapterEvents,
-  hasUsableChapterCacheThrough,
+  getCachedChapterMaxEventIdx,
+  resolveGraphElementsProfileImages,
+  graphElementsHaveUnresolvedProfileImages,
+  GRAPH_IMAGE_DEFERRED_RETRY_MS,
 } from '../graph/graphModel';
 import {
   enrichGraphCharacters,
   applyDisplayNamesToElements,
 } from '../graph/graphCore';
-import {
-  resolveGraphElementsProfileImages,
-  graphElementsHaveUnresolvedProfileImages,
-  GRAPH_IMAGE_DEFERRED_RETRY_MS,
-} from '../common/urlUtils';
 import { resolveChapterIndex, toPositiveInt, toPositiveNumberOrNull, asArray } from '../common/valueUtils';
 import { cacheKeyUtils, eventUtils, ELEMENTS_TO_RELATIONS_OPTS, formatChapterOrdinalLabel } from './viewerCore';
 import { resolveServerEventMatch } from './viewerSession';
@@ -23,7 +20,7 @@ import { getChapterData } from '../common/cache/manifestCache.js';
 
 /** elements 설정 + 프로필 이미지 비동기 resolve (stale guard 지원) */
 export function commitVisibleGraphElements(setElements, nextElements, { applyTokenRef } = {}) {
-  const visibleElements = Array.isArray(nextElements) ? nextElements : [];
+  const visibleElements = asArray(nextElements);
   setElements(visibleElements);
   const token = applyTokenRef ? ++applyTokenRef.current : null;
 
@@ -33,17 +30,17 @@ export function commitVisibleGraphElements(setElements, nextElements, { applyTok
     return true;
   };
 
-  void resolveGraphElementsProfileImages(visibleElements).then((resolved) => {
+  // 이미지는 포기하지 않음: 다 풀릴 때까지 재시도, 새 apply·언마운트(token 변경) 시에만 중단
+  const resolveUntilDone = async (elements, attempt) => {
+    const resolved = await resolveGraphElementsProfileImages(elements, { force: attempt > 0 });
     if (!applyIfCurrent(resolved)) return;
     if (!graphElementsHaveUnresolvedProfileImages(resolved)) return;
-
     setTimeout(() => {
       if (applyTokenRef && token !== applyTokenRef.current) return;
-      void resolveGraphElementsProfileImages(resolved, { force: true }).then((retried) => {
-        applyIfCurrent(retried);
-      });
-    }, GRAPH_IMAGE_DEFERRED_RETRY_MS);
-  });
+      void resolveUntilDone(resolved, attempt + 1);
+    }, Math.min(GRAPH_IMAGE_DEFERRED_RETRY_MS * (attempt + 1), 5000));
+  };
+  void resolveUntilDone(visibleElements, 0);
 
   return visibleElements;
 }
@@ -76,17 +73,6 @@ export const VIEWER_GRAPH_PIPELINE = {
   DISCOVERY_WAIT_MS: 30000,
   DISCOVERY_POLL_MS: 16,
 };
-
-export function getCachedChapterMaxEventIdx(bookId, chapter) {
-  return Number(getCachedChapterEvents(bookId, chapter)?.maxEventIdx) || 0;
-}
-
-/** 캐시에 throughEventIdx까지 쓸 수 있는 데이터가 있는지 (INVALID source 제외) */
-export function hasCachedChapterThrough(bookId, chapter, throughEventIdx = 1) {
-  const through = Number(throughEventIdx);
-  const need = Number.isFinite(through) && through >= 1 ? through : 1;
-  return hasUsableChapterCacheThrough(bookId, chapter, need);
-}
 
 export function buildChapterCharacterSearchData(events, currentChapter) {
   if (!currentChapter || !Array.isArray(events) || events.length === 0) {
@@ -139,10 +125,6 @@ export function clearViewerGraphPipelineMaps(refs) {
   refs.chapterDiscoveryPromiseRef.current.clear();
 }
 
-export function resolvePipelineBookId(book) {
-  return toPositiveNumberOrNull(book?.id);
-}
-
 export function fallbackEventMeta(chapter, eventIdx) {
   return {
     chapterIdx: chapter,
@@ -173,12 +155,6 @@ export function convertGraphSourceToElements(
     { bookId }
   );
   return { elements, normalizedEvent, eventMeta, characters, relations };
-}
-
-/** API 응답에서 result 객체 추출 */
-export function pickGraphApiResult(response) {
-  const result = response?.result;
-  return result && typeof result === 'object' ? result : null;
 }
 
 /** graph event state 캐시 스냅샷 (표시 가능한 payload만) */
@@ -226,7 +202,7 @@ export const graphDataTransformUtils = {
     if (!apiEvent || typeof apiEvent !== 'object') return null;
     const chapterIdx = resolveChapterIndex(apiEvent);
     if (!Number.isFinite(chapterIdx) || chapterIdx < 1) return null;
-    const eventNum = eventUtils.resolveEventOrdinal(apiEvent);
+    const eventNum = eventUtils.resolveEventNum(apiEvent, null);
     if (!eventNum) return null;
     return {
       ...apiEvent,
@@ -253,8 +229,7 @@ export const graphDataTransformUtils = {
   },
 
   createNextEventData: (normalizedEvent, currentChapter, apiEventIdx, resultData) => {
-    const apiEventNum = normalizedEvent ? Number(normalizedEvent.eventNum) : NaN;
-    const eventNum = Number.isFinite(apiEventNum) && apiEventNum > 0 ? apiEventNum : apiEventIdx;
+    const eventNum = toPositiveNumberOrNull(normalizedEvent?.eventNum) ?? apiEventIdx;
     const originalEventIdx = normalizedEvent
       ? eventUtils.resolveEventNum(normalizedEvent)
       : apiEventIdx;
@@ -268,7 +243,6 @@ export const graphDataTransformUtils = {
       eventNum,
       eventIdx: eventNum,
       eventId: rawId != null ? rawId : eventNum,
-      resolvedEventIdx: apiEventIdx,
       originalEventIdx,
       relations,
       characters,

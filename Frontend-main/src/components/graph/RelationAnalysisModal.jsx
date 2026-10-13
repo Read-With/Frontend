@@ -4,7 +4,7 @@ import {
   RELATION_CONNECTION_KIND,
 } from "../../utils/graph/graphCore";
 import {Radar,RadarChart,PolarGrid,PolarAngleAxis,PolarRadiusAxis,ResponsiveContainer,} from 'recharts';
-import { getPositivityDisplay, clampPositivity, GRAPH_COLORS, brandAlpha } from '../../utils/styles/graphStyles.js';
+import { getPositivityDisplay, GRAPH_COLORS, brandAlpha } from '../../utils/styles/graphStyles.js';
 import { truncateWithEllipsis, cycleIndex } from '../../utils/common/valueUtils.js';
 import { joinClasses, lockBodyScroll } from '../../utils/styles/styles.js';
 import { NodeProfileAvatar } from './GraphControls';
@@ -196,35 +196,6 @@ function RelationList({
   );
 }
 
-/** −1~+1 긍정성 미니 스케일 (연결 적을 때 레이더 대체) */
-function PositivityScaleBar({ positivity }) {
-  const value = Number.isFinite(Number(positivity)) ? Number(positivity) : 0;
-  const clamped = clampPositivity(value);
-  const pct = ((clamped + 1) / 2) * 100;
-  const { color, label } = getPositivityDisplay(clamped);
-
-  return (
-    <div
-      className="relation-positivity-scale"
-      role="img"
-      aria-label={`긍정성 ${label} (${clamped.toFixed(2)})`}
-    >
-      <div className="relation-positivity-scale-track">
-        <span className="relation-positivity-scale-zero" />
-        <span
-          className="relation-positivity-scale-marker"
-          style={{ left: `${pct}%`, background: color }}
-        />
-      </div>
-      <div className="relation-positivity-scale-labels" aria-hidden>
-        <span>−100%</span>
-        <span>0%</span>
-        <span>+100%</span>
-      </div>
-    </div>
-  );
-}
-
 function RelationCard({ item, active, onSelect, onSwitch, sourceName }) {
   if (!item) return null;
 
@@ -249,7 +220,6 @@ function RelationCard({ item, active, onSelect, onSwitch, sourceName }) {
             {sourceName} ↔ {item.name}
           </p>
         ) : null}
-        <PositivityScaleBar positivity={item.positivity} />
         <RelationTagsRow tags={item.relationTags} />
       </button>
       {active ? <SwitchAnalysisButton item={item} onSwitch={onSwitch} /> : null}
@@ -644,17 +614,6 @@ function RelationAnalysisModalImpl({
             </button>
           </div>
         </div>
-
-        {connectionKind === CONNECTION.SUFFICIENT ? (
-          <div className="relation-modal-legend" aria-hidden="false">
-            <span className="relation-modal-legend-label">긍정성</span>
-            <div className="relation-modal-legend-bar">
-              <span>부정 (−100%)</span>
-              <span className="relation-modal-legend-gradient" />
-              <span>긍정 (+100%)</span>
-            </div>
-          </div>
-        ) : null}
 
         <div className={bodyClassName}>
           {chartPanel}

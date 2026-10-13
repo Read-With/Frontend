@@ -6,7 +6,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getBook, getBooks, getBooksArray, toggleBookFavorite, getBookManifest } from '../../utils/api/booksApi';
 import { normalizeTitle, normalizeAuthor, errorUtils } from '../../utils/common/valueUtils';
 import { userViewerPath } from '../../utils/common/urlUtils';
-import { prefetchManifest } from '../../utils/common/cache/manifestCache';
 import { PROGRESS_CACHE_UPDATED_EVENT } from '../../utils/common/cache/progressCache';
 import { readBooksCache, writeBooksCache, loadFromStorage, saveToStorage } from '../../utils/common/cache/cacheManager';
 import { resolveLibraryReadingProgressPercent } from '../../utils/library/libraryUtils';
@@ -73,9 +72,7 @@ function prefetchBookManifests(books) {
   for (const book of books) {
     const id = Number(book?.id);
     if (!Number.isFinite(id) || id <= 0) continue;
-    prefetchManifest(id, (bookId) => getBookManifest(bookId, { forceRefresh: false })).catch(
-      () => {}
-    );
+    getBookManifest(id).catch(() => {});
   }
 }
 

@@ -43,6 +43,37 @@ function profileFromUserData(userData) {
   };
 }
 
+const isCorruptedName = (name) => {
+  if (!name) return false;
+  return /[ìíîïðñòóôõö]/.test(name) || /\\x[0-9A-Fa-f]{2}/.test(name);
+};
+
+/** 저장된 Google 사용자 복원(토큰 재저장 포함). 이름이 깨졌으면 저장분을 지우고 corrupted */
+function restoreSavedUser() {
+  const savedUser = getStoredGoogleUserJson();
+  if (!savedUser) return { profile: null, corrupted: false };
+  let profile = null;
+  try {
+    const userData = JSON.parse(savedUser);
+    if (userData.accessToken) {
+      setStoredAccessToken(userData.accessToken);
+    }
+    if (userData.refreshToken) {
+      setStoredRefreshToken(userData.refreshToken);
+    }
+    profile = profileFromUserData(userData);
+    setStoredGoogleUserJson(JSON.stringify(profile));
+
+    if (isCorruptedName(profile.name)) {
+      removeStoredGoogleUser();
+      return { profile, corrupted: true };
+    }
+  } catch {
+    removeStoredGoogleUser();
+  }
+  return { profile, corrupted: false };
+}
+
 function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -77,11 +108,6 @@ function AuthProvider({ children }) {
   useEffect(() => {
     let cancelled = false;
 
-    const isCorruptedName = (name) => {
-      if (!name) return false;
-      return /[ìíîïðñòóôõö]/.test(name) || /\\x[0-9A-Fa-f]{2}/.test(name);
-    };
-
     (async () => {
       try {
         if (isOAuthCallbackRoute()) {
@@ -89,30 +115,8 @@ function AuthProvider({ children }) {
           return;
         }
 
-        const savedUser = getStoredGoogleUserJson();
-        let profile = null;
-
-        if (savedUser) {
-          try {
-            const userData = JSON.parse(savedUser);
-            if (userData.accessToken) {
-              setStoredAccessToken(userData.accessToken);
-            }
-            if (userData.refreshToken) {
-              setStoredRefreshToken(userData.refreshToken);
-            }
-            profile = profileFromUserData(userData);
-            setStoredGoogleUserJson(JSON.stringify(profile));
-
-            if (isCorruptedName(profile.name)) {
-              removeStoredGoogleUser();
-              if (!cancelled) setIsLoading(false);
-              return;
-            }
-          } catch {
-            removeStoredGoogleUser();
-          }
-        }
+        const { profile, corrupted } = restoreSavedUser();
+        if (corrupted) return;
 
         await ensureSessionAccessToken();
         if (cancelled) return;

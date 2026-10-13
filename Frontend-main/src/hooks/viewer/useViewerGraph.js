@@ -3,13 +3,13 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
 import {
   applyChapterEventsFromCache,
-} from '../../utils/graph/graphFetch';
-import {
+  getCachedChapterMaxEventIdx,
+  hasUsableChapterCacheThrough,
   ensureChapterEventsDiscovered,
   prefetchChapterEvents,
   clearBookRelationshipDeltas,
 } from '../../utils/graph/graphModel';
-import { errorUtils } from '../../utils/common/valueUtils';
+import { errorUtils, toPositiveNumberOrNull } from '../../utils/common/valueUtils';
 import { cacheKeyUtils, deriveGraphPhase, eventUtils } from '../../utils/viewer/viewerCore';
 import {
   saveViewerMode,
@@ -17,7 +17,6 @@ import {
   resolvePersistedViewerMode,
   isHardNavigationReload,
   eventMatchesChapter,
-  buildViewerActionError,
 } from '../../utils/viewer/viewerSession';
 import {
   buildChapterCharacterSearchData,
@@ -27,13 +26,10 @@ import {
   resolveCumulativeGraphForDisplay,
   resolveGraphCallContext,
   VIEWER_GRAPH_PIPELINE,
-  getCachedChapterMaxEventIdx,
-  hasCachedChapterThrough,
   toCommitGraphArgs,
   awaitPendingChapterDiscovery,
   resolveChapterDiscoveryCoverage,
   clearViewerGraphPipelineMaps,
-  resolvePipelineBookId,
 } from '../../utils/viewer/viewerGraph';
 import { useGraphSearch, useGraphDisplayToggles } from '../graph/useGraphViewState';
 import { useAsyncRequestGuard } from '../common/hooksShared';
@@ -242,6 +238,8 @@ function useRetryToken() {
 
 function usePipelineRefs() {
   const applyTokenRef = useRef(0);
+  // 언마운트 시 이미지 재시도 루프 중단
+  useEffect(() => () => { applyTokenRef.current += 1; }, []);
   const hasVisibleElementsRef = useRef(false);
   const chapterSyncStatusRef = useRef(new Map());
   const chapterEventDiscoveryRef = useRef(new Map());
@@ -466,7 +464,7 @@ function useGraphChapterDiscovery({
 
     const runDiscovery = async () => {
       // 캐시 hit면 로딩 플래시 없이 즉시 완료
-      if (hasCachedChapterThrough(bookId, currentChapter, throughEventIdx)) {
+      if (hasUsableChapterCacheThrough(bookId, currentChapter, throughEventIdx)) {
         markCovered();
         return;
       }
@@ -488,7 +486,7 @@ function useGraphChapterDiscovery({
       if (isRunStale()) return;
 
       // pending discovery가 캐시를 이미 채웠을 수 있음
-      if (hasCachedChapterThrough(bookId, currentChapter, throughEventIdx)) {
+      if (hasUsableChapterCacheThrough(bookId, currentChapter, throughEventIdx)) {
         markCovered();
         return;
       }
@@ -535,13 +533,13 @@ function useGraphChapterDiscovery({
 
       refs.chapterEventDiscoveryRef.current.set(discoveryKey, 'missing');
       setLoading(false);
-      setDiscoveryError(buildViewerActionError(
-        '챕터 이벤트를 불러오지 못했습니다.',
-        outcome.reason === 'api_error'
+      setDiscoveryError({
+        message: '챕터 이벤트를 불러오지 못했습니다.',
+        details: outcome.reason === 'api_error'
           ? outcome.error?.message || '알 수 없는 오류가 발생했습니다.'
           : '캐시가 생성되지 않았습니다.',
-        retryDiscovery,
-      ));
+        retry: retryDiscovery,
+      });
 
       if (outcome.reason === 'api_error') {
         errorUtils.logError(`${LOG_PREFIX} 챕터 이벤트 discovery 실패`, outcome.error);
@@ -626,11 +624,11 @@ function useGraphFineLoad({
     finishFineLoading(
       true,
       false,
-      buildViewerActionError(
-        '그래프 데이터를 불러오지 못했습니다.',
-        error?.message || '알 수 없는 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
-        triggerGraphRetry,
-      ),
+      {
+        message: '그래프 데이터를 불러오지 못했습니다.',
+        details: error?.message || '알 수 없는 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
+        retry: triggerGraphRetry,
+      },
     );
   }, [clearActiveGraphKeys, finishFineLoading, dispatchGraphLoad, setVisibleElements, triggerGraphRetry]);
 
@@ -652,7 +650,7 @@ function useGraphFineLoad({
     return { ready: false, reason: 'timeout' };
   }, [refs]);
 
-  const pipelineBookId = resolvePipelineBookId(book);
+  const pipelineBookId = toPositiveNumberOrNull(book?.id);
 
   useEffect(() => {
     const bookId = pipelineBookId;
@@ -822,7 +820,7 @@ export function useViewerGraphPipeline({
   resetTransition,
 }) {
   const refs = usePipelineRefs();
-  const pipelineBookId = resolvePipelineBookId(book);
+  const pipelineBookId = toPositiveNumberOrNull(book?.id);
 
   const { setVisibleElements, invalidateVisibleGraphApply, commitGraphState } = useGraphElementApply({
     setElements,

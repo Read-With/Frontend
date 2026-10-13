@@ -1,30 +1,19 @@
 /** 북마크 표시·locator·색상 팔레트 (API 호출 없음) */
 
-import { toLocator, locatorsEqual, toViewerResumeAnchor, toPositiveNumberOrNull } from '../common/valueUtils';
-import { resolveViewerBookKey } from '../viewer/viewerCore';
+import { toLocator, locatorsEqual, toViewerResumeAnchor, toPositiveNumberOrNull, sleep } from '../common/valueUtils';
 import {
   getChapterData,
   locatorToBookAbsoluteOffset,
   resolveProgressMetricsFromLocator,
 } from '../common/cache/manifestCache';
 import { normalizeStartEndLocatorsForServer } from '../common/cache/progressCache';
-import { COLORS } from '../styles/styles.js';
+import { GRAPH_COLORS } from '../styles/graphStyles.js';
 
 export const clientSortToApiSort = (sortOrder) =>
   sortOrder === 'oldest' ? 'time_asc' : 'time_desc';
 
 /** PATCH /v2/bookmarks/:id 허용 필드 (위치 변경은 API 미지원) */
 export const BOOKMARK_UPDATABLE_FIELDS = Object.freeze(['color', 'memo']);
-
-export const resolveBookmarkApiBookId = (book, routeBookId = null) => {
-  const fromKey = toPositiveNumberOrNull(resolveViewerBookKey(book, routeBookId));
-  if (fromKey != null) return fromKey;
-  return toPositiveNumberOrNull(routeBookId) ?? toPositiveNumberOrNull(book?.id);
-};
-
-/** 뷰어 locator → 서버 paragraphStarts 축 (비교·생성 공통) */
-export const normalizeBookmarkLocators = (bookId, startLocator, endLocator = null) =>
-  normalizeStartEndLocatorsForServer(bookId, startLocator, endLocator);
 
 /** 북마크 → 뷰어 resumeAnchor (진도 preferred resume와 동일 헬퍼) */
 export const bookmarkToResumeAnchor = (bookmark) =>
@@ -51,7 +40,7 @@ export const waitForBookmarkAxisReady = async (
   if (isBookmarkAxisReady(bookId, locator)) return true;
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    await sleep(intervalMs);
     if (isBookmarkAxisReady(bookId, locator)) return true;
   }
   return isBookmarkAxisReady(bookId, locator);
@@ -77,10 +66,7 @@ export const parseBookmarkLocation = (bookmark, bookId = null) => {
   }
 
   const end = toLocator(bookmark.endLocator);
-  const metrics =
-    bookId != null && bookId !== ''
-      ? resolveProgressMetricsFromLocator(bookId, loc)
-      : null;
+  const metrics = resolveProgressMetricsFromLocator(bookId, loc); // bookId 없으면 null
 
   let base;
   if (metrics?.chapterProgress != null) {
@@ -94,10 +80,7 @@ export const parseBookmarkLocation = (bookmark, bookId = null) => {
 export const formatBookmarkLocatorDetail = (bookmark, bookId = null) => {
   const loc = toLocator(bookmark?.startLocator);
   if (!loc) return '';
-  const metrics =
-    bookId != null && bookId !== ''
-      ? resolveProgressMetricsFromLocator(bookId, loc)
-      : null;
+  const metrics = resolveProgressMetricsFromLocator(bookId, loc); // bookId 없으면 null
   if (metrics?.readingProgressPercent != null && metrics?.chapterProgress != null) {
     return `전체 ${metrics.readingProgressPercent}% · 챕터 ${metrics.chapterProgress}%`;
   }
@@ -210,22 +193,6 @@ export const groupBookmarksByChapter = (bookmarks, sortOrder = 'recent', bookId 
   return groups;
 };
 
-const RELATIVE_DAYS_THRESHOLD = 7;
-
-export const formatRelativeTime = (value) => {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-  const diffMin = Math.floor((Date.now() - date.getTime()) / (1000 * 60));
-  if (diffMin < 1) return '방금 전';
-  if (diffMin < 60) return `${diffMin}분 전`;
-  const diffHour = Math.floor(diffMin / 60);
-  if (diffHour < 24) return `${diffHour}시간 전`;
-  const diffDay = Math.floor(diffHour / 24);
-  if (diffDay < RELATIVE_DAYS_THRESHOLD) return `${diffDay}일 전`;
-  return date.toLocaleString('ko-KR', { month: 'short', day: 'numeric' });
-};
-
 const bookmarkColors = {
   normal: '#f4f7ff',
   important: '#fff3c2',
@@ -235,7 +202,7 @@ const bookmarkColors = {
 export const bookmarkBorders = {
   normal: '#e7eaf7',
   important: '#ffd600',
-  highlight: COLORS.primary,
+  highlight: GRAPH_COLORS.primary,
 };
 
 export const DEFAULT_BOOKMARK_COLOR = bookmarkColors.normal;
@@ -260,7 +227,7 @@ export const getColorKey = (color) => {
 };
 
 export const createBookmarkData = (bookId, startLocator, endLocator = null) => {
-  const { startLocator: start, endLocator: end } = normalizeBookmarkLocators(
+  const { startLocator: start, endLocator: end } = normalizeStartEndLocatorsForServer(
     bookId,
     startLocator,
     endLocator

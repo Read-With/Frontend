@@ -7,7 +7,7 @@ import HomePage from './pages/HomePage';
 import OAuthCallback from './components/auth/OAuthCallback';
 import useAuth, { AuthProvider } from './hooks/auth/useAuth';
 import { prefetchBooks } from './hooks/books/bookHooks';
-import { COLORS } from './utils/styles/styles.js';
+import { GRAPH_COLORS } from './utils/styles/graphStyles.js';
 import { errorUtils } from './utils/common/valueUtils';
 import { rememberPostLoginPath } from './utils/common/urlUtils';
 
@@ -21,22 +21,22 @@ const PageLoader = ({ fullScreen = false }) => (
   <div
     role="status"
     className={`flex flex-col items-center justify-center gap-3 ${fullScreen ? 'min-h-screen' : 'min-h-[40vh]'}`}
-    style={{ color: COLORS.textSecondary, fontSize: '0.95rem' }}
+    style={{ color: GRAPH_COLORS.textSecondary, fontSize: '0.95rem' }}
   >
     <div
       className="h-10 w-10 animate-spin rounded-full border-4 border-gray-200"
-      style={{ borderTopColor: COLORS.primary }}
+      style={{ borderTopColor: GRAPH_COLORS.primary }}
       aria-hidden
     />
     로딩 중…
   </div>
 );
 
-const TEXT_COLOR = COLORS.nodeText || '#1a1a1a';
+const TEXT_COLOR = GRAPH_COLORS.nodeText || '#1a1a1a';
 const actionClass = 'rounded-lg px-4 py-2 no-underline cursor-pointer';
 const actionStyle = {
-  border: `1px solid ${COLORS.border}`,
-  background: COLORS.white || '#fff',
+  border: `1px solid ${GRAPH_COLORS.border}`,
+  background: GRAPH_COLORS.white || '#fff',
   color: TEXT_COLOR,
 };
 
@@ -44,7 +44,7 @@ const actionStyle = {
 const MessageScreen = ({ title, description, children }) => (
   <div
     className="flex flex-col items-center justify-center gap-3 px-6 text-center"
-    style={{ minHeight: '60vh', color: COLORS.textSecondary }}
+    style={{ minHeight: '60vh', color: GRAPH_COLORS.textSecondary }}
   >
     <h1 className="m-0 text-xl font-semibold" style={{ color: TEXT_COLOR }}>
       {title}

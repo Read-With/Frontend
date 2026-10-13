@@ -27,7 +27,46 @@ export const isUnusableChapterGraphCacheSource = (source) =>
 
 function getStorage(storageType = 'localStorage') {
   if (typeof window === 'undefined') return null;
-  return storageType === 'sessionStorage' ? sessionStorage : localStorage;
+  try {
+    // 쿠키/사이트 데이터 차단 시 접근만으로 SecurityError
+    return storageType === 'sessionStorage' ? sessionStorage : localStorage;
+  } catch {
+    return null;
+  }
+}
+
+/** 문자열 그대로 읽기 (JSON 아님). 실패 시 null */
+export function readRaw(key, storageType = 'localStorage') {
+  try {
+    return getStorage(storageType)?.getItem(key) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** 문자열 그대로 쓰기. null/''이면 제거. 성공 여부 반환 */
+export function writeRaw(key, value, storageType = 'localStorage') {
+  const storage = getStorage(storageType);
+  if (!storage) return false;
+  try {
+    if (value == null || value === '') storage.removeItem(key);
+    else storage.setItem(key, value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** 여러 키 제거. 성공 여부 반환 */
+export function removeKeys(storageType, ...keys) {
+  const storage = getStorage(storageType);
+  if (!storage) return false;
+  try {
+    keys.forEach((key) => storage.removeItem(key));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** 크기 제한 Map 쓰기 — 다시 쓰면 최신으로 이동, 넘치면 가장 오래된 항목 제거 */
@@ -35,6 +74,22 @@ export function setBounded(map, key, value, maxSize) {
   map.delete(key);
   map.set(key, value);
   if (map.size > maxSize) map.delete(map.keys().next().value);
+}
+
+/** inflight 등록 후 완료 시 해제 (forceRefresh 등으로 덮어쓴 다른 요청의 등록은 지우지 않음) */
+export const awaitTracked = async (map, key, promise, entry = promise) => {
+  map.set(key, entry);
+  try {
+    return await promise;
+  } finally {
+    if (map.get(key) === entry) map.delete(key);
+  }
+};
+
+/** 같은 key 동시 요청은 진행 중 promise에 합류, 끝나면 map에서 제거 */
+export function withInflight(map, cacheKey, run) {
+  if (!cacheKey) return Promise.resolve().then(run);
+  return map.get(cacheKey) ?? awaitTracked(map, cacheKey, Promise.resolve().then(run));
 }
 
 export function loadFromStorage(storageKey, storageType = 'localStorage') {

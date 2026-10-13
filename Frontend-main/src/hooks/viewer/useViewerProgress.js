@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { getBookProgress, saveProgress, saveProgressKeepalive } from '../../utils/api/booksApi';
 import { ensureSessionAccessToken } from '../../utils/api/authApi';
-import { canResolveProgressMetrics } from '../../utils/common/cache/manifestCache';
+import { canResolveProgressMetrics, resolveProgressMetricsFromLocator } from '../../utils/common/cache/manifestCache';
 import {
   getProgressFromCache,
   PROGRESS_CACHE_UPDATED_EVENT,
@@ -12,12 +12,10 @@ import {
   getCachedReaderProgress,
   setCachedReaderProgress,
 } from '../../utils/common/cache/progressCache';
-import { viewerResumeAnchorKey, clampPercent, errorUtils } from '../../utils/common/valueUtils';
+import { viewerResumeAnchorKey, clampPercent, errorUtils, stringOrEmpty, sleep } from '../../utils/common/valueUtils';
 import {
-  delay,
   waitForPaint,
   waitForViewerMethod,
-  resolveMetricsFromLocator,
   resolveMetricsFromReadingLocatorKey,
   shouldApplyCacheSnapshot,
   snapshotFromProgressRow,
@@ -46,6 +44,27 @@ function applyRefState(ref, setState, value) {
   ref.current = value;
   setState(value);
   return value;
+}
+
+/** resume 타임아웃 시 저장된 진행률(%)로 이동 시도. stale이면 즉시 중단 */
+async function moveToProgressFallback(viewerRef, pct, isStale) {
+  if (!Number.isFinite(pct) || pct < 0) return;
+  const ready = await waitForViewerMethod(viewerRef, 'moveToProgress', VIEWER_RESUME_TIMEOUT_MS);
+  if (!ready || isStale()) return;
+  try {
+    for (let attempt = 0; attempt < VIEWER_RESUME_PERCENT_FALLBACK_ATTEMPTS; attempt += 1) {
+      if (isStale()) return;
+      const moved = viewerRef.current?.moveToProgress?.(pct);
+      await waitForPaint();
+      if (moved) return;
+      await sleep(VIEWER_RESUME_POLL_MS);
+    }
+  } catch (error) {
+    errorUtils.logWarning(
+      '[useViewerProgress] resume 타임아웃 percent 폴백 실패',
+      error?.message ?? '알 수 없는 오류',
+    );
+  }
 }
 
 const NOT_READY = Symbol('notReady');
@@ -112,7 +131,7 @@ export function useViewerProgress({
     applyRefState(
       readingLocatorKeyRef,
       setReadingLocatorKey,
-      typeof nextKey === 'string' ? nextKey : '',
+      stringOrEmpty(nextKey),
     );
   }, []);
 
@@ -135,7 +154,9 @@ export function useViewerProgress({
   }, [onPreferredResumeApplied]);
 
   const finishResume = useCallback(async (options = {}) => {
-    if (options.runId != null && isResumeRunStale(options.runId)) return;
+    // 실행이 stale이면 이후 단계는 모두 생략 (stale은 되돌아가지 않음)
+    const isStale = () => options.runId != null && isResumeRunStale(options.runId);
+    if (isStale()) return;
 
     if (options.appliedKey != null) {
       serverResumeAppliedKeyRef.current = options.appliedKey;
@@ -143,34 +164,10 @@ export function useViewerProgress({
 
     if (options.timeoutKey != null) {
       errorUtils.logWarning('[useViewerProgress] resume 위치 복원 시간 초과', options.timeoutKey);
-      const pct = Number(progressRef.current);
-      if (Number.isFinite(pct) && pct >= 0) {
-        const ready = await waitForViewerMethod(
-          viewerRef,
-          'moveToProgress',
-          VIEWER_RESUME_TIMEOUT_MS,
-        );
-        if (options.runId != null && isResumeRunStale(options.runId)) return;
-        if (ready) {
-          try {
-            for (let attempt = 0; attempt < VIEWER_RESUME_PERCENT_FALLBACK_ATTEMPTS; attempt += 1) {
-              if (options.runId != null && isResumeRunStale(options.runId)) return;
-              const moved = viewerRef.current?.moveToProgress?.(pct);
-              await waitForPaint();
-              if (moved) break;
-              await delay(VIEWER_RESUME_POLL_MS);
-            }
-          } catch (error) {
-            errorUtils.logWarning(
-              '[useViewerProgress] resume 타임아웃 percent 폴백 실패',
-              error?.message ?? '알 수 없는 오류',
-            );
-          }
-        }
-      }
+      await moveToProgressFallback(viewerRef, Number(progressRef.current), isStale);
     }
 
-    if (options.runId != null && isResumeRunStale(options.runId)) return;
+    if (isStale()) return;
     clearPreferredResume();
     markReady();
   }, [clearPreferredResume, isResumeRunStale, markReady, progressRef, viewerRef]);
@@ -389,7 +386,7 @@ export function useViewerProgress({
           );
         }
 
-        await delay(VIEWER_RESUME_POLL_MS);
+        await sleep(VIEWER_RESUME_POLL_MS);
       }
 
       if (!isResumeRunStale(runId)) {
@@ -450,9 +447,7 @@ export function useViewerProgress({
         applyReadingLocatorKey(toReadingLocatorKey(lineLocator, lineEnd));
       }
       applyLiveMetrics(
-        resolveMetricsFromLocator(bookKey, lineLocator, {
-          metricsReady: progressMetricsReady,
-        }),
+        progressMetricsReady ? resolveProgressMetricsFromLocator(bookKey, lineLocator) : null,
       );
     },
     [bookKey, progressMetricsReady, applyLiveMetrics, applyReadingLocatorKey],
@@ -563,7 +558,7 @@ export function useProgressAutoSave({
     const { startLocator, endLocator } = resolveReadingLocators(getLocator, event);
     if (!startLocator) return null;
 
-    const metrics = resolveMetricsFromLocator(id, startLocator, { metricsReady: ready });
+    const metrics = ready ? resolveProgressMetricsFromLocator(id, startLocator) : null;
     const payload = buildProgressPayload(id, startLocator, endLocator, event, metrics);
     if (!payload) return null;
 
@@ -628,7 +623,7 @@ export function useProgressAutoSave({
       }
       errorUtils.logWarning(
         `${LOG_PREFIX} 서버 저장 실패`,
-        err?.message ?? (typeof err === 'string' ? err : ''),
+        err?.message ?? stringOrEmpty(err),
       );
       return settle(resolve, { isSuccess: false, message: err?.message });
     }
