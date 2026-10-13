@@ -1,11 +1,8 @@
-/** Cytoscape 스타일시트·레이아웃·노드 크기·긍정성 색/라벨 */
+/** Cytoscape 스타일시트·노드 크기·긍정성 색/라벨 */
 
-import { isValidNodeWeight } from '../graph/graphModel.js';
-import { clampPositivity } from '../common/valueUtils';
+import { asArray, clamp01, clampPositivity, isPositiveFiniteNumberLiteral } from '../common/valueUtils';
 
-// styles.js가 이 모듈을 re-export하므로 styles.js를 import하지 않는다.
-
-export { clampPositivity };
+// styles.js가 이 모듈을 import하므로 styles.js를 import하지 않는다 (순환 방지).
 
 export const STYLE_DURATION = {
   NORMAL: '0.3s',
@@ -13,7 +10,7 @@ export const STYLE_DURATION = {
 };
 
 /** --rg-* / --brand-* 와 동일 hex (Cytoscape는 CSS var 미지원) */
-export const BRAND_RGB = '62, 79, 47';
+const BRAND_RGB = '62, 79, 47';
 
 export function brandAlpha(alpha) {
   return `rgba(${BRAND_RGB}, ${alpha})`;
@@ -59,8 +56,8 @@ export const GRAPH_COLORS = {
   surfaceGlass: RG.surfaceGlass,
 };
 
-export const NODE_SIZE_MIN = 30;
-export const NODE_SIZE_MAX = 80;
+const NODE_SIZE_MIN = 30;
+const NODE_SIZE_MAX = 80;
 
 const RESPONSIVE_NODE_SIZE_RANGES = Object.freeze([
   { maxWidth: 420, min: 22, max: 54 },
@@ -81,20 +78,20 @@ export function getResponsiveNodeSizeRange(containerWidth) {
 }
 
 function computeWeightRange(weights) {
-  const valid = (Array.isArray(weights) ? weights : []).filter(isValidNodeWeight);
+  const valid = (asArray(weights)).filter(isPositiveFiniteNumberLiteral);
   if (valid.length === 0) return { min: 0, max: 0 };
   return { min: Math.min(...valid), max: Math.max(...valid) };
 }
 
 function normalizeWeightToUnit(weight, minWeight, maxWeight) {
-  if (!isValidNodeWeight(weight)) return 0;
+  if (!isPositiveFiniteNumberLiteral(weight)) return 0;
   if (typeof minWeight !== 'number' || typeof maxWeight !== 'number') return 0;
   if (minWeight >= maxWeight) return 1;
   return (weight - minWeight) / (maxWeight - minWeight);
 }
 
 function calculateNodeSizeFromNormalized(normalized, minPx = NODE_SIZE_MIN, maxPx = NODE_SIZE_MAX) {
-  const ratio = Math.max(0, Math.min(1, Number(normalized) || 0));
+  const ratio = clamp01(normalized);
   return Math.round(minPx + ratio * (maxPx - minPx));
 }
 
@@ -141,66 +138,6 @@ export function applyNormalizedNodeSizes(
   });
 }
 
-export const PRESET_LAYOUT = Object.freeze({
-  name: 'preset',
-  fit: false,
-  animate: false,
-});
-
-/** 최초 로딩·전체 재배치용. animate:false로 동기 완료
- *  노드 반지름이 최대 40px(NODE_SIZE_MAX/2)까지 나오므로, 인접 노드가 맞닿아 보이지 않도록
- *  idealEdgeLength·nodeRepulsion·tilingPadding을 노드 크기 대비 여유 있게 잡는다. */
-export const COSE_BILKENT_LAYOUT = Object.freeze({
-  name: 'cose-bilkent',
-  fit: false,
-  animate: false,
-  randomize: false,
-  nodeDimensionsIncludeLabels: true,
-  nodeRepulsion: 5500,
-  idealEdgeLength: 130,
-  edgeElasticity: 0.45,
-  nestingFactor: 0.1,
-  gravity: 0.25,
-  numIter: 2500,
-  tile: true,
-  tilingPaddingVertical: 32,
-  tilingPaddingHorizontal: 32,
-});
-
-/** 노드가 몇 개뿐인 그래프에 COSE_BILKENT_LAYOUT 기본값(넓은 그래프 기준)을 그대로 쓰면
- *  서로 당겨줄 간선·중력이 약해 과도하게 퍼진다. 노드 수가 적을수록 간선 길이·반발력을
- *  줄이고 중력을 높여 촘촘하게 모은다. */
-const LAYOUT_DENSITY_RANGE = {
-  MIN_NODES: 3,
-  MAX_NODES: 20,
-  SPARSE: { idealEdgeLength: 70, nodeRepulsion: 2200, gravity: 0.5 },
-};
-
-function lerp(a, b, t) {
-  return a + (b - a) * t;
-}
-
-/** 노드 수에 맞춰 idealEdgeLength·nodeRepulsion·gravity를 보간한 cose-bilkent 레이아웃 옵션 */
-export function resolveCoseBilkentLayout(nodeCount) {
-  const { MIN_NODES, MAX_NODES, SPARSE } = LAYOUT_DENSITY_RANGE;
-  const count = Number(nodeCount);
-
-  if (!Number.isFinite(count) || count <= MIN_NODES) {
-    return { ...COSE_BILKENT_LAYOUT, ...SPARSE };
-  }
-  if (count >= MAX_NODES) {
-    return { ...COSE_BILKENT_LAYOUT };
-  }
-
-  const t = (count - MIN_NODES) / (MAX_NODES - MIN_NODES);
-  return {
-    ...COSE_BILKENT_LAYOUT,
-    idealEdgeLength: lerp(SPARSE.idealEdgeLength, COSE_BILKENT_LAYOUT.idealEdgeLength, t),
-    nodeRepulsion: lerp(SPARSE.nodeRepulsion, COSE_BILKENT_LAYOUT.nodeRepulsion, t),
-    gravity: lerp(SPARSE.gravity, COSE_BILKENT_LAYOUT.gravity, t),
-  };
-}
-
 /** @param {'graph'|'viewer'|'default'} [context='default'] viewer는 분할 밀도용 얇은 간선 */
 export const getEdgeStyle = (context = 'default') => ({
   width: context === 'viewer' ? 3.5 : 5,
@@ -210,8 +147,6 @@ export const getEdgeStyle = (context = 'default') => ({
 /* ─── 긍정성 (−1~+1) 색·라벨 ─── */
 
 /** 관계 존재 구간의 긍정도. 없/비정상이면 0. UI에서 null(정보 없음)과 구분할 때는 쓰지 말 것. */
-export const finitePositivityOrZero = clampPositivity;
-
 export const getRelationColor = (positivity) => {
   const value = clampPositivity(positivity);
   const normalized = (value + 1) / 2;
@@ -221,21 +156,6 @@ export const getRelationColor = (positivity) => {
   const lightness = 52 - 10 * Math.abs(value);
   return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
 };
-
-/**
- * 간선·태그 색(getRelationColor)과 동일한 −1→+1 스케일 그라데이션.
- * CSS `--rg-positivity-gradient` / 범례·스케일 바에 사용.
- */
-export function getPositivityGradientCss({ steps = 9, angle = '90deg' } = {}) {
-  const n = Math.max(2, Math.trunc(steps));
-  const stops = [];
-  for (let i = 0; i < n; i += 1) {
-    const t = i / (n - 1);
-    const pct = Math.round(t * 1000) / 10;
-    stops.push(`${getRelationColor(t * 2 - 1)} ${pct}%`);
-  }
-  return `linear-gradient(${angle}, ${stops.join(', ')})`;
-}
 
 const relationStyleCache = new Map();
 
@@ -256,7 +176,7 @@ function isMissingPositivity(positivity) {
 }
 
 /** @returns {{ color: string, text: string }} */
-export function getRelationStyle(positivity) {
+function getRelationStyle(positivity) {
   if (isMissingPositivity(positivity)) {
     return { color: getRelationColor(0), text: '정보 없음' };
   }
@@ -284,10 +204,6 @@ export function getPositivityDisplay(positivity) {
     label: text,
     percent: isMissingPositivity(positivity) ? 0 : Math.round(clampPositivity(positivity) * 100),
   };
-}
-
-export function clearStyleCache() {
-  relationStyleCache.clear();
 }
 
 /* ─── Cytoscape stylesheet ─── */

@@ -1,28 +1,25 @@
 /** progress/reader 캐시 + 서버 locator 정규화 */
 
-import { errorUtils } from '../urlUtils';
 import {
+  asArray,
   resolveChapterIndex,
   clampPercent,
   toStringOrNull,
   toTrimmedStringOrNull,
+  toPositiveNumberOrNull,
   toLocator,
   locatorsEqual,
   resolveProgressLocator,
   progressPayloadFromData,
   progressResultToViewerAnchor,
+  errorUtils,
 } from '../valueUtils';
 import {
-  registerCache,
-  getCacheItem,
-  setCacheItem,
-  removeCacheItem,
-  removeFromStorage,
-  loadTtlStorage,
+  setBounded,
+  loadFromStorage,
+  saveToStorage,
   PROGRESS_CACHE_KEY,
   PROGRESS_CACHE_TTL_MS,
-  READER_PROGRESS_CACHE_PREFIX,
-  READER_PROGRESS_MAX_AGE_MS,
 } from './cacheManager';
 import {
   getChapterData,
@@ -34,12 +31,12 @@ import {
 } from './manifestCache';
 
 /** POST progress — 서버 blockIndex 검증에 맞게 paragraphStarts 축으로 재매핑 */
-export const normalizeLocatorForServerProgress = (bookId, locator, manifestOverride = undefined) => {
+const normalizeLocatorForServerProgress = (bookId, locator, manifestOverride = undefined) => {
   const loc = toLocator(locator);
   if (!loc) return null;
   const chapter = getChapterData(bookId, loc.chapterIndex, manifestOverride);
   if (!chapter) return loc;
-  const starts = Array.isArray(chapter.paragraphStarts) ? chapter.paragraphStarts : [];
+  const starts = asArray(chapter.paragraphStarts);
   if (starts.length === 0) return loc;
   const local = chapterLocalOffsetFromLocator(chapter, loc);
   const out = locatorFromChapterLocalOffset(chapter, local);
@@ -99,7 +96,7 @@ const progressPercentFromData = (data, options, pickValue) => {
   return value != null ? clampPercent(value) : null;
 };
 
-const normalizeReadingProgressPercent = (data, options = {}) =>
+export const normalizeReadingProgressPercent = (data, options = {}) =>
   progressPercentFromData(data, options, (bookId, locator) =>
     readingProgressPercentFromLocator(bookId, locator)
   );
@@ -110,7 +107,7 @@ const normalizeChapterProgressPercent = (data, options = {}) =>
     return metrics?.chapterProgress ?? null;
   });
 
-const resolveProgressEventName = (source) => {
+export const resolveProgressEventName = (source) => {
   if (!source || typeof source !== 'object') return '';
   const name =
     source.eventName ??
@@ -126,38 +123,27 @@ const resolveProgressEventName = (source) => {
 
 export const PROGRESS_CACHE_UPDATED_EVENT = 'readwith:progress-cache-updated';
 
-const progressCache = new Map();
-registerCache('progressCache', progressCache, {
-  maxSize: 1000,
-  ttl: PROGRESS_CACHE_TTL_MS,
-  cleanupInterval: 3600000,
-  storageKey: PROGRESS_CACHE_KEY,
-  storageType: 'localStorage',
-  persist: true,
-});
+const PROGRESS_CACHE_MAX = 1000;
+const isProgressExpired = (entry) =>
+  !!entry?.timestamp && Date.now() - entry.timestamp > PROGRESS_CACHE_TTL_MS;
 
-function migrateLegacyProgressAggregate() {
-  const allEntry = progressCache.get('all');
-  if (!allEntry?.data || typeof allEntry.data !== 'object') return;
+const progressCache = new Map(
+  Object.entries(loadFromStorage(PROGRESS_CACHE_KEY)?.data ?? {}).filter(
+    ([, entry]) => !isProgressExpired(entry)
+  )
+);
 
-  for (const [bookId, row] of Object.entries(allEntry.data)) {
-    if (!row || row.bookId == null) continue;
-    if (!progressCache.has(bookId)) {
-      setCacheItem('progressCache', bookId, {
-        ...row,
-        timestamp: row.timestamp || Date.now(),
-      });
-    }
-  }
-  removeCacheItem('progressCache', 'all');
-}
+const persistProgressCache = () =>
+  saveToStorage(PROGRESS_CACHE_KEY, { data: Object.fromEntries(progressCache), timestamp: Date.now() });
 
-migrateLegacyProgressAggregate();
+const setProgressEntry = (bookId, entry) => {
+  setBounded(progressCache, bookId, { ...entry, timestamp: entry.timestamp || Date.now() }, PROGRESS_CACHE_MAX);
+  persistProgressCache();
+};
 
-const getReaderProgressStorageKey = (bookKey) => {
-  const sanitized = toTrimmedStringOrNull(bookKey);
-  if (!sanitized) return null;
-  return `${READER_PROGRESS_CACHE_PREFIX}${sanitized}`;
+const removeProgressEntry = (bookId) => {
+  progressCache.delete(bookId);
+  persistProgressCache();
 };
 
 const progressToReaderLocation = (progress) => {
@@ -166,13 +152,13 @@ const progressToReaderLocation = (progress) => {
   const chapterIdx = resolveChapterIndex(startLocator);
   if (chapterIdx == null || chapterIdx < 1) return null;
   const endLocator = progress.endLocator ?? startLocator;
-  const eventNum = Number(progress.eventNum);
+  const eventNum = toPositiveNumberOrNull(progress.eventNum);
   return {
     key: String(progress.bookId),
     bookId: progress.bookId,
     chapterIdx: progress.chapterIdx ?? chapterIdx,
-    eventIdx: Number.isFinite(eventNum) && eventNum > 0 ? eventNum : null,
-    eventNum: Number.isFinite(eventNum) && eventNum > 0 ? eventNum : null,
+    eventIdx: eventNum,
+    eventNum,
     eventId: progress.eventId ?? null,
     startLocator,
     endLocator,
@@ -201,9 +187,7 @@ const normalizeReaderLocationPayload = (bookKey, payload) => {
   const endRaw =
     payload.endLocator ?? payload.anchor?.endLocator ?? payload.anchor?.end ?? startL;
   const endL = toLocator(endRaw) ?? startL;
-  const eventNumCandidate = Number(payload.eventNum ?? payload.eventIdx);
-  const normalizedEventNum =
-    Number.isFinite(eventNumCandidate) && eventNumCandidate > 0 ? eventNumCandidate : null;
+  const normalizedEventNum = toPositiveNumberOrNull(payload.eventNum ?? payload.eventIdx);
   const chapterProgressCandidate = Number(payload.chapterProgress);
   const normalizedChapterProgress = Number.isFinite(chapterProgressCandidate)
     ? clampPercent(chapterProgressCandidate)
@@ -263,19 +247,22 @@ const fromStoredProgress = (stored) => {
 
   const bookIdStr = String(stored.bookId);
   const row = ensureProgressRowLocator(bookIdStr, stored);
+  // 전체·챕터 진도를 한 번에 계산 (각각 구하면 전체 진도 계산이 두 번 돎)
+  const rowLocator = resolveProgressLocator(row);
+  const metrics = rowLocator ? resolveProgressMetricsFromLocator(bookIdStr, rowLocator) : null;
   const pct =
-    normalizeReadingProgressPercent(row, { bookId: bookIdStr }) ??
+    metrics?.readingProgressPercent ??
     (Number.isFinite(Number(row.readingProgressPercent))
       ? clampPercent(row.readingProgressPercent)
       : null);
   const chp =
-    normalizeChapterProgressPercent(row, { bookId: bookIdStr }) ??
+    metrics?.chapterProgress ??
     (Number.isFinite(Number(row.chapterProgress)) ? clampPercent(row.chapterProgress) : null);
   const anchor = progressResultToViewerAnchor(row);
 
   if (anchor) {
     const locator = anchor.startLocator;
-    const evn = Number(row.eventNum);
+    const evn = toPositiveNumberOrNull(row.eventNum);
     const evName = resolveProgressEventName(row);
 
     return {
@@ -288,7 +275,7 @@ const fromStoredProgress = (stored) => {
       updatedAt: row.updatedAt,
       timestamp: stored.timestamp,
       ...(pct != null ? { readingProgressPercent: pct } : {}),
-      ...(Number.isFinite(evn) && evn > 0 ? { eventNum: evn } : {}),
+      ...(evn ? { eventNum: evn } : {}),
       ...(chp != null ? { chapterProgress: chp } : {}),
       ...(evName ? { eventName: evName } : {}),
     };
@@ -352,8 +339,8 @@ export const setProgressToCache = (progressData) => {
       timestamp: Date.now(),
     };
     if (pct != null) progress.readingProgressPercent = pct;
-    const evn = Number(withLoc.eventNum);
-    if (Number.isFinite(evn) && evn > 0) progress.eventNum = evn;
+    const evn = toPositiveNumberOrNull(withLoc.eventNum);
+    if (evn) progress.eventNum = evn;
     if (chpFromLoc != null) progress.chapterProgress = chpFromLoc;
     const evName = resolveProgressEventName(withLoc);
     if (evName) progress.eventName = evName;
@@ -371,88 +358,28 @@ export const setProgressToCache = (progressData) => {
     return;
   }
 
-  setCacheItem('progressCache', bookIdStr, progress);
+  setProgressEntry(bookIdStr, progress);
   dispatchProgressCacheUpdated(progressData.bookId);
 };
 
 export const getProgressFromCache = (bookId) => {
   if (!bookId) return null;
   const bookIdStr = toStringOrNull(bookId);
-  const cached = getCacheItem('progressCache', bookIdStr);
+  const cached = progressCache.get(bookIdStr);
+  if (isProgressExpired(cached)) return null;
   return fromStoredProgress(cached);
 };
 
 export const removeProgressFromCache = (bookId) => {
   if (!bookId) return;
   const bookIdStr = toStringOrNull(bookId);
-  removeCacheItem('progressCache', bookIdStr);
-  const storageKey = getReaderProgressStorageKey(bookIdStr);
-  if (storageKey) removeFromStorage(storageKey, 'localStorage');
+  removeProgressEntry(bookIdStr);
   dispatchProgressCacheUpdated(bookIdStr);
 };
 
-/** 뷰어 재개용 위치 — progressCache SSOT, legacy는 1회 마이그레이션 후 삭제 */
-export const getCachedReaderProgress = (bookKey) => {
-  try {
-    const fromProgress = progressToReaderLocation(getProgressFromCache(bookKey));
-    if (fromProgress) return fromProgress;
-
-    const legacy = getLegacyReaderProgress(bookKey);
-    if (!legacy) return null;
-
-    setProgressToCache({
-      bookId: legacy.bookId ?? bookKey,
-      startLocator: legacy.startLocator,
-      endLocator: legacy.endLocator,
-      locator: legacy.locator ?? legacy.startLocator,
-      eventNum: legacy.eventNum,
-      eventName: legacy.eventName,
-      chapterProgress: legacy.chapterProgress,
-    });
-    const storageKey = getReaderProgressStorageKey(bookKey);
-    if (storageKey) removeFromStorage(storageKey, 'localStorage');
-
-    return progressToReaderLocation(getProgressFromCache(bookKey)) ?? legacy;
-  } catch (error) {
-    errorUtils.logError('getCachedReaderProgress', error, { bookKey });
-    return null;
-  }
-};
-
-/** legacy reader_progress_{id}만 조회 (마이그레이션 폴백용) */
-export const getLegacyReaderProgress = (bookKey) => {
-  try {
-    const storageKey = getReaderProgressStorageKey(bookKey);
-    if (!storageKey) return null;
-
-    const parsed = loadTtlStorage(storageKey, READER_PROGRESS_MAX_AGE_MS, 'localStorage');
-    if (!parsed) return null;
-
-    let chapterIdx = resolveChapterIndex(parsed);
-    const loc = parsed?.startLocator ?? parsed?.locator;
-    if (chapterIdx == null && loc && typeof loc === 'object') {
-      chapterIdx = resolveChapterIndex(loc);
-    }
-
-    if (chapterIdx == null || chapterIdx < 1) {
-      removeFromStorage(storageKey, 'localStorage');
-      return null;
-    }
-
-    return {
-      ...parsed,
-      chapterIdx,
-      eventIdx: Number.isFinite(Number(parsed.eventIdx)) ? Number(parsed.eventIdx) : null,
-      eventNum: Number.isFinite(Number(parsed.eventNum)) ? Number(parsed.eventNum) : null,
-      chapterProgress: Number.isFinite(Number(parsed.chapterProgress))
-        ? clampPercent(parsed.chapterProgress)
-        : null,
-    };
-  } catch (error) {
-    errorUtils.logError('getLegacyReaderProgress', error, { bookKey });
-    return null;
-  }
-};
+/** 뷰어 재개용 위치 — progressCache SSOT */
+export const getCachedReaderProgress = (bookKey) =>
+  progressToReaderLocation(getProgressFromCache(bookKey));
 
 /** 뷰어 위치 저장 — progressCache만 갱신 */
 export const setCachedReaderProgress = (bookKey, payload) => {

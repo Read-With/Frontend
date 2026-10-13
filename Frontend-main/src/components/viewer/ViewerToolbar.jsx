@@ -1,5 +1,4 @@
 import { createElement, useState, useEffect, useMemo, useCallback } from 'react';
-import PropTypes from 'prop-types';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -16,13 +15,10 @@ import {
 } from 'lucide-react';
 import { findViewerModeOption } from '../../utils/viewer/viewerSession';
 import { userViewerPath, userGraphPath } from '../../utils/common/urlUtils';
-import { useClickOutside } from '../../hooks/ui/tooltipHooks';
-import { useIsNarrowViewport, useSessionHint } from '../../hooks/common/hooksShared';
+import { useIsNarrowViewport } from '../../hooks/common/hooksShared';
 import './ViewerToolbar.css';
 
-const MODE_HINT_SESSION_KEY = 'rw-viewer-mode-hint-seen';
 const ICON_SM = 18;
-const MODE_HINT_PANEL_ID = 'viewer-mode-hint-panel';
 
 function ToolbarButton({
   onClick,
@@ -46,14 +42,6 @@ function ToolbarButton({
   );
 }
 
-ToolbarButton.propTypes = {
-  onClick: PropTypes.func,
-  title: PropTypes.string,
-  ariaLabel: PropTypes.string,
-  className: PropTypes.string,
-  children: PropTypes.node,
-};
-
 function IconLabel({ icon: Icon, label, center = false, strokeWidth = 2 }) {
   return (
     <span className={`viewer-toolbar-label${center ? ' is-centered' : ''}`}>
@@ -63,85 +51,43 @@ function IconLabel({ icon: Icon, label, center = false, strokeWidth = 2 }) {
   );
 }
 
-IconLabel.propTypes = {
-  icon: PropTypes.elementType.isRequired,
-  label: PropTypes.node,
-  center: PropTypes.bool,
-  strokeWidth: PropTypes.number,
-};
-
-/** 본문만 ↔ 본문+그래프 토글 + 세션 1회 힌트 */
+/** 본문만 ↔ 본문+그래프 토글 */
 function ScreenModeToggle({
   showGraph,
   onToggleGraph,
   title,
   className,
-  message,
-  hintSeen,
-  open,
-  onDismissHint,
   menu = false,
 }) {
-  const rootRef = useClickOutside(() => {
-    if (open) onDismissHint();
-  }, open);
-
-  const handleClick = () => {
-    onDismissHint();
-    onToggleGraph?.();
-  };
-
   const modeLabel = showGraph ? '본문+그래프' : '본문만';
 
   return (
-    <div className={`viewer-mode-hint${menu ? ' is-menu' : ''}`} ref={rootRef}>
-      <ToolbarButton
-        onClick={handleClick}
-        title={title}
-        ariaLabel={`보기 방식 전환, 현재 ${modeLabel}`}
-        className={`${className}${!hintSeen ? ' has-hint' : ''}`}
-        aria-expanded={open}
-        aria-controls={open ? MODE_HINT_PANEL_ID : undefined}
-      >
-        {menu ? (
-          <>
-            {showGraph ? (
-              <Columns2 size={ICON_SM} strokeWidth={2.5} aria-hidden />
-            ) : (
-              <Maximize2 size={ICON_SM} aria-hidden />
-            )}
-            <span className="viewer-mobile-menu-label">{modeLabel}</span>
-          </>
-        ) : (
-          <IconLabel
-            icon={showGraph ? Columns2 : Maximize2}
-            label={modeLabel}
-            center
-            strokeWidth={showGraph ? 2.5 : 2}
-          />
-        )}
-        {!hintSeen ? <span className="viewer-mode-hint-dot" aria-hidden /> : null}
-      </ToolbarButton>
-      {open ? (
-        <p id={MODE_HINT_PANEL_ID} className="viewer-mode-hint-panel" role="status">
-          {message}
-        </p>
-      ) : null}
-    </div>
+    <ToolbarButton
+      onClick={onToggleGraph}
+      title={title}
+      ariaLabel={`보기 방식 전환, 현재 ${modeLabel}`}
+      className={className}
+    >
+      {menu ? (
+        <>
+          {showGraph ? (
+            <Columns2 size={ICON_SM} strokeWidth={2.5} aria-hidden />
+          ) : (
+            <Maximize2 size={ICON_SM} aria-hidden />
+          )}
+          <span className="viewer-mobile-menu-label">{modeLabel}</span>
+        </>
+      ) : (
+        <IconLabel
+          icon={showGraph ? Columns2 : Maximize2}
+          label={modeLabel}
+          center
+          strokeWidth={showGraph ? 2.5 : 2}
+        />
+      )}
+    </ToolbarButton>
   );
 }
-
-ScreenModeToggle.propTypes = {
-  showGraph: PropTypes.bool,
-  onToggleGraph: PropTypes.func,
-  title: PropTypes.string,
-  className: PropTypes.string,
-  message: PropTypes.string,
-  hintSeen: PropTypes.bool,
-  open: PropTypes.bool,
-  onDismissHint: PropTypes.func.isRequired,
-  menu: PropTypes.bool,
-};
 
 function ViewerToolbar({
   showToolbar,
@@ -164,17 +110,10 @@ function ViewerToolbar({
   const book = location.state?.book;
   const isMobile = useIsNarrowViewport();
   const [showMobileMenu, setShowMobileMenu] = useState(false);
-  const modeHint = useSessionHint(MODE_HINT_SESSION_KEY, { autoOpen: !isMobile });
-  const { hintSeen: modeHintSeen, open: modeHintOpen, setOpen: setModeHintOpen, dismiss: dismissModeHint } = modeHint;
 
   useEffect(() => {
     if (!isMobile) setShowMobileMenu(false);
   }, [isMobile]);
-
-  useEffect(() => {
-    if (!isMobile || modeHintSeen) return;
-    setModeHintOpen(showMobileMenu);
-  }, [isMobile, showMobileMenu, modeHintSeen, setModeHintOpen]);
 
   const viewMode = useMemo(() => findViewerModeOption(showGraph), [showGraph]);
   const ModeIcon = viewMode.Icon;
@@ -234,14 +173,14 @@ function ViewerToolbar({
           <div className="viewer-toolbar-mobile-nav">
             <ToolbarButton
               onClick={onPrev}
-              title="이전 페이지"
+              title="이전 페이지 (←)"
               className="xhtml-toolbar-btn xhtml-toolbar-btn--compact"
             >
               <ArrowLeft size={ICON_SM} aria-hidden />
             </ToolbarButton>
             <ToolbarButton
               onClick={onNext}
-              title="다음 페이지"
+              title="다음 페이지 (→)"
               className="xhtml-toolbar-btn xhtml-toolbar-btn--compact"
             >
               <ArrowRight size={ICON_SM} aria-hidden />
@@ -252,24 +191,23 @@ function ViewerToolbar({
             onClick={toggleMobileMenu}
             title={showMobileMenu ? '메뉴 닫기' : '메뉴 열기'}
             ariaLabel={showMobileMenu ? '메뉴 닫기' : '메뉴 열기'}
-            className={`xhtml-toolbar-btn xhtml-toolbar-btn--compact${!modeHintSeen ? ' has-hint' : ''}`}
+            className="xhtml-toolbar-btn xhtml-toolbar-btn--compact"
           >
             {showMobileMenu ? (
               <X size={ICON_SM} aria-hidden />
             ) : (
               <Menu size={ICON_SM} aria-hidden />
             )}
-            {!modeHintSeen ? <span className="viewer-mode-hint-dot" aria-hidden /> : null}
           </ToolbarButton>
         </div>
       ) : (
         <div className="viewer-toolbar-group-wrap">
           <div className="viewer-toolbar-group-left">
             <div className="toolbar-group toolbar-group--nav">
-              <ToolbarButton onClick={onPrev} title="이전 페이지로 이동" ariaLabel="이전 페이지">
+              <ToolbarButton onClick={onPrev} title="이전 페이지로 이동 (←)" ariaLabel="이전 페이지">
                 <IconLabel icon={ArrowLeft} label="이전" />
               </ToolbarButton>
-              <ToolbarButton onClick={onNext} title="다음 페이지로 이동" ariaLabel="다음 페이지">
+              <ToolbarButton onClick={onNext} title="다음 페이지로 이동 (→)" ariaLabel="다음 페이지">
                 <span className="viewer-toolbar-label">
                   다음
                   <ArrowRight size={ICON_SM} aria-hidden />
@@ -315,14 +253,6 @@ function ViewerToolbar({
                 onToggleGraph={onToggleGraph}
                 title={graphToggleTitle}
                 className={graphToggleClass}
-                message={
-                  showGraph
-                    ? '「본문+그래프」로 읽으면서 관계를 볼 수 있고, 「전체 관계도」는 챕터를 골라 탐색하는 별도 화면입니다.'
-                    : '인물 관계를 함께 보려면 「본문+그래프」를 켜 보세요. 「전체 관계도」는 챕터 탐색용 별도 화면입니다.'
-                }
-                hintSeen={modeHintSeen}
-                open={modeHintOpen}
-                onDismissHint={dismissModeHint}
               />
               <div
                 className={`viewer-view-mode-badge${showGraph ? ' is-graph-on' : ''}`}
@@ -403,14 +333,6 @@ function ViewerToolbar({
               onToggleGraph={onToggleGraph}
               title={graphToggleTitle}
               className={mobileGraphToggleClass}
-              message={
-                showGraph
-                  ? '「본문+그래프」는 분할 보기, 「전체 관계도」는 챕터 탐색용 별도 화면입니다.'
-                  : '인물 관계를 함께 보려면 「본문+그래프」를 켜 보세요. 「전체 관계도」는 챕터 탐색용입니다.'
-              }
-              hintSeen={modeHintSeen}
-              open={modeHintOpen}
-              onDismissHint={dismissModeHint}
             />
             <ToolbarButton
               onClick={runMobileAction(() => {
@@ -442,21 +364,5 @@ function ViewerToolbar({
     </div>
   );
 }
-
-ViewerToolbar.propTypes = {
-  showToolbar: PropTypes.bool.isRequired,
-  currentChapter: PropTypes.number,
-  onPrev: PropTypes.func,
-  onNext: PropTypes.func,
-  isBookmarked: PropTypes.bool,
-  onAddBookmark: PropTypes.func,
-  onToggleBookmarkList: PropTypes.func,
-  onOpenSettings: PropTypes.func,
-  onToggleGraph: PropTypes.func,
-  showGraph: PropTypes.bool,
-  isFromLibrary: PropTypes.bool,
-  previousPage: PropTypes.object,
-  onExitToMypage: PropTypes.func,
-};
 
 export default ViewerToolbar;

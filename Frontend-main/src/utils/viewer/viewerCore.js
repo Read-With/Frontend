@@ -1,9 +1,16 @@
 /** 뷰어 도메인 primitive: eventUtils, book/cache 키, 챕터 제목·라벨 */
 
-import { resolveChapterIndex, toPositiveNumberFromId, toPositiveNumberOrNull } from '../common/valueUtils';
+import {
+  asArray,
+  resolveChapterIndex,
+  toPositiveNumberOrNull,
+  resolveEventId,
+  resolveEventNum,
+  sortEventsByIdx,
+} from '../common/valueUtils';
 
-/** graphCore.isGraphEdgeElement와 동일 — graph ↔ viewer 순환 import 방지 */
-const isGraphEdgeElement = (element) =>
+/** graphCore가 re-export (graph → viewer 단방향 import 유지) */
+export const isGraphEdgeElement = (element) =>
   Boolean(element?.data && element.data.source !== undefined && element.data.target !== undefined);
 
 /** elements → relations 변환 시 공통 옵션 (표시용) */
@@ -12,28 +19,6 @@ export const ELEMENTS_TO_RELATIONS_OPTS = {
   includeCount: false,
   positivityDefault: null,
 };
-
-function nonEmptyId(value) {
-  if (value === undefined || value === null) return null;
-  const s = String(value).trim();
-  return s !== '' ? value : null;
-}
-
-function normalizeEventIdx(event) {
-  if (!event || typeof event !== 'object') return null;
-  return (
-    toPositiveNumberOrNull(event.eventNum) ??
-    toPositiveNumberOrNull(event.eventIdx) ??
-    toPositiveNumberOrNull(event.idx) ??
-    toPositiveNumberFromId(event.eventId) ??
-    toPositiveNumberOrNull(event.resolvedEventIdx) ??
-    toPositiveNumberOrNull(event.originalEventIdx) ??
-    toPositiveNumberOrNull(event.event?.eventNum) ??
-    toPositiveNumberOrNull(event.event?.eventIdx) ??
-    toPositiveNumberOrNull(event.event?.idx) ??
-    toPositiveNumberFromId(event.event?.eventId)
-  );
-}
 
 function chapterNumOf(event) {
   return Number(eventUtils.resolveChapterIdx(event));
@@ -55,6 +40,11 @@ function compareByChapterThenEvent(a, b) {
 }
 
 export const eventUtils = {
+  // id·순번 해석은 valueUtils (manifestCache 공용)
+  resolveEventId,
+  resolveEventNum,
+  sortEventsByIdx,
+
   resolveRelationNodeIds: (relation) => {
     if (!relation || typeof relation !== 'object') return { id1: null, id2: null };
     const id1 = relation.id1 ?? relation.source ?? null;
@@ -63,15 +53,6 @@ export const eventUtils = {
       id1: id1 != null ? String(id1) : null,
       id2: id2 != null ? String(id2) : null,
     };
-  },
-
-  resolveEventId: (event) => {
-    if (!event || typeof event !== 'object') return null;
-    const direct = nonEmptyId(event.eventId ?? event.id);
-    if (direct != null) return direct;
-    const nested = event.event;
-    if (!nested || typeof nested !== 'object') return null;
-    return nonEmptyId(nested.eventId ?? nested.id);
   },
 
   resolveChapterIdx: (event) => {
@@ -86,40 +67,6 @@ export const eventUtils = {
       toPositiveNumberOrNull(resolveChapterIndex(nested)) ??
       toPositiveNumberOrNull(nested.chapter)
     );
-  },
-
-  resolveEventOrdinal(event) {
-    if (!event || typeof event !== 'object') return null;
-    const direct = normalizeEventIdx(event);
-    if (direct) return direct;
-
-    const inner = event.event;
-    if (inner && typeof inner === 'object') {
-      const fromInner = normalizeEventIdx(inner) ?? toPositiveNumberFromId(eventUtils.resolveEventId(inner));
-      if (fromInner) return fromInner;
-    }
-    return toPositiveNumberFromId(eventUtils.resolveEventId(event));
-  },
-
-  resolveEventNum(event, fallback = 0) {
-    if (typeof event === 'number' && Number.isFinite(event) && event > 0) {
-      return Math.trunc(event);
-    }
-    const idx = eventUtils.resolveEventOrdinal(event) ?? 0;
-    return idx > 0 ? idx : fallback;
-  },
-
-  /** eventOrdinal 오름차순 정렬 (없는 값은 뒤로) */
-  sortEventsByIdx(events) {
-    if (!Array.isArray(events)) return [];
-    return [...events].sort((a, b) => {
-      const idxA = eventUtils.resolveEventOrdinal(a);
-      const idxB = eventUtils.resolveEventOrdinal(b);
-      if (idxA == null && idxB == null) return 0;
-      if (idxA == null) return 1;
-      if (idxB == null) return -1;
-      return idxA - idxB;
-    });
   },
 
   convertElementsToRelations: (elements, options = {}) => {
@@ -158,35 +105,45 @@ export const eventUtils = {
     return events.find((e) => eventUtils.resolveEventNum(e) === eventIdx) || null;
   },
 
-  updateEventsInState: (prevEvents, newEvent, targetChapter) => {
-    const previous = Array.isArray(prevEvents) ? prevEvents : [];
+  updateEventsInState: (prevEvents, newEvent, targetChapter) =>
+    eventUtils.mergeEventsInState(prevEvents, [newEvent], targetChapter),
+
+  /** 같은 순번은 병합, 없으면 추가 — 여러 건을 한 번에 (건별 filter·정렬 반복 없음) */
+  mergeEventsInState: (prevEvents, newEvents, targetChapter) => {
+    const previous = asArray(prevEvents);
     const otherChapterEvents = previous.filter(
       (evt) => chapterNumOf(evt) !== targetChapter
     );
-    const currentChapterEvents = previous.filter(
-      (evt) => chapterNumOf(evt) === targetChapter
-    );
+    // 정렬은 마지막 1회 — 안정 정렬이라 같은 순번 중 "처음 것"은 원래 순서 기준으로 동일
+    const current = previous.filter((evt) => chapterNumOf(evt) === targetChapter);
 
-    const targetIdx = eventUtils.resolveEventNum(newEvent);
-    const existingIdx = currentChapterEvents.findIndex(
-      (evt) => eventUtils.resolveEventNum(evt) === targetIdx
-    );
+    const indexByNum = new Map();
+    current.forEach((evt, idx) => {
+      const num = eventUtils.resolveEventNum(evt);
+      if (!indexByNum.has(num)) indexByNum.set(num, idx);
+    });
+    for (const newEvent of asArray(newEvents)) {
+      const num = eventUtils.resolveEventNum(newEvent);
+      const existingIdx = indexByNum.get(num);
+      if (existingIdx != null) {
+        current[existingIdx] = { ...current[existingIdx], ...newEvent };
+      } else {
+        indexByNum.set(num, current.length);
+        current.push(newEvent);
+      }
+    }
 
-    const updatedCurrent =
-      existingIdx >= 0
-        ? currentChapterEvents.map((evt, idx) =>
-            idx === existingIdx ? { ...evt, ...newEvent } : evt
-          )
-        : [...currentChapterEvents, newEvent];
-
-    updatedCurrent.sort(compareByEventNum);
-    return [...otherChapterEvents, ...updatedCurrent].sort(compareByChapterThenEvent);
+    return [...otherChapterEvents, ...current].sort(compareByChapterThenEvent);
   },
 };
 
-export function resolveServerBookId(book) {
-  if (!book) return null;
-  return toPositiveNumberOrNull(book._bookId) ?? toPositiveNumberOrNull(book.id);
+/** book의 서버 bookId, 없으면 fallback(라우트 id 등)을 양의 정수로 */
+export function resolveServerBookId(book, fallback = null) {
+  return (
+    toPositiveNumberOrNull(book?._bookId) ??
+    toPositiveNumberOrNull(book?.id) ??
+    toPositiveNumberOrNull(fallback)
+  );
 }
 
 /** 서버 bookId 우선, 없으면 route·book 필드로 캐시/로더 키 문자열 */
@@ -231,37 +188,35 @@ function makeLoadedBook(base, bookId, resolvedBookId) {
   });
 }
 
-export const bookUtils = {
-  createBookObject: ({ stateBook, matchedServerBook, serverBook, bookId, loadingServerBook }) => {
-    if (matchedServerBook && typeof matchedServerBook.id === 'number') {
-      return makeLoadedBook(matchedServerBook, bookId, matchedServerBook.id);
+export function createBookObject({ stateBook, matchedServerBook, serverBook, bookId, loadingServerBook }) {
+  if (matchedServerBook && typeof matchedServerBook.id === 'number') {
+    return makeLoadedBook(matchedServerBook, bookId, matchedServerBook.id);
+  }
+
+  if (stateBook) {
+    if (serverBook && typeof serverBook.id === 'number') {
+      return makeLoadedBook({ ...stateBook, ...serverBook }, bookId, serverBook.id);
     }
 
-    if (stateBook) {
-      if (serverBook && typeof serverBook.id === 'number') {
-        return makeLoadedBook({ ...stateBook, ...serverBook }, bookId, serverBook.id);
-      }
+    const { xhtmlFile: _xf, xhtmlArrayBuffer: _xb, ...stateRest } = stateBook;
+    return makeLoadedBook(stateRest, bookId, stateBook._bookId || stateBook.id || bookId);
+  }
 
-      const { xhtmlFile: _xf, xhtmlArrayBuffer: _xb, ...stateRest } = stateBook;
-      return makeLoadedBook(stateRest, bookId, stateBook._bookId || stateBook.id || bookId);
-    }
+  if (serverBook) {
+    return makeLoadedBook(serverBook, bookId, serverBook.id);
+  }
 
-    if (serverBook) {
-      return makeLoadedBook(serverBook, bookId, serverBook.id);
-    }
-
-    const numericBookId = toPositiveNumberOrNull(bookId);
-    const resolvedId = loadingServerBook ? null : numericBookId;
-    return {
-      title: loadingServerBook ? '로딩 중...' : `Book ${bookId}`,
-      filename: bookId,
-      id: resolvedId,
-      _needsLoad: true,
-      _bookId: resolvedId ?? bookId,
-      xhtmlPath: undefined,
-    };
-  },
-};
+  const numericBookId = toPositiveNumberOrNull(bookId);
+  const resolvedId = loadingServerBook ? null : numericBookId;
+  return {
+    title: loadingServerBook ? '로딩 중...' : `Book ${bookId}`,
+    filename: bookId,
+    id: resolvedId,
+    _needsLoad: true,
+    _bookId: resolvedId ?? bookId,
+    xhtmlPath: undefined,
+  };
+}
 
 /* ─── 챕터 제목 해석·표시 (from chapterTitle) ─── */
 
@@ -299,12 +254,12 @@ export function formatFallbackChapterLabel(idx) {
   return Number.isFinite(n) && n >= 1 ? `제${Math.trunc(n)}장` : '제—장';
 }
 
-export function isFallbackChapterLabel(label) {
+function isFallbackChapterLabel(label) {
   return /^제[\d—]+장$/.test(toComparable(label));
 }
 
 /** spineHref → 사람이 읽을 수 있는 파일명 기반 제목 */
-export function titleFromSpineHref(href) {
+function titleFromSpineHref(href) {
   const raw = String(href ?? '').trim();
   if (!raw) return '';
   let path = raw;
@@ -334,7 +289,7 @@ export function titleFromSpineHref(href) {
  * 매니페스트 챕터에서 원제 후보를 고른다.
  * 우선순위: title → chapterTitle → nav/toc → label → spine 파일명
  */
-export function pickChapterRawTitle(chapter) {
+function pickChapterRawTitle(chapter) {
   if (!chapter || typeof chapter !== 'object') {
     return { raw: '', source: null };
   }
@@ -363,7 +318,7 @@ function stripLeadingSep(text) {
 }
 
 /** 목록 라벨용: 책 제목을 전역 제거(prefix만이 아님) */
-export function stripBookTitleFromText(label, bookTitle) {
+function stripBookTitleFromText(label, bookTitle) {
   let text = toComparable(label);
   const book = toComparable(bookTitle);
   if (!text) return '';
@@ -387,7 +342,7 @@ export function stripBookTitleFromText(label, bookTitle) {
  * - 비면 책 제목만 제거한 중간값 → 그래도 비고 raw≠책제목이면 raw 유지
  * - raw가 책 제목과 동일하면 '' (collapsed)
  */
-export function cleanChapterListLabel(rawTitle, bookTitle) {
+function cleanChapterListLabel(rawTitle, bookTitle) {
   const raw = toComparable(rawTitle);
   if (!raw) return '';
 
@@ -497,36 +452,16 @@ export function resolveChapterTitleMeta(chapter, bookTitle = '', chapterIdx = nu
     };
   }
 
+  // cleaned가 비면 collapsed: 원문을 약하게만 다듬어 노출
   const cleaned = cleanChapterListLabel(raw, bookTitle);
-  if (cleaned) {
-    return {
-      chapter: chapterNum,
-      raw,
-      display: cleaned,
-      status: 'ok',
-      source,
-      searchTexts: uniqueSearchTexts([
-        cleaned,
-        raw,
-        fallback,
-        `챕터 ${idxStr}`,
-        `chapter ${idxStr}`,
-        idxStr,
-      ]),
-      tooltip: `챕터 ${idxStr} — ${raw}`,
-    };
-  }
-
-  // raw는 있으나 정리 후 의미 있는 표시명이 없음 → collapsed: 원문을 약하게만 다듬어 노출
-  const conservative = collapseWhitespace(raw);
-  const display = conservative && normalizeLabel(conservative) !== normalizeLabel(bookTitle)
-    ? conservative
-    : fallback;
+  const conservative = cleaned ? '' : collapseWhitespace(raw);
+  const display = cleaned
+    || (conservative && normalizeLabel(conservative) !== normalizeLabel(bookTitle) ? conservative : fallback);
   return {
     chapter: chapterNum,
     raw,
     display,
-    status: 'collapsed',
+    status: cleaned ? 'ok' : 'collapsed',
     source,
     searchTexts: uniqueSearchTexts([
       display,
@@ -552,16 +487,6 @@ function uniqueSearchTexts(values) {
     out.push(text);
   }
   return out;
-}
-
-/** 상단바: 제N장 · 이름 (이름 없으면 제N장) */
-export function formatChapterOrderAndName(orderOneBased, chapterTitle) {
-  const fallback = formatFallbackChapterLabel(orderOneBased);
-  const name = collapseWhitespace(String(chapterTitle ?? ''));
-  if (!name || isFallbackChapterLabel(name) || normalizeLabel(name) === normalizeLabel(fallback)) {
-    return fallback;
-  }
-  return `${fallback} · ${name}`;
 }
 
 /** 단순 챕터 번호 라벨 (`Chapter 3` / `Chapter ?`) */

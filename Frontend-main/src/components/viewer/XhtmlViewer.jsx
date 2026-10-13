@@ -8,8 +8,7 @@ import {
   useCallback,
   useMemo,
 } from 'react';
-import PropTypes from 'prop-types';
-import { errorUtils } from '../../utils/common/urlUtils';
+import { errorUtils } from '../../utils/common/valueUtils';
 import {
   absoluteOffsetFromReadingProgressPercent,
   locatorFromBookAbsoluteOffset,
@@ -18,9 +17,9 @@ import {
 import {
   toReadingLocatorKey,
   defaultSettings,
+  viewerFontStack,
 } from '../../utils/viewer/viewerSession';
-import { resolveServerBookIdOrFallback } from '../../hooks/common/hooksShared';
-import { resolveViewerBookKey } from '../../utils/viewer/viewerCore';
+import { resolveServerBookId, resolveViewerBookKey } from '../../utils/viewer/viewerCore';
 import {
   collectBlockEntries,
   computeLineBoundsFromRuler,
@@ -31,7 +30,6 @@ import {
   resolvePageIndexFromLocator,
   resolveViewportLocatorEmit,
   loadCachedXhtmlContent,
-  XHTML_CACHE_INVALIDATED_EVENT,
 } from '../../utils/viewer/viewerLocator';
 import './XhtmlViewer.css';
 
@@ -51,7 +49,7 @@ const XhtmlViewer = forwardRef(
       manifestReady = true,
       /** resume 점프 전 본문 깜빡임 방지(레이아웃·ruler는 유지) */
       suppressViewport = false,
-      suppressMessage = '로딩 중...',
+      suppressMessage = '로딩 중…',
       onToggleChrome = null,
     },
     ref
@@ -67,7 +65,6 @@ const XhtmlViewer = forwardRef(
     const [pageHeight, setPageHeight] = useState(0);
     const [contentHeight, setContentHeight] = useState(0);
     const [currentPageIndex, setCurrentPageIndex] = useState(0);
-    const [reloadNonce, setReloadNonce] = useState(0);
     const touchStartX = useRef(0);
     const touchStartY = useRef(0);
     const suppressClickRef = useRef(false);
@@ -115,10 +112,15 @@ const XhtmlViewer = forwardRef(
 
     const currentSnap = useMemo(
       () => getSnappedOffsetAndHeight(safePageIndex, pageHeight || 1),
+      // lineBoundsVersion: getSnappedOffsetAndHeight가 ref로 읽는 줄 경계가 바뀌면 재계산
+      // eslint-disable-next-line react-hooks/exhaustive-deps
       [getSnappedOffsetAndHeight, safePageIndex, pageHeight, lineBoundsVersion]
     );
 
     const contentHtml = useMemo(() => (xhtmlContent ? { __html: xhtmlContent.bodyHTML } : { __html: '' }), [xhtmlContent]);
+
+    // 본문 DOM은 xhtmlContent가 바뀔 때만 교체됨 — 페이지마다 블록 전체를 다시 querySelectorAll 하지 않음
+    const blockEntriesCacheRef = useRef({ root: null, content: null, entries: [] });
     const viewportStyle = useMemo(
       () => ({ height: currentSnap.visibleHeight || '100%', overflow: 'hidden' }),
       [currentSnap.visibleHeight]
@@ -131,7 +133,7 @@ const XhtmlViewer = forwardRef(
     const bid = useMemo(() => resolveViewerBookKey(book, bookKey), [book, bookKey]);
 
     const manifest = useMemo(() => {
-      const cacheId = resolveServerBookIdOrFallback(book, bid);
+      const cacheId = resolveServerBookId(book, bid);
       if (!cacheId) return null;
       return getManifestFromCache(cacheId);
     }, [book, bid]);
@@ -190,16 +192,6 @@ const XhtmlViewer = forwardRef(
     );
 
     useEffect(() => {
-      if (!bid || typeof window === 'undefined') return undefined;
-      const onInvalidate = (e) => {
-        if (String(e?.detail?.bookId) !== String(bid)) return;
-        setReloadNonce((n) => n + 1);
-      };
-      window.addEventListener(XHTML_CACHE_INVALIDATED_EVENT, onInvalidate);
-      return () => window.removeEventListener(XHTML_CACHE_INVALIDATED_EVENT, onInvalidate);
-    }, [bid]);
-
-    useEffect(() => {
       let cancelled = false;
       const load = async () => {
         if (!bid) {
@@ -233,7 +225,7 @@ const XhtmlViewer = forwardRef(
       };
       load();
       return () => { cancelled = true; };
-    }, [bid, manifestReady, reloadNonce]);
+    }, [bid, manifestReady]);
 
     useEffect(() => {
       const container = containerRef.current;
@@ -286,8 +278,17 @@ const XhtmlViewer = forwardRef(
       if (!xhtmlContent || !contentRef.current || !viewportRef.current) return;
       if (!layoutReady) return;
 
+      const cache = blockEntriesCacheRef.current;
+      if (cache.root !== contentRef.current || cache.content !== xhtmlContent) {
+        blockEntriesCacheRef.current = {
+          root: contentRef.current,
+          content: xhtmlContent,
+          entries: collectBlockEntries(contentRef.current),
+        };
+      }
+
       const result = resolveViewportLocatorEmit({
-        blockEntries: collectBlockEntries(contentRef.current),
+        blockEntries: blockEntriesCacheRef.current.entries,
         viewportRect: viewportRef.current.getBoundingClientRect(),
         rulerRoot: rulerRef.current,
         manifest,
@@ -478,7 +479,7 @@ const XhtmlViewer = forwardRef(
     if (loading) {
       return (
         <div className="xhtml-viewer-status" role="status" aria-live="polite">
-          로딩 중...
+          로딩 중…
         </div>
       );
     }
@@ -517,7 +518,7 @@ const XhtmlViewer = forwardRef(
             padding-bottom: ${contentPadding.paddingBottom}px;
             font-size: ${baseFontSize}%;
             line-height: ${lineHeight};
-            font-family: ${settings?.fontFamily || 'Noto Serif KR'}, 'Noto Serif', Georgia, serif;
+            font-family: ${viewerFontStack(settings?.fontFamily)};
           }
         `}</style>
         <div ref={rulerRef} className="xhtml-viewer-ruler xhtml-viewer-content" dangerouslySetInnerHTML={contentHtml} aria-hidden />
@@ -541,22 +542,5 @@ const XhtmlViewer = forwardRef(
 );
 
 XhtmlViewer.displayName = 'XhtmlViewer';
-XhtmlViewer.propTypes = {
-  book: PropTypes.object,
-  bookKey: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-  onCurrentPageChange: PropTypes.func,
-  onTotalPagesChange: PropTypes.func,
-  onCurrentLineChange: PropTypes.func,
-  settings: PropTypes.shape({
-    fontSize: PropTypes.number,
-    lineHeight: PropTypes.number,
-    fontFamily: PropTypes.string,
-    margin: PropTypes.number,
-  }),
-  manifestReady: PropTypes.bool,
-  suppressViewport: PropTypes.bool,
-  suppressMessage: PropTypes.string,
-  onToggleChrome: PropTypes.func,
-};
 
 export default XhtmlViewer;

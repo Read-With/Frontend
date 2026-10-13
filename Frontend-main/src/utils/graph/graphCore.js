@@ -1,20 +1,17 @@
 /** 그래프 도메인 primitive, 관계 스키마, UI 상수, 챕터 라벨 */
 
 import {
-  resolveLastEventIdxForChapter,
-  getLastEventIdxFromChapterData,
   getChapterData,
   getManifestFromCache,
 } from '../common/cache/manifestCache.js';
-import { getProgressFromCache } from '../common/cache/progressCache.js';
 import {
-  toPositiveNumberOrNull,
   toPositiveNumberFromId,
-  toFiniteNumber,
   toNumberOrNull,
+  toPositiveNumberOrNull,
   toTrimmedStringOrNull,
   asArray,
   clampPositivity,
+  compareLocale,
 } from '../common/valueUtils';
 import {
   formatFallbackChapterLabel,
@@ -22,28 +19,17 @@ import {
   stripSharedListPrefix,
   stripChapterOrdinalPrefix,
   eventUtils,
+  isGraphEdgeElement,
 } from '../viewer/viewerCore.js';
+import { removeKeys } from '../common/cache/cacheManager';
 
 /* ─── 요소 ID · 타입 판별 ─── */
 
-const API_PREFIX = 'api:';
-
 export const directedEdgeElementId = (fromId, toId) => `${String(fromId)}->${String(toId)}`;
-
-export const extractApiBookId = (folderKeyOrFilename) => {
-  if (!folderKeyOrFilename) return null;
-  if (typeof folderKeyOrFilename === 'number') {
-    return toPositiveNumberOrNull(folderKeyOrFilename);
-  }
-  const key = String(folderKeyOrFilename).trim();
-  if (!key) return null;
-  return toPositiveNumberOrNull(key.startsWith(API_PREFIX) ? key.slice(API_PREFIX.length) : key);
-};
 
 export const normalizeElementId = (element) => element?.id ?? element?.data?.id ?? null;
 
-export const isGraphEdgeElement = (element) =>
-  Boolean(element?.data && element.data.source !== undefined && element.data.target !== undefined);
+export { isGraphEdgeElement };
 
 export const isGraphNodeElement = (element) =>
   Boolean(element?.data && element.data.id !== undefined && !isGraphEdgeElement(element));
@@ -58,7 +44,7 @@ export function undirectedPairKey(s, t) {
 export const sortElementsByDataId = (elements) => {
   if (!Array.isArray(elements)) return [];
   return [...elements].sort((a, b) =>
-    String(a?.data?.id ?? '').localeCompare(String(b?.data?.id ?? ''))
+    compareLocale(String(a?.data?.id ?? ''), String(b?.data?.id ?? ''))
   );
 };
 
@@ -76,10 +62,6 @@ export const uniqueStrings = (values, { caseInsensitive = false } = {}) => {
 };
 
 /** uniqueStrings → 정렬 후 join (태그 fingerprint 등) */
-export function sortedUniqueJoin(values, sep = '\x1e', options) {
-  return uniqueStrings(values, options).sort().join(sep);
-}
-
 export function normalizeRelationArray(relation, label = '') {
   const values = Array.isArray(relation)
     ? relation
@@ -203,10 +185,18 @@ export function appendRelationLabelHistory(prevHistory, labels, eventId, positiv
   const pos = Number.isFinite(Number(positivity)) ? Number(positivity) : 0;
   const ordinal = toPositiveNumberFromId(eventId);
 
+  // 소문자 → 원래 key (먼저 들어온 key 우선). 라벨마다 Object.keys 전체를 훑지 않도록 1회 구성
+  let keyByLower = null;
   const findExistingKey = (text) => {
     if (Object.prototype.hasOwnProperty.call(next, text)) return text;
-    const lower = text.toLowerCase();
-    return Object.keys(next).find((k) => k.toLowerCase() === lower) ?? null;
+    if (!keyByLower) {
+      keyByLower = new Map();
+      for (const k of Object.keys(next)) {
+        const lk = k.toLowerCase();
+        if (!keyByLower.has(lk)) keyByLower.set(lk, k);
+      }
+    }
+    return keyByLower.get(text.toLowerCase()) ?? null;
   };
 
   for (const raw of asArray(labels)) {
@@ -214,6 +204,8 @@ export function appendRelationLabelHistory(prevHistory, labels, eventId, positiv
     if (!text) continue;
     const existingKey = findExistingKey(text);
     if (!existingKey) {
+      const lower = text.toLowerCase();
+      if (keyByLower && !keyByLower.has(lower)) keyByLower.set(lower, text);
       next[text] = {
         text,
         firstEventId: eventId,
@@ -316,35 +308,6 @@ export function buildRelationTagDisplayItems({
   });
 }
 
-/** 챕터 마지막 이벤트 인덱스 (manifest 힌트, UI·범위용). 없으면 null — 가짜 1 금지 */
-export const calculateLastEventForChapter = ({
-  manifestChapters,
-  manifestBookId,
-  chapter,
-}) => {
-  if (manifestBookId != null && Number.isFinite(Number(manifestBookId)) && Number(manifestBookId) > 0) {
-    const manifestHint =
-      Array.isArray(manifestChapters) && manifestChapters.length > 0
-        ? { chapters: manifestChapters }
-        : undefined;
-    const fromManifest = resolveLastEventIdxForChapter(manifestBookId, chapter, manifestHint);
-    if (fromManifest != null) {
-      return fromManifest;
-    }
-  }
-
-  if (!manifestChapters?.length) return null;
-
-  const chapterNum = Number(chapter);
-  const chapterInfo = manifestChapters.find(
-    (ch) => ch && typeof ch === 'object' && Number(ch.idx) === chapterNum
-  );
-
-  if (!chapterInfo) return null;
-
-  return getLastEventIdxFromChapterData(chapterInfo);
-};
-
 export const GRAPH_LAYOUT_CONSTANTS = {
   SIDEBAR: { OPEN_WIDTH: 280, CLOSED_WIDTH: 56 },
   /** .graph-page-topbar(2.75rem) + 여백 — 관계 분석 모달 top 기준 */
@@ -434,8 +397,8 @@ export function normalizeRelation(raw) {
   }
 
   try {
-    const id1 = toFiniteNumber(raw.id1);
-    const id2 = toFiniteNumber(raw.id2);
+    const id1 = toNumberOrNull(raw.id1);
+    const id2 = toNumberOrNull(raw.id2);
 
     if (
       !Number.isFinite(id1) ||
@@ -483,10 +446,10 @@ export function isSamePair(rel, a, b) {
     return false;
   }
 
-  const r1 = toFiniteNumber(rel.id1);
-  const r2 = toFiniteNumber(rel.id2);
-  const s1 = toFiniteNumber(a);
-  const s2 = toFiniteNumber(b);
+  const r1 = toNumberOrNull(rel.id1);
+  const r2 = toNumberOrNull(rel.id2);
+  const s1 = toNumberOrNull(a);
+  const s2 = toNumberOrNull(b);
 
   if (
     !Number.isFinite(r1) ||
@@ -529,7 +492,7 @@ export function relationEventMetaPassthrough(raw) {
 
 /** manifest / structure / delta 이벤트에서 eventId 추출 */
 export function resolveManifestEventId(ev) {
-  return toTrimmedStringOrNull(eventUtils.resolveEventId(ev) ?? ev?.eventId ?? ev?.id);
+  return toTrimmedStringOrNull(eventUtils.resolveEventId(ev));
 }
 
 export function processRelations(relations) {
@@ -541,63 +504,11 @@ export function processRelations(relations) {
     return relations
       .map((raw) => ({ raw, norm: normalizeRelation(raw) }))
       .filter(({ norm }) => norm != null)
-      .map(({ raw, norm: r }) => ({
-        id1: r.id1,
-        id2: r.id2,
-        positivity: r.positivity,
-        relation: r.relation,
-        weight: r.weight,
-        count: r.count,
-        latestLabels: r.latestLabels,
-        labelHistory: r.labelHistory,
-        latestEventId: r.latestEventId,
-        label: r.label,
-        ...relationEventMetaPassthrough(raw),
-      }));
+      .map(({ raw, norm }) => ({ ...norm, ...relationEventMetaPassthrough(raw) }));
   } catch {
     return [];
   }
 }
-
-export const extractRadarChartData = (nodeId, relations, elements, maxDisplay = 8) => {
-  if (!nodeId || !relations || !Array.isArray(relations)) return [];
-
-  const targetNodeId = String(nodeId);
-  const radarDataMap = new Map();
-
-  relations.forEach((rel) => {
-    const id1 = String(rel.id1);
-    const id2 = String(rel.id2);
-    let connectedNodeId = null;
-    if (id1 === targetNodeId) connectedNodeId = id2;
-    else if (id2 === targetNodeId) connectedNodeId = id1;
-
-    if (!connectedNodeId) return;
-
-    const existingData = radarDataMap.get(connectedNodeId);
-    const positivity = toFiniteNumber(rel.positivity);
-    if (!existingData || Math.abs(positivity) > Math.abs(existingData.positivity)) {
-      const connectedNode = elements.find(
-        (el) => isGraphNodeElement(el) && String(el.data.id) === connectedNodeId
-      );
-      if (connectedNode && Number.isFinite(positivity)) {
-        const name =
-          connectedNode.data.label || connectedNode.data.common_name || `인물 ${connectedNodeId}`;
-        radarDataMap.set(connectedNodeId, {
-          id: connectedNodeId,
-          name,
-          positivity,
-          normalizedValue: ((positivity + 1) / 2) * 100,
-          relationTags: rel.relation || [],
-        });
-      }
-    }
-  });
-
-  const radarData = Array.from(radarDataMap.values());
-  radarData.sort((a, b) => Math.abs(b.positivity) - Math.abs(a.positivity));
-  return radarData.slice(0, maxDisplay);
-};
 
 /* ─── 인물 표시 이름 (from graphCharacterNames) ─── */
 
@@ -663,12 +574,17 @@ export function rememberCharacterDisplayName(bookId, characterId, displayName) {
   map.set(id, String(displayName).trim());
 }
 
-function rememberCharacterDisplayNames(bookId, characters) {
+/** id·표시 이름이 모두 있는 인물만 fn(id, name) 호출 */
+function forEachCharacterName(characters, fn) {
   asArray(characters).forEach((char) => {
     const id = extractCharacterId(char);
     const name = pickCharacterDisplayName(char);
-    if (id && name) rememberCharacterDisplayName(bookId, id, name);
+    if (id && name) fn(id, name);
   });
+}
+
+function rememberCharacterDisplayNames(bookId, characters) {
+  forEachCharacterName(characters, (id, name) => rememberCharacterDisplayName(bookId, id, name));
 }
 
 export function lookupRememberedCharacterDisplayName(bookId, characterId) {
@@ -677,16 +593,26 @@ export function lookupRememberedCharacterDisplayName(bookId, characterId) {
   return getMemoryMap(bookId)?.get(id) || '';
 }
 
-export function buildManifestCharacterNameLookup(bookId) {
-  const lookup = new Map();
-  if (bookId == null || bookId === '') return lookup;
-  const characters = getManifestFromCache(bookId)?.characters;
-  asArray(characters).forEach((char) => {
-    const id = extractCharacterId(char);
-    const name = pickCharacterDisplayName(char);
-    if (id && name) lookup.set(id, name);
-  });
+// manifest 객체는 캐시 후 변경하지 않음 — 객체 identity 기준 메모 (인물·요소마다 Map 재생성 방지)
+const manifestNameLookupMemo = new WeakMap();
+
+/** 읽기 전용 공유 Map (없으면 null) — 변경 금지 */
+function getManifestCharacterNameLookup(bookId) {
+  if (bookId == null || bookId === '') return null;
+  const manifest = getManifestFromCache(bookId);
+  if (!manifest || typeof manifest !== 'object') return null;
+  let lookup = manifestNameLookupMemo.get(manifest);
+  if (!lookup) {
+    lookup = new Map();
+    forEachCharacterName(manifest.characters, (id, name) => lookup.set(id, name));
+    manifestNameLookupMemo.set(manifest, lookup);
+  }
   return lookup;
+}
+
+/** 호출부가 변경해도 되는 복사본 */
+export function buildManifestCharacterNameLookup(bookId) {
+  return new Map(getManifestCharacterNameLookup(bookId));
 }
 
 /** payload·manifest·세션 메모리를 합쳐 ID→이름 룩업 생성 */
@@ -698,11 +624,7 @@ function buildCharacterDisplayNameLookup(bookId, characters = null) {
       if (!lookup.has(id) && isUsableCharacterDisplayName(name, id)) lookup.set(id, name);
     });
   }
-  asArray(characters).forEach((char) => {
-    const id = extractCharacterId(char);
-    const name = pickCharacterDisplayName(char);
-    if (id && name) lookup.set(id, name);
-  });
+  forEachCharacterName(characters, (id, name) => lookup.set(id, name));
   return lookup;
 }
 
@@ -721,7 +643,7 @@ function resolveCharacterDisplayName(characterOrId, { bookId, lookup = null } = 
   const fromLookup = lookup?.get(id);
   if (isUsableCharacterDisplayName(fromLookup, id)) return fromLookup;
 
-  const fromManifest = buildManifestCharacterNameLookup(bookId).get(id);
+  const fromManifest = getManifestCharacterNameLookup(bookId)?.get(id);
   if (fromManifest) return fromManifest;
 
   return lookupRememberedCharacterDisplayName(bookId, id);
@@ -809,40 +731,9 @@ export function enrichGraphPayload(payload, bookId) {
 
 /** 상단 메타·스크러버 공통: `Event 3` / `Event ?` */
 export function formatGraphEventMetaLabel(eventNum, { unknown = '?' } = {}) {
-  const n = Number(eventNum);
-  if (Number.isFinite(n) && n > 0) return `Event ${Math.trunc(n)}`;
+  const n = toPositiveNumberOrNull(eventNum);
+  if (n) return `Event ${Math.trunc(n)}`;
   return `Event ${unknown}`;
-}
-
-/** 챕터 manifest events → 정렬된 eventIdx 목록 */
-export function listChapterEventIndices(bookId, chapter, manifestHint) {
-  if (bookId == null) return [];
-  const ch = getChapterData(bookId, chapter, manifestHint);
-  const events = Array.isArray(ch?.events) ? ch.events : [];
-  const nums = [];
-  const seen = new Set();
-  for (const ev of events) {
-    const n = eventUtils.resolveEventNum(ev);
-    if (n > 0 && !seen.has(n)) {
-      seen.add(n);
-      nums.push(n);
-    }
-  }
-  nums.sort((a, b) => a - b);
-  return nums;
-}
-
-/** 진도 캐시 기준, 해당 챕터의 읽기 중 사건 번호 */
-export function resolveReadingEventNumForChapter(bookId, chapter) {
-  if (bookId == null) return null;
-  const progress = getProgressFromCache(bookId);
-  if (!progress) return null;
-  const ch = Number(progress.chapterIdx);
-  const ev = Number(progress.eventNum);
-  if (ch === Number(chapter) && Number.isFinite(ev) && ev > 0) {
-    return Math.trunc(ev);
-  }
-  return null;
 }
 
 /* ─── 노드 툴팁 · 관계 분석 연결 상태 ─── */
@@ -876,14 +767,14 @@ export const NODE_TOOLTIP_VIEW_STATUS = Object.freeze({
   PENDING: 'pending',
 });
 
-export function normalizeMatchName(value) {
+function normalizeMatchName(value) {
   return String(value ?? '')
     .trim()
     .toLowerCase()
     .replace(/\s+/g, ' ');
 }
 
-export function collectNodeMatchNames(node) {
+function collectNodeMatchNames(node) {
   const names = [];
   const push = (v) => {
     if (typeof v !== 'string') return;
@@ -901,7 +792,7 @@ export function collectNodeMatchNames(node) {
 }
 
 /** id/이름 비교용 문자열 */
-export function normalizeGraphIdString(value) {
+function normalizeGraphIdString(value) {
   if (value == null) return '';
   if (typeof value === 'number') {
     return Number.isFinite(value) ? String(Math.trunc(value)) : '';
@@ -964,7 +855,7 @@ export function collectUndirectedRelations(rawRelations, targetNodeId = null) {
     const key = undirectedPairKey(id1, id2);
     if (relationMap.has(key)) return;
 
-    const positivityRaw = toFiniteNumber(rel.positivity);
+    const positivityRaw = toNumberOrNull(rel.positivity);
     relationMap.set(key, {
       id1,
       id2,
@@ -998,22 +889,9 @@ export function buildProcessedNode(data) {
 
 const POV_SPOILER_SESSION_KEY = 'readwith:pov-spoiler-unlocked';
 
-/** @deprecated 세션 유지 안 함 — 선택 해제 후 안내 문구가 다시 보이도록 false 고정 */
-export function readPovSpoilerUnlocked() {
-  return false;
-}
-
-/** @deprecated 세션에 저장하지 않음 */
-export function unlockPovSpoilerSession() {
-  clearPovSpoilerSession();
-}
-
+// ponytail: 이 키를 쓰는 코드가 없음 — 이전 버전 잔여 세션 정리용. 배포 몇 주 뒤 함수째 삭제
 export function clearPovSpoilerSession() {
-  try {
-    sessionStorage.removeItem(POV_SPOILER_SESSION_KEY);
-  } catch {
-    /* ignore */
-  }
+  removeKeys('sessionStorage', POV_SPOILER_SESSION_KEY);
 }
 
 /**

@@ -1,6 +1,7 @@
 /** 인증·토큰 갱신·authenticatedFetch */
 
-import { getApiBaseUrl, errorUtils } from '../common/urlUtils';
+import { getApiBaseUrl } from '../common/urlUtils';
+import { errorUtils, sleep } from '../common/valueUtils';
 import {
   getStoredAccessToken,
   setStoredAccessToken,
@@ -16,12 +17,6 @@ export const makeSilentError = (code, message) => ({
   message,
   result: null,
 });
-
-export const isForbiddenError = (error) =>
-  Number(error?.status) === 403 || Number(error?.statusCode) === 403;
-
-export const isNotFoundError = (error) =>
-  Number(error?.status) === 404 || Number(error?.statusCode) === 404;
 
 export const SOFT_FAIL_403_404 = [403, 404];
 
@@ -230,7 +225,6 @@ async function authorizedFetch(url, options = {}, retryCount = 0) {
 const API_REQUEST_MAX_ATTEMPTS = 3;
 const API_REQUEST_RETRY_BASE_MS = 400;
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const isNetworkFetchError = (error) => {
   if (!error || error.status === 401) return false;

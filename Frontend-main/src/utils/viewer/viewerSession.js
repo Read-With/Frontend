@@ -2,27 +2,25 @@
 
 import { PanelsTopLeft, FileText } from 'lucide-react';
 import { toast } from 'react-toastify';
-import { errorUtils } from '../common/urlUtils';
-import { storageUtils } from '../common/cache/cacheManager';
+import { loadFromStorage, saveToStorage, readRaw, writeRaw } from '../common/cache/cacheManager';
 import {
   toLocator,
   progressResultToViewerAnchor,
   locatorsEqual,
-  resolveProgressLocator,
   toViewerResumeAnchor,
   anchorToLocators,
-  clampPercent,
   resolveChapterIndex,
   toPositiveNumberOrNull,
+  toNumberOrNull,
+  errorUtils,
 } from '../common/valueUtils';
 import {
   findManifestEventInChapter,
   getLastManifestEventInChapter,
-  resolveLocatorToEventParams as resolveManifestLocatorToEventParams,
+  resolveLocatorToEventParams,
   resolveProgressMetricsFromLocator,
-  readingProgressPercentFromLocator,
 } from '../common/cache/manifestCache';
-import { getProgressFromCache } from '../common/cache/progressCache';
+import { getProgressFromCache, resolveProgressEventName } from '../common/cache/progressCache';
 import { eventUtils, resolveServerBookId } from './viewerCore';
 
 export const VIEWER_MODE_OPTIONS = [
@@ -39,32 +37,24 @@ export const defaultSettings = {
   showGraph: false,
 };
 
+/** 본문·설정 미리보기 공용 글꼴 스택 */
+export const viewerFontStack = (fontFamily) =>
+  `${fontFamily || defaultSettings.fontFamily}, 'Noto Serif', Georgia, serif`;
+
 export const SETTINGS_STORAGE_KEY = 'xhtml_viewer_settings';
-
-const SETTINGS_KEYS = Object.keys(defaultSettings);
-
-function toFiniteOr(value, fallback) {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : fallback;
-}
 
 export function normalizeSettings(settings = {}) {
   const merged = { ...defaultSettings, ...settings };
   return {
-    fontSize: toFiniteOr(merged.fontSize, defaultSettings.fontSize),
-    lineHeight: toFiniteOr(merged.lineHeight, defaultSettings.lineHeight),
-    margin: toFiniteOr(merged.margin, defaultSettings.margin),
+    fontSize: toNumberOrNull(merged.fontSize) ?? defaultSettings.fontSize,
+    lineHeight: toNumberOrNull(merged.lineHeight) ?? defaultSettings.lineHeight,
+    margin: toNumberOrNull(merged.margin) ?? defaultSettings.margin,
     fontFamily:
       typeof merged.fontFamily === 'string' && merged.fontFamily.trim()
         ? merged.fontFamily
         : defaultSettings.fontFamily,
     showGraph: Boolean(merged.showGraph),
   };
-}
-
-function needsSettingsPersist(raw, normalized) {
-  if (!raw || typeof raw !== 'object' || 'pageMode' in raw) return true;
-  return SETTINGS_KEYS.some((key) => raw[key] !== normalized[key]);
 }
 
 export function findViewerModeOption(showGraph) {
@@ -76,22 +66,15 @@ export function findViewerModeOption(showGraph) {
 
 export function loadSettings() {
   try {
-    const raw = storageUtils.getJson(SETTINGS_STORAGE_KEY, defaultSettings);
-    const loaded = normalizeSettings(raw);
-    if (needsSettingsPersist(raw, loaded)) {
-      storageUtils.setJson(SETTINGS_STORAGE_KEY, loaded);
-    }
-    return loaded;
+    return normalizeSettings(loadFromStorage(SETTINGS_STORAGE_KEY) ?? defaultSettings);
   } catch (error) {
-    return errorUtils.handleError('loadSettings', error, defaultSettings, {
-      settings: storageUtils.get(SETTINGS_STORAGE_KEY),
-    });
+    return errorUtils.handleError('loadSettings', error, defaultSettings);
   }
 }
 
 export function saveSettings(settings) {
   try {
-    storageUtils.setJson(SETTINGS_STORAGE_KEY, normalizeSettings(settings));
+    saveToStorage(SETTINGS_STORAGE_KEY, normalizeSettings(settings));
     return { success: true };
   } catch (error) {
     errorUtils.logError('saveSettings', error, { settings });
@@ -99,35 +82,8 @@ export function saveSettings(settings) {
   }
 }
 
-function progressPercentFromData(data, options, pickValue) {
-  if (!data || typeof data !== 'object') return null;
-  const bookId = options.bookId ?? data.bookId;
-  const locator = resolveProgressLocator(data);
-  if (bookId == null || !locator) return null;
-  const value = pickValue(bookId, locator);
-  return value != null ? clampPercent(value) : null;
-}
-
-function chapterIdxOf(source) {
-  return toPositiveNumberOrNull(eventUtils.resolveChapterIdx(source));
-}
-
 function positiveEventNum(source) {
   return toPositiveNumberOrNull(eventUtils.resolveEventNum(source));
-}
-
-export function resolveProgressEventName(source) {
-  if (!source || typeof source !== 'object') return '';
-  const name =
-    source.eventName ??
-    source.eventTitle ??
-    source.eventLabel ??
-    source.name ??
-    source.event_name ??
-    source.event?.name ??
-    source.event?.title ??
-    source.title;
-  return typeof name === 'string' ? name.trim() : '';
 }
 
 // --- 이벤트 매칭·manifest ---
@@ -201,7 +157,7 @@ function pickEventIdentityPayload(event) {
 function resolveManifestEventMatch(event, bookId) {
   const identity = pickEventIdentityPayload(event);
   const eventId = eventUtils.resolveEventId(identity);
-  const chapterIdx = chapterIdxOf(identity) ?? chapterIdxOf(event);
+  const chapterIdx = eventUtils.resolveChapterIdx(identity) ?? eventUtils.resolveChapterIdx(event);
   const normalizedEventId = eventId == null ? '' : String(eventId).trim();
   const normalizedBookId = toPositiveNumberOrNull(bookId);
   if (!normalizedBookId || !chapterIdx || !normalizedEventId) {
@@ -236,12 +192,12 @@ export function resolveServerEventMatch({
   event,
   atLocator = null,
 }) {
-  const bookId = resolveServerBookId(book) ?? toPositiveNumberOrNull(fallbackBookId);
+  const bookId = resolveServerBookId(book, fallbackBookId);
   const anchorLocators = anchorToLocators(event?.anchor);
   const locator = toLocator(atLocator) ?? anchorLocators.startLocator;
   const endLocator = atLocator ? locator : anchorLocators.endLocator;
   const rawEventIdx = positiveEventNum(event);
-  const rawChapter = chapterIdxOf(event) ?? toPositiveNumberOrNull(currentChapter);
+  const rawChapter = eventUtils.resolveChapterIdx(event) ?? toPositiveNumberOrNull(currentChapter);
   const locatorChapter = toPositiveNumberOrNull(resolveChapterIndex(locator));
   const endChapter = toPositiveNumberOrNull(resolveChapterIndex(endLocator));
   const spansFromPreviousChapter =
@@ -276,7 +232,7 @@ export function resolveServerEventMatch({
   }
 
   if (locator) {
-    const resolved = resolveManifestLocatorToEventParams(bookId, locator, rawEventIdx ?? 1);
+    const resolved = resolveLocatorToEventParams(bookId, locator, rawEventIdx ?? 1);
     const locatorEventIdx = toPositiveNumberOrNull(resolved?.eventIdx);
     if (resolved?.resolved && locatorEventIdx) {
       return eventMatchResult({
@@ -314,8 +270,7 @@ function applyChapterEventIndex(eventObj, eventIdx) {
     eventNum: normalizedEventIdx,
     eventIdx: normalizedEventIdx,
     eventId: normalizedEventIdx,
-    resolvedEventIdx: normalizedEventIdx,
-    ...(eventChanged ? { eventName: '', eventTitle: '', name: '', title: '' } : {}),
+    ...(eventChanged ? { eventName: '', name: '', title: '' } : {}),
   };
 }
 
@@ -326,7 +281,7 @@ function applyResolvedEventMetadata(eventObj, manifestEvent) {
   return {
     ...eventObj,
     ...(eventId != null ? { eventId } : {}),
-    ...(eventName ? { eventName, eventTitle: eventName, name: eventName, title: eventName } : {}),
+    ...(eventName ? { eventName, name: eventName, title: eventName } : {}),
   };
 }
 
@@ -343,7 +298,7 @@ export function resolveViewerLineEvent({ receivedEvent, book, bookKey }) {
   });
   const resolvedEventIdx = toPositiveNumberOrNull(match.eventIdx) ?? 0;
   const resolvedChapter = toPositiveNumberOrNull(match.chapterIdx) ?? 0;
-  const resolvedBookId = resolveServerBookId(book) ?? toPositiveNumberOrNull(bookKey);
+  const resolvedBookId = resolveServerBookId(book, bookKey);
 
   let nextChapter = null;
   if (resolvedChapter > 0) {
@@ -365,7 +320,6 @@ export function resolveViewerLineEvent({ receivedEvent, book, bookKey }) {
     nextEvent,
     nextChapter,
     atLocator: match.atLocator,
-    resolvedEventIdx: eventUtils.resolveEventNum(nextEvent) || resolvedEventIdx,
   };
 }
 
@@ -381,19 +335,6 @@ const EMPTY_PROGRESS_TOP_BAR = {
 
 function emptyTopBar() {
   return { ...EMPTY_PROGRESS_TOP_BAR };
-}
-
-export function normalizeReadingProgressPercent(data, options = {}) {
-  return progressPercentFromData(data, options, (bookId, locator) =>
-    readingProgressPercentFromLocator(bookId, locator)
-  );
-}
-
-export function normalizeChapterProgressPercent(data, options = {}) {
-  return progressPercentFromData(data, options, (bookId, locator) => {
-    const metrics = resolveProgressMetricsFromLocator(bookId, locator);
-    return metrics?.chapterProgress ?? null;
-  });
 }
 
 export function toReadingLocatorKey(startLocator, endLocator) {
@@ -415,30 +356,21 @@ export function parseReadingLocatorKey(readingLocatorKey) {
   }
 }
 
-export function resolveMetricsFromLocator(bookKey, locator, { metricsReady = true } = {}) {
-  if (!bookKey || !metricsReady || !locator) return null;
-  const start = toLocator(locator);
-  return start ? resolveProgressMetricsFromLocator(bookKey, start) : null;
-}
-
-export function resolveMetricsFromReadingLocatorKey(bookKey, readingLocatorKey, options = {}) {
-  if (!readingLocatorKey) return null;
+export function resolveMetricsFromReadingLocatorKey(bookKey, readingLocatorKey, { metricsReady = true } = {}) {
+  if (!readingLocatorKey || !metricsReady) return null;
   const { start } = parseReadingLocatorKey(readingLocatorKey);
-  return resolveMetricsFromLocator(bookKey, start, options);
+  return resolveProgressMetricsFromLocator(bookKey, start);
 }
 
-export function progressRowToTopBar(row, bookId = null) {
+function progressRowToTopBar(row, bookId = null) {
   if (!row || typeof row !== 'object') return emptyTopBar();
 
-  const explicit = Number(row.eventNum);
-  const fromId = eventUtils.resolveEventNum(row);
-  const eventNum =
-    Number.isFinite(explicit) && explicit > 0 ? explicit : fromId > 0 ? fromId : null;
+  const eventNum = eventUtils.resolveEventNum(row, null);
 
   const loc = toLocator(row.startLocator ?? row.locator ?? row.anchor?.startLocator);
-  const metrics = resolveMetricsFromLocator(bookId, loc);
+  const metrics = resolveProgressMetricsFromLocator(bookId, loc);
   const chapterIdx =
-    chapterIdxOf(row) ?? toPositiveNumberOrNull(row.chapterNum) ?? toPositiveNumberOrNull(loc?.chapterIndex);
+    eventUtils.resolveChapterIdx(row) ?? toPositiveNumberOrNull(row.chapterNum) ?? toPositiveNumberOrNull(loc?.chapterIndex);
 
   return {
     eventNum,
@@ -453,7 +385,7 @@ export function patchTopBarFromLineEvent(prev, nextEvent, lineLocator = null) {
   const previous = prev != null && typeof prev === 'object' ? prev : emptyTopBar();
   const eventNum = eventUtils.resolveEventNum(nextEvent);
   const chapterIdx =
-    chapterIdxOf(nextEvent) ?? toPositiveNumberOrNull(resolveChapterIndex(lineLocator));
+    eventUtils.resolveChapterIdx(nextEvent) ?? toPositiveNumberOrNull(resolveChapterIndex(lineLocator));
 
   return {
     ...previous,
@@ -571,9 +503,8 @@ export function buildSaveLocationPayload(bookId, startLocator, endLocator, curre
   const base = buildLocatorPayloadBase(bookId, startLocator, endLocator, currentEvent, metrics);
   if (!base) return null;
 
-  const numericBookId = Number(bookId);
   return {
-    bookId: Number.isFinite(numericBookId) && numericBookId > 0 ? numericBookId : null,
+    bookId: toPositiveNumberOrNull(bookId),
     startLocator: base.startLocator,
     endLocator: base.endLocator,
     locator: base.locator,
@@ -589,21 +520,11 @@ export function buildSaveLocationPayload(bookId, startLocator, endLocator, curre
 
 
 export function saveViewerMode(mode) {
-  try {
-    if (!mode || typeof mode !== 'string') return;
-    localStorage.setItem('viewer_mode', mode);
-  } catch {
-    return;
-  }
+  if (!mode || typeof mode !== 'string') return;
+  writeRaw('viewer_mode', mode);
 }
 
-function loadViewerMode() {
-  try {
-    return localStorage.getItem('viewer_mode');
-  } catch {
-    return null;
-  }
-}
+const loadViewerMode = () => readRaw('viewer_mode');
 
 /** showGraph는 settings SSOT. viewer_mode는 전체화면(graph) 여부만 복원. */
 export function resolveInitialGraphFullScreen(showGraph = loadSettings().showGraph) {
@@ -616,27 +537,10 @@ export function resolvePersistedViewerMode(graphFullScreen, showGraph) {
   return 'viewer';
 }
 
-export function deriveGraphPhase({ isReloading, isEventGraphLoading, isGraphLoading }) {
-  if (isReloading) return 'reloading';
-  if (isEventGraphLoading) return 'event';
-  if (isGraphLoading) return 'loading';
-  return 'idle';
-}
-
 export function isHardNavigationReload() {
   if (!performance?.getEntriesByType) return false;
   const [entry] = performance.getEntriesByType('navigation');
   return entry?.type === 'reload';
-}
-
-export function buildViewerActionError(message, details, retry) {
-  return { message, details, retry };
-}
-
-export function delay(ms) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
 }
 
 export function waitForPaint() {

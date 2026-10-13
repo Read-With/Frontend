@@ -4,92 +4,21 @@ import ViewerLayout from './ViewerLayout';
 import XhtmlViewer from './XhtmlViewer';
 import ViewerSettings from './ViewerSettings';
 import { useViewerPage } from '../../hooks/viewer/useViewerPage';
-import { useModalFocusTrap, useLatestRef } from '../../hooks/common/hooksShared';
+import { useLatestRef } from '../../hooks/common/hooksShared';
 import { useTooltipState } from '../../hooks/ui/tooltipHooks';
-import { anchorToLocators, resolveChapterIndex } from '../../utils/common/valueUtils';
+import { anchorToLocators, resolveChapterIndex, errorUtils, toPositiveNumberOrNull } from '../../utils/common/valueUtils';
 import {
   resolveViewerLineEvent,
   parseReadingLocatorKey,
   patchTopBarFromLineEvent,
 } from '../../utils/viewer/viewerSession';
-import { isSameBookmarkPosition, normalizeBookmarkLocators } from '../../utils/bookmarks/bookmarkUtils';
-import { errorUtils } from '../../utils/common/urlUtils';
+import { isSameBookmarkPosition } from '../../utils/bookmarks/bookmarkUtils';
+import { normalizeStartEndLocatorsForServer } from '../../utils/common/cache/progressCache';
 import GraphSplitArea from './GraphSplitArea';
+import BookmarkDeleteConfirm from './BookmarkDeleteConfirm';
 import '../../pages/BookmarksPage.css';
 
 const TOOLBAR_REVEAL_ZONE_PX = 72;
-
-function BookmarkDeleteConfirm({
-  open,
-  busy,
-  onCancel,
-  onConfirm,
-}) {
-  const dialogRef = useRef(null);
-  const busyRef = useLatestRef(busy);
-  const onCancelRef = useLatestRef(onCancel);
-  // busy/onCancel을 ref로 안정화 — useModalFocusTrap의 onClose 참조가 busy 토글마다 바뀌면
-  // effect가 재실행되며 (버튼이 disabled된) 다이얼로그로 포커스가 불필요하게 튐
-  const handleClose = useCallback(() => {
-    if (!busyRef.current) onCancelRef.current?.();
-  }, [busyRef, onCancelRef]);
-
-  useModalFocusTrap(open, dialogRef, handleClose);
-
-  useEffect(() => {
-    if (!open) return undefined;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = 'unset';
-    };
-  }, [open]);
-
-  if (!open) return null;
-
-  return (
-    <div
-      className="bm-confirm-overlay"
-      role="presentation"
-      onClick={busy ? undefined : onCancel}
-    >
-      <div
-        ref={dialogRef}
-        className="bm-confirm-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="viewer-bookmark-delete-title"
-        aria-describedby="viewer-bookmark-delete-desc"
-        tabIndex={-1}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <p id="viewer-bookmark-delete-title" className="bm-confirm-title">
-          북마크를 삭제할까요?
-        </p>
-        <p id="viewer-bookmark-delete-desc" className="bm-confirm-desc">
-          현재 위치에 표시된 북마크가 제거됩니다.
-        </p>
-        <div className="bm-confirm-actions">
-          <button
-            type="button"
-            className="bm-btn bm-btn-ghost"
-            onClick={onCancel}
-            disabled={busy}
-          >
-            취소
-          </button>
-          <button
-            type="button"
-            className="bm-btn bm-btn-confirm-delete"
-            onClick={onConfirm}
-            disabled={busy}
-          >
-            {busy ? '삭제 중…' : '삭제'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 const ViewerPage = () => {
   const {
@@ -180,7 +109,7 @@ const ViewerPage = () => {
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('touchstart', onTouchStart);
     };
-  }, [setShowToolbar]);
+  }, [setShowToolbar, showToolbarRef]);
 
   const toggleToolbar = useCallback(() => {
     setShowToolbar((prev) => !prev);
@@ -247,7 +176,7 @@ const ViewerPage = () => {
     if (!bookmarks?.length || !readingLocatorKey || !bookKey) return false;
     const { start, end } = parseReadingLocatorKey(readingLocatorKey);
     if (!start) return false;
-    const { startLocator, endLocator } = normalizeBookmarkLocators(
+    const { startLocator, endLocator } = normalizeStartEndLocatorsForServer(
       bookKey,
       start,
       end ?? start
@@ -278,9 +207,7 @@ const ViewerPage = () => {
       );
 
       const locatorChapter = resolveChapterIndex(startLocator);
-      const resolvedChapter =
-        nextChapter ??
-        (Number.isFinite(locatorChapter) && locatorChapter > 0 ? locatorChapter : null);
+      const resolvedChapter = nextChapter ?? toPositiveNumberOrNull(locatorChapter);
 
       if (resolvedChapter && resolvedChapter !== readingChapterRef.current) {
         setCurrentChapter(resolvedChapter);
@@ -294,6 +221,7 @@ const ViewerPage = () => {
       book,
       bookKey,
       markViewerPageReady,
+      readingChapterRef,
       setCurrentChapter,
       setCurrentEvent,
       applyReadingLocator,
@@ -302,9 +230,11 @@ const ViewerPage = () => {
   );
 
   const handleExitToMypage = useCallback(async () => {
+    let saved = true;
     try {
       const res = await flushProgressAsync();
       if (res?.isSuccess === false && !res.skipped && !res.deduped) {
+        saved = false;
         errorUtils.logWarning(
           '[ViewerPage] 마이페이지 이동 전 진도 저장 실패',
           res?.message || '알 수 없는 오류',
@@ -312,8 +242,11 @@ const ViewerPage = () => {
         );
       }
     } catch {
-      /* 저장 실패해도 이탈 */
+      saved = false; // 저장 실패해도 이탈
     } finally {
+      if (!saved) {
+        toast.warning('읽던 위치를 저장하지 못했어요. 다음에 열 때 위치가 조금 다를 수 있어요.');
+      }
       exitToMypage();
     }
   }, [bookKey, flushProgressAsync, exitToMypage]);
@@ -397,7 +330,7 @@ const ViewerPage = () => {
           bookKey={bookKey}
           suppressViewport={suppressViewport}
           suppressMessage={
-            resumeAnchor ? '읽던 위치로 이동 중...' : '로딩 중...'
+            resumeAnchor ? '읽던 위치로 이동 중…' : '로딩 중…'
           }
           onToggleChrome={toggleToolbar}
         />
@@ -414,6 +347,7 @@ const ViewerPage = () => {
         busy={isBookmarkMutating}
         onCancel={dismissDeleteConfirm}
         onConfirm={confirmToolbarDelete}
+        description="현재 위치에 표시된 북마크가 제거됩니다."
       />
     </div>
   );

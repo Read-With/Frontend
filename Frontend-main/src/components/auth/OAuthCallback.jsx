@@ -5,20 +5,17 @@ import {
   validateUserData,
   verifyGoogleOAuthState,
   clearGoogleOAuthStateSession,
-} from '../../utils/security/oauthSecurity';
-import {
-  getApiBaseUrl,
-  getGoogleOAuthRedirectUri,
   resolveOAuthUrlError,
   resolveOAuthApiBodyError,
   resolveOAuthHttpError,
   normalizeOAuthFetchError,
   getOAuthErrorTip,
-  errorUtils,
-} from '../../utils/common/urlUtils';
+} from '../../utils/security/oauthSecurity';
+import { getApiBaseUrl, getGoogleOAuthRedirectUri, takePostLoginPath } from '../../utils/common/urlUtils';
+import { errorUtils, sleep } from '../../utils/common/valueUtils';
 import './OAuthCallback.css';
 
-function GoogleIcon({ className, ...props }) {
+export function GoogleIcon({ className, ...props }) {
   return (
     <svg className={className} viewBox="0 0 24 24" aria-hidden="true" {...props}>
       <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
@@ -224,6 +221,9 @@ async function exchangeGoogleAuthCode(code) {
   }
 }
 
+const isServerNotReady = (err) =>
+  err?.phase === 'network' || err?.phase === 'timeout' || [502, 503, 504].includes(err?.status);
+
 function stripOAuthCallbackParams() {
   if (!window.history?.replaceState) return;
   const cleanUrl = new URL(window.location.href);
@@ -322,11 +322,22 @@ const OAuthCallback = () => {
 
       try {
         stripOAuthCallbackParams();
-        const frontendUserData = await exchangeGoogleAuthCode(code);
+        let frontendUserData;
+        // 서버가 깨어날 때까지 무한 재시도 (code를 서버가 아직 소비하지 않은 실패만)
+        for (let attempt = 1; ; attempt += 1) {
+          try {
+            frontendUserData = await exchangeGoogleAuthCode(code);
+            break;
+          } catch (err) {
+            if (cancelled || !isServerNotReady(err)) throw err;
+            await sleep(Math.min(1000 * attempt, 5000));
+            if (cancelled) return;
+          }
+        }
         if (cancelled) return;
         login(frontendUserData);
         clearOAuthAttemptArtifacts();
-        navigate('/mypage', { replace: true });
+        navigate(takePostLoginPath() || '/mypage', { replace: true });
       } catch (err) {
         finishError(normalizeOAuthFetchError(err), {
           error: err,

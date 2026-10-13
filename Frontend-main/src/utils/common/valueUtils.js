@@ -99,16 +99,45 @@ export function truncateWithEllipsis(text, maxLen) {
   return `${s.slice(0, maxLen - 1)}…`;
 }
 
-/** 순환 인덱스 (화살표·형제 전환) */
+/** 순환 인덱스 (화살표·형제 전환). 미선택(index < 0)이면 앞으로는 처음, 뒤로는 마지막. */
 export function cycleIndex(index, length, delta = 1) {
   if (!length || length < 1) return 0;
-  const base = Number.isFinite(index) && index >= 0 ? Math.trunc(index) : 0;
-  return (base + delta + length) % length;
+  if (!Number.isFinite(index) || index < 0) return delta >= 0 ? 0 : length - 1;
+  return (((Math.trunc(index) + delta) % length) + length) % length;
+}
+
+/** 상대 시간 표기. withTime=false면 달력 날짜 기준 (오늘·어제·N일 전) */
+export function formatRelativeTime(value, { withTime = true } = {}) {
+  if (value == null || value === '') return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  let diffDay;
+  if (withTime) {
+    const diffMin = Math.floor((Date.now() - date.getTime()) / (1000 * 60));
+    if (diffMin < 1) return '방금 전';
+    if (diffMin < 60) return `${diffMin}분 전`;
+    const diffHour = Math.floor(diffMin / 60);
+    if (diffHour < 24) return `${diffHour}시간 전`;
+    diffDay = Math.floor(diffHour / 24);
+  } else {
+    // 달력 날짜 기준 차이 (round: DST 23/25시간 보정). 미래(시계 오차)는 오늘로 취급
+    const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    diffDay = Math.round((startOfDay(new Date()) - startOfDay(date)) / (1000 * 60 * 60 * 24));
+    if (diffDay <= 0) return '오늘';
+    if (diffDay === 1) return '어제';
+  }
+  if (diffDay < 7) return `${diffDay}일 전`;
+  return date.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' });
 }
 
 export const toStringOrNull = (value) => (value == null ? null : String(value));
 
+/** 문자열이면 그대로, 아니면 '' (강제 변환 없음) */
+export const stringOrEmpty = (value) => (typeof value === 'string' ? value : '');
+
 export const asArray = (value) => (Array.isArray(value) ? value : []);
+
+export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** 책 제목 비교용 정규화 (대소문자·공백·특수문자 제거) */
 export const normalizeTitle = (title) => {
@@ -125,13 +154,18 @@ export const normalizeTitle = (title) => {
 export const normalizeAuthor = (author) =>
   (author || '').toLowerCase().trim().replace(/\s+/g, ' ');
 
-export const toFiniteNumber = (value) => {
-  if (value === undefined || value === null) return NaN;
-  const converted = typeof value === 'number' ? value : Number(value);
-  return Number.isFinite(converted) ? converted : NaN;
-};
+/** number 리터럴이면서 양의 유한수인지 (문자열 강제 변환 없음) */
+export function isPositiveFiniteNumberLiteral(n) {
+  return typeof n === 'number' && Number.isFinite(n) && n > 0;
+}
 
 /** 관계 긍정도 −1~+1. 비유한 값은 0 */
+export const clamp01 = (n) => Math.min(1, Math.max(0, Number(n) || 0));
+
+/** String#localeCompare와 같은 결과 — 정렬 비교마다 collator를 새로 만들지 않음 */
+export const compareLocale = new Intl.Collator().compare;
+export const compareKo = new Intl.Collator('ko').compare;
+
 export function clampPositivity(positivity) {
   const value = Number(positivity);
   return Number.isFinite(value) ? Math.max(-1, Math.min(1, value)) : 0;
@@ -143,7 +177,7 @@ export const toPositiveNumberOrNull = (value) => {
 };
 
 export const toPositiveInt = (value, fallback = null) => {
-  const parsed = toFiniteNumber(value);
+  const parsed = toNumberOrNull(value);
   return Number.isFinite(parsed) && parsed >= 1 ? Math.trunc(parsed) : fallback;
 };
 
@@ -162,44 +196,34 @@ export const toPositiveNumberFromId = (value) => {
   return lastDigits ? toPositiveNumberOrNull(lastDigits[1]) : null;
 };
 
+/** 'api:12' · '12' · 12 → 12 (그 외 null) */
+export const extractApiBookId = (folderKeyOrFilename) => {
+  if (!folderKeyOrFilename) return null;
+  if (typeof folderKeyOrFilename === 'number') {
+    return toPositiveNumberOrNull(folderKeyOrFilename);
+  }
+  const key = String(folderKeyOrFilename).trim();
+  if (!key) return null;
+  return toPositiveNumberOrNull(key.startsWith('api:') ? key.slice('api:'.length) : key);
+};
+
 /** 뷰어/그래프 라우트용 bookId — 후보 중 양의 정수만 채택 */
 export const resolvePositiveBookId = (...candidates) => {
   for (const candidate of candidates) {
-    if (candidate == null || candidate === '') continue;
-    const text = String(candidate).trim();
-    const apiMatch = text.match(/^api:(\d+)$/i);
-    if (apiMatch) {
-      const fromApi = toPositiveNumberOrNull(apiMatch[1]);
-      if (fromApi) return fromApi;
-    }
-    const id = toPositiveNumberFromId(candidate);
+    const id = extractApiBookId(candidate) ?? toPositiveNumberFromId(candidate);
     if (id) return id;
   }
   return null;
-};
-
-export const isPositiveFiniteNumber = (value) => {
-  const num = toNumberOrNull(value);
-  return num !== null && num > 0;
 };
 
 /** locator·manifest·payload 공통 1-based 챕터 번호 해석 */
 export const resolveChapterIndex = (row) =>
   toNumberOrNull(row?.chapterIndex ?? row?.chapterIdx ?? row?.idx);
 
-/** URL·쿼리·상태에서 온 1-based 챕터 번호: trim 후 유한·정수·>= 1 만 통과 */
+/** URL·쿼리·상태에서 온 1-based 챕터 번호: 유한·정수·>= 1 만 통과 (소수는 null) */
 export const toOneBasedChapterIndexOrNull = (value) => {
-  if (value === null || value === undefined) return null;
-  let v = value;
-  if (typeof v === 'string') {
-    const s = v.trim();
-    if (s === '') return null;
-    v = s;
-  }
-  const num = Number(v);
-  if (!Number.isFinite(num) || num < 1) return null;
-  const t = Math.trunc(num);
-  return t === num ? t : null;
+  const n = toPositiveInt(value);
+  return n === toNumberOrNull(value) ? n : null;
 };
 
 export const clampPercent = (value, fallback = null) => {
@@ -208,27 +232,9 @@ export const clampPercent = (value, fallback = null) => {
   return Math.min(100, Math.max(0, Math.round(n)));
 };
 
-export const deepClone = (value) => {
-  try {
-    if (typeof structuredClone === 'function') return structuredClone(value);
-  } catch (error) {
-    errorUtils.logWarning('deepClone', 'structuredClone 실패, JSON 직렬화로 대체', {
-      message: error?.message,
-    });
-  }
-  try {
-    return JSON.parse(JSON.stringify(value));
-  } catch (error) {
-    errorUtils.logWarning('deepClone', 'JSON 직렬화 실패', { message: error?.message });
-    return value;
-  }
-};
-
 // --- locator (merged from locatorUtils) ---
 
-const toNumber = toNumberOrNull;
-
-const hasPositiveChapterHint = (locator) => isPositiveFiniteNumber(resolveChapterIndex(locator));
+const hasPositiveChapterHint = (locator) => toPositiveNumberOrNull(resolveChapterIndex(locator)) != null;
 
 const firstLocator = (...candidates) => {
   for (const candidate of candidates) {
@@ -253,8 +259,8 @@ const extractLocationHint = (payload) => {
 export const toLocator = (obj) => {
   if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return null;
   const chapterIndex = resolveChapterIndex(obj);
-  const blockIndex = toNumber(obj.blockIndex);
-  const offset = toNumber(obj.offset);
+  const blockIndex = toNumberOrNull(obj.blockIndex);
+  const offset = toNumberOrNull(obj.offset);
   if (chapterIndex == null || chapterIndex < 1) return null;
   return {
     chapterIndex: Number(chapterIndex),
@@ -296,10 +302,10 @@ export function hasGraphPanelLocationHint(payload, { requireEventNum = false } =
   if (!requireEventNum || !payload || typeof payload !== 'object') {
     return false;
   }
-  if (!isPositiveFiniteNumber(resolveChapterIndex(payload))) {
+  if (toPositiveNumberOrNull(resolveChapterIndex(payload)) == null) {
     return false;
   }
-  return isPositiveFiniteNumber(Number(payload.eventNum ?? 0));
+  return toPositiveNumberOrNull(payload.eventNum) != null;
 }
 
 /** progress·캐시 payload에서 단일 reading locator 해석 */
@@ -366,3 +372,65 @@ export const progressPayloadFromData = (data) => {
     locatorVersion: version,
   };
 };
+
+// --- event id·순번 (manifestCache·viewerCore eventUtils 공용) ---
+
+function nonEmptyId(value) {
+  if (value === undefined || value === null) return null;
+  const s = String(value).trim();
+  return s !== '' ? value : null;
+}
+
+function normalizeEventIdx(event) {
+  if (!event || typeof event !== 'object') return null;
+  return (
+    toPositiveNumberOrNull(event.eventNum) ??
+    toPositiveNumberOrNull(event.eventIdx) ??
+    toPositiveNumberOrNull(event.idx) ??
+    toPositiveNumberFromId(event.eventId) ??
+    toPositiveNumberOrNull(event.originalEventIdx) ??
+    toPositiveNumberOrNull(event.event?.eventNum) ??
+    toPositiveNumberOrNull(event.event?.eventIdx) ??
+    toPositiveNumberOrNull(event.event?.idx) ??
+    toPositiveNumberFromId(event.event?.eventId)
+  );
+}
+
+export const resolveEventId = (event) => {
+  if (!event || typeof event !== 'object') return null;
+  const direct = nonEmptyId(event.eventId ?? event.id);
+  if (direct != null) return direct;
+  const nested = event.event;
+  if (!nested || typeof nested !== 'object') return null;
+  return nonEmptyId(nested.eventId ?? nested.id);
+};
+
+/** 이벤트 순번(양수). 숫자는 그대로, 객체는 idx 필드 → eventId 꼬리 숫자 순으로 해석. 없으면 fallback */
+export function resolveEventNum(event, fallback = 0) {
+  if (typeof event === 'number' && Number.isFinite(event) && event > 0) {
+    return Math.trunc(event);
+  }
+  if (!event || typeof event !== 'object') return fallback;
+  const direct = normalizeEventIdx(event);
+  if (direct) return direct;
+
+  const inner = event.event;
+  if (inner && typeof inner === 'object') {
+    const fromInner = normalizeEventIdx(inner) ?? toPositiveNumberFromId(resolveEventId(inner));
+    if (fromInner) return fromInner;
+  }
+  return toPositiveNumberFromId(resolveEventId(event)) ?? fallback;
+}
+
+/** 이벤트 순번 오름차순 정렬 (없는 값은 뒤로) */
+export function sortEventsByIdx(events) {
+  if (!Array.isArray(events)) return [];
+  return [...events].sort((a, b) => {
+    const idxA = resolveEventNum(a, null);
+    const idxB = resolveEventNum(b, null);
+    if (idxA == null && idxB == null) return 0;
+    if (idxA == null) return 1;
+    if (idxB == null) return -1;
+    return idxA - idxB;
+  });
+}

@@ -1,6 +1,6 @@
 /** 공통 UI 색상·애니메이션·ref 유틸 */
 
-import { GRAPH_COLORS, STYLE_DURATION } from './graphStyles';
+import { STYLE_DURATION } from './graphStyles';
 
 export const ANIMATION_VALUES = {
   EASE_OUT: 'cubic-bezier(0.4, 0, 0.2, 1)',
@@ -24,11 +24,6 @@ export function joinClasses(...parts) {
   return parts.filter(Boolean).join(' ');
 }
 
-/** GRAPH_COLORS 재export (소비자는 COLORS 또는 GRAPH_COLORS) */
-export const COLORS = GRAPH_COLORS;
-
-export { brandAlpha, BRAND_RGB } from './graphStyles';
-
 const opacityTransition = `opacity ${ANIMATION_VALUES.DURATION.NORMAL}`;
 
 const createConditionalTransition = (condition, normalTransition, disabledTransition = 'none') =>
@@ -46,3 +41,18 @@ export const unifiedNodeAnimations = {
       'none',
     ),
 };
+
+let bodyScrollLockCount = 0;
+
+/** body 스크롤 잠금 — 카운트 기반이라 중첩(뷰어 + 다이얼로그 등)돼도 마지막 해제 시에만 복원. 해제 함수 반환. */
+export function lockBodyScroll() {
+  bodyScrollLockCount += 1;
+  document.body.style.overflow = 'hidden';
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    bodyScrollLockCount -= 1;
+    if (bodyScrollLockCount === 0) document.body.style.overflow = '';
+  };
+}

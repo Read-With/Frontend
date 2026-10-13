@@ -6,11 +6,12 @@ import {
   hasMacroGraphStorageCache,
   hasMacroSessionCache,
   prefetchMacroGraphToCache,
-  padSingleEvent,
   fetchRelationTimelineCumulative,
   fetchRelationTimelineViewer,
 } from '../../utils/graph/graphFetch';
-import { getBookScopeRelationshipGraph, FETCH_STATUS } from '../../utils/api/graphApi.js';
+import { padSingleEvent } from '../../utils/graph/graphCy';
+import { FETCH_STATUS } from '../../utils/api/graphApi.js';
+import { getBookScopeRelationshipGraph } from '../../utils/graph/graphModel';
 import { getMaxChapter } from '../../utils/common/cache/manifestCache';
 import { toPositiveNumberOrNull, toPositiveInt } from '../../utils/common/valueUtils';
 import {
@@ -237,15 +238,7 @@ export function useRelationData(mode, id1, id2, chapterNum, eventNum, bookId = n
       mode === 'viewer' ? toPositiveInt(eventNum) : toPositiveInt(eventNum, 1);
 
     if (mode === 'viewer' && normalizedEvent == null) {
-      if (force) invalidate();
-      lastSuccessKeyRef.current = '';
-      setTimeline([]);
-      setLabels([]);
-      setNoRelation(false);
-      setIncomplete(false);
-      setUsedProbe(false);
-      setError(null);
-      setLoading(false);
+      resetError(null, { bumpRequest: force });
       return;
     }
 
@@ -321,7 +314,6 @@ export function useRelationData(mode, id1, id2, chapterNum, eventNum, bookId = n
     resetError,
     nextRequestId,
     isStale,
-    invalidate,
   ]);
 
   useEffect(() => {

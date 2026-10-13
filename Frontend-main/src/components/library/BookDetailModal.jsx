@@ -1,19 +1,18 @@
 import { useState, useEffect, useMemo, useCallback, useRef, memo } from 'react';
-import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { getBookManifest, getBookProgress, deleteBookProgress } from '../../utils/api/booksApi';
-import { resolveProgressLocator } from '../../utils/common/valueUtils';
+import { getBookManifest, getBookProgress, deleteBookProgress, fetchAuthenticatedAssetBlobUrl } from '../../utils/api/booksApi';
+import { resolveProgressLocator, errorUtils, formatRelativeTime } from '../../utils/common/valueUtils';
 import { BOOKS_QUERY_KEY } from '../../hooks/books/bookHooks';
 import { useAsyncRequestGuard, useModalFocusTrap, useLatestRef } from '../../hooks/common/hooksShared';
 import { getProgressFromCache, PROGRESS_CACHE_UPDATED_EVENT,} from '../../utils/common/cache/progressCache';
 import {
   resolveLibraryReadingProgressPercent,
-  formatLibraryRelativeDate,
   attachLibraryModalChrome,
   dedupeAndSortCharacters,
   toLibraryIsoDateOrNull,
   libraryPanelBodyClass,
+  HIDE_BOOK_COPY,
 } from '../../utils/library/libraryUtils';
 import {
   resolveServerBookId,
@@ -22,10 +21,8 @@ import {
 import {
   USER_VIEWER_PREFIX,
   USER_GRAPH_PREFIX,
-  fetchAuthenticatedAssetBlobUrl,
   isProtectedPublicAsset,
   sanitizeAssetUrl,
-  errorUtils,
 } from '../../utils/common/urlUtils';
 import { toast } from 'react-toastify';
 import ConfirmDialog from './ConfirmDialog';
@@ -95,15 +92,6 @@ export function AuthenticatedImage({
     />
   );
 }
-
-AuthenticatedImage.propTypes = {
-  src: PropTypes.string,
-  alt: PropTypes.string,
-  className: PropTypes.string,
-  fallback: PropTypes.node,
-  onError: PropTypes.func,
-  onLoad: PropTypes.func,
-};
 
 function mergeBookWithManifest(book, manifestData) {
   const manifest = manifestData.result;
@@ -216,40 +204,16 @@ function CharacterRow({ character, isMain = false }) {
   );
 }
 
-const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'grid' }) => {
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
+/** 책 상세(manifest)·서버 진도 로드. 열릴 때와 book 변경 시 다시 불러옴 */
+function useBookDetails(book, serverBookId, isOpen) {
   const [bookDetails, setBookDetails] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [showMoreCharacters, setShowMoreCharacters] = useState(false);
   const [progressInfo, setProgressInfo] = useState(null);
-  const [coverImgFailed, setCoverImgFailed] = useState(false);
-  const [charactersPanelOpen, setCharactersPanelOpen] = useState(true);
-  const [chaptersPanelOpen, setChaptersPanelOpen] = useState(true);
-  const [bookDeleteConfirm, setBookDeleteConfirm] = useState(false);
-  const [progressDeleteConfirm, setProgressDeleteConfirm] = useState(false);
+  // progressCache 갱신 시 재렌더 → 호출부가 getProgressFromCache를 다시 읽음
   const [, setProgressCacheTick] = useState(0);
-  const closeButtonRef = useRef(null);
-  const dialogRef = useRef(null);
   const { nextRequestId: nextDetailsRequestId, isStale: isDetailsRequestStale } = useAsyncRequestGuard();
   const { nextRequestId: nextProgressRequestId, isStale: isProgressRequestStale } = useAsyncRequestGuard();
-
-  const characterLists = useMemo(
-    () => dedupeAndSortCharacters(bookDetails?.characters),
-    [bookDetails?.characters]
-  );
-
-  const serverBookId = resolveServerBookId(book);
-
-  const cachedProgress = serverBookId != null ? getProgressFromCache(serverBookId) : null;
-  const progressLocator = resolveProgressLocator(cachedProgress || progressInfo);
-  const readPercent = resolveLibraryReadingProgressPercent(book);
-
-  const libraryRelativeUpdated = book?.updatedAt
-    ? formatLibraryRelativeDate(book.updatedAt)
-    : '';
-  const libraryUpdatedAtIso = toLibraryIsoDateOrNull(book?.updatedAt);
 
   const fetchProgressInfo = useCallback(async () => {
     if (!serverBookId) {
@@ -328,15 +292,29 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
     return () => window.removeEventListener(PROGRESS_CACHE_UPDATED_EVENT, onUpd);
   }, [isOpen, serverBookId]);
 
-  useEffect(() => {
-    if (isOpen) {
-      setShowMoreCharacters(false);
-    }
-  }, [isOpen, book?.id]);
+  const retry = useCallback(() => {
+    fetchBookDetails();
+    fetchProgressInfo();
+  }, [fetchBookDetails, fetchProgressInfo]);
 
-  useEffect(() => {
-    setCoverImgFailed(false);
-  }, [isOpen, book?.id, bookDetails?.coverImgUrl, book?.coverImgUrl]);
+  return { bookDetails, loading, error, progressInfo, setProgressInfo, retry };
+}
+
+/** 표시용 제목·저자·표지 (manifest 값 우선, 없으면 목록의 book) */
+function resolveBookDisplay(book, details) {
+  return {
+    coverSrc: details?.coverImgUrl || book?.coverImgUrl,
+    displayTitle: details?.title || book?.title || '제목 없음',
+    chapterStripBookTitle: String(details?.title ?? book?.title ?? '').trim(),
+    displayAuthor: details?.author || book?.author || '저자 정보 없음',
+  };
+}
+
+/** 책 숨기기·진도 삭제 확인 다이얼로그 상태와 실행. Esc는 열린 확인창부터 닫음 */
+function useDeleteConfirms({ isOpen, book, serverBookId, onDelete, onClose, progressInfo, setProgressInfo }) {
+  const queryClient = useQueryClient();
+  const [bookDeleteConfirm, setBookDeleteConfirm] = useState(false);
+  const [progressDeleteConfirm, setProgressDeleteConfirm] = useState(false);
 
   useEffect(() => {
     if (!isOpen) {
@@ -344,49 +322,6 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
       setProgressDeleteConfirm(false);
     }
   }, [isOpen]);
-
-  useEffect(() => {
-    const len = bookDetails?.chapters?.length ?? 0;
-    if (len > 12) {
-      setChaptersPanelOpen(false);
-    } else if (len > 0) {
-      setChaptersPanelOpen(true);
-    }
-  }, [bookDetails?.id, bookDetails?.chapters?.length]);
-
-  // 중첩된 ConfirmDialog(삭제 확인)가 열려있는 동안은 Tab 트랩만 양보 — "이전 포커스" 캡처는
-  // isOpen 기준으로 유지해 중첩 다이얼로그가 열고 닫힐 때마다 포커스가 두 번 튀지 않게 함
-  useModalFocusTrap(isOpen, dialogRef, undefined, {
-    initialFocusRef: closeButtonRef,
-    suspended: bookDeleteConfirm || progressDeleteConfirm,
-  });
-
-  const getBookIdentifier = useCallback(() => {
-    const id = book?.id ?? resolveServerBookId(book);
-    return id != null ? String(id) : '';
-  }, [book]);
-
-  const navigateToBookPage = useCallback(
-    (pathPrefix) => {
-      const id = getBookIdentifier();
-      if (!id) {
-        toast.error('책 정보가 없어 이동할 수 없습니다.');
-        return;
-      }
-      onClose();
-      navigate(`${pathPrefix}/${id}`, { state: { book } });
-    },
-    [book, getBookIdentifier, onClose, navigate]
-  );
-
-  const handleReadClick = useCallback(() => navigateToBookPage(USER_VIEWER_PREFIX), [navigateToBookPage]);
-
-  const handleGraphClick = useCallback(() => navigateToBookPage(USER_GRAPH_PREFIX), [navigateToBookPage]);
-
-  const handleRetryFetch = useCallback(() => {
-    fetchBookDetails();
-    fetchProgressInfo();
-  }, [fetchBookDetails, fetchProgressInfo]);
 
   const deleteProgressMutation = useMutation({
     mutationFn: (bookId) => deleteBookProgress(bookId),
@@ -408,7 +343,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
     },
   });
 
-  const handleConfirmDeleteProgress = useCallback(async () => {
+  const confirmDeleteProgress = useCallback(async () => {
     setProgressDeleteConfirm(false);
     try {
       await deleteProgressMutation.mutateAsync(serverBookId);
@@ -417,7 +352,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
     }
   }, [serverBookId, deleteProgressMutation]);
 
-  const handleConfirmDeleteBook = useCallback(async () => {
+  const confirmDeleteBook = useCallback(async () => {
     if (!book || !book.id) {
       return;
     }
@@ -425,30 +360,16 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
     try {
       if (onDelete) {
         await onDelete(book.id);
-        toast.success('책이 삭제되었습니다');
         setBookDeleteConfirm(false);
         onClose();
       } else {
-        toast.error('삭제 기능을 사용할 수 없습니다');
+        toast.error('숨기기 기능을 사용할 수 없습니다');
       }
     } catch (err) {
       errorUtils.logError('BookDetailModal', err, { action: 'deleteBook' });
-      toast.error('책 삭제에 실패했습니다');
+      toast.error(HIDE_BOOK_COPY.failed);
     }
   }, [book, onDelete, onClose]);
-
-
-  const toggleCharactersPanel = useCallback(() => {
-    setCharactersPanelOpen((o) => !o);
-  }, []);
-
-  const toggleChaptersPanel = useCallback(() => {
-    setChaptersPanelOpen((o) => !o);
-  }, []);
-
-  const toggleShowMoreCharacters = useCallback(() => {
-    setShowMoreCharacters((v) => !v);
-  }, []);
 
   const nestedConfirmStateRef = useLatestRef({ bookDeleteConfirm, progressDeleteConfirm });
 
@@ -471,45 +392,45 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
     });
   }, [isOpen, onClose, nestedConfirmStateRef]);
 
-  if (!isOpen) return null;
+  const openBook = useCallback(() => setBookDeleteConfirm(true), []);
+  const closeBook = useCallback(() => setBookDeleteConfirm(false), []);
+  const openProgress = useCallback(() => setProgressDeleteConfirm(true), []);
+  const closeProgress = useCallback(() => setProgressDeleteConfirm(false), []);
 
-  const coverSrc = bookDetails?.coverImgUrl || book?.coverImgUrl;
-  const displayTitle = bookDetails?.title || book?.title || '제목 없음';
-  const chapterStripBookTitle = String(bookDetails?.title ?? book?.title ?? '').trim();
-  const displayAuthor = bookDetails?.author || book?.author || '저자 정보 없음';
-  const coverInitial = (displayTitle || '?').trim().slice(0, 1) || '?';
-  const isListView = viewMode === 'list';
-  const hasProgress = readPercent > 0 || !!progressInfo;
+  return {
+    book: bookDeleteConfirm,
+    progress: progressDeleteConfirm,
+    openBook,
+    closeBook,
+    openProgress,
+    closeProgress,
+    confirmDeleteBook,
+    confirmDeleteProgress,
+  };
+}
 
-  const coverBlock = (
+function BookCover({ src, title }) {
+  // 실패한 src만 기억 → src가 바뀌면 자동으로 다시 시도
+  const [failedSrc, setFailedSrc] = useState(null);
+  const showImage = src && failedSrc !== src;
+  const initial = (title || '?').trim().slice(0, 1) || '?';
+  return (
     <div className="book-detail-cover-wrap">
       <div className="book-detail-cover">
-        {coverSrc && !coverImgFailed ? (
-          <AuthenticatedImage
-            src={coverSrc}
-            alt={displayTitle}
-            onError={() => setCoverImgFailed(true)}
-          />
-        ) : null}
-        {(!coverSrc || coverImgFailed) && (
+        {showImage ? (
+          <AuthenticatedImage src={src} alt={title} onError={() => setFailedSrc(src)} />
+        ) : (
           <div className="book-detail-cover-placeholder" aria-hidden="true">
-            <span className="book-detail-cover-placeholder-letter">{coverInitial}</span>
+            <span className="book-detail-cover-placeholder-letter">{initial}</span>
           </div>
         )}
       </div>
     </div>
   );
+}
 
-  const titleBlock = (
-    <div className="book-detail-title-row">
-      <h2 id="book-detail-title" className="book-detail-title">
-        {displayTitle}
-      </h2>
-      <span className="book-detail-author">{displayAuthor}</span>
-    </div>
-  );
-
-  const progressSkeleton = (
+function ProgressSkeleton() {
+  return (
     <div className="book-detail-skeleton" aria-hidden="true">
       <div className="book-detail-skeleton-line book-detail-skeleton-line--lg" />
       <div className="book-detail-skeleton-line book-detail-skeleton-line--sm" />
@@ -521,8 +442,10 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
       </div>
     </div>
   );
+}
 
-  const progressMeta = (
+function ProgressMeta({ readPercent, relativeUpdated, updatedAtIso, hasServerProgress, onDeleteClick }) {
+  return (
     <div
       className="book-detail-reader-meta book-detail-reader-meta--compact"
       role="region"
@@ -550,22 +473,22 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
         </div>
       )}
       <div className="book-detail-reader-compact-foot">
-        {libraryRelativeUpdated ? (
+        {relativeUpdated ? (
           <time
             className="book-detail-reader-compact-time"
-            dateTime={libraryUpdatedAtIso ?? undefined}
-            aria-label={`최근 업데이트 ${libraryRelativeUpdated}`}
+            dateTime={updatedAtIso ?? undefined}
+            aria-label={`최근 업데이트 ${relativeUpdated}`}
           >
-            {libraryRelativeUpdated}
+            {relativeUpdated}
           </time>
-        ) : progressInfo ? (
+        ) : hasServerProgress ? (
           <span className="book-detail-reader-compact-placeholder">—</span>
         ) : null}
-        {progressInfo && (
+        {hasServerProgress && (
           <button
             type="button"
             className="book-detail-reader-clear-progress"
-            onClick={() => setProgressDeleteConfirm(true)}
+            onClick={onDeleteClick}
             aria-label="독서 진도 삭제"
           >
             진도 삭제
@@ -574,8 +497,10 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
       </div>
     </div>
   );
+}
 
-  const statusBlocks = (
+function StatusBlocks({ loading, error, onRetry }) {
+  return (
     <>
       {loading && (
         <div className="book-detail-loading" role="status" aria-live="polite">
@@ -586,16 +511,225 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
       {error && (
         <div className="book-detail-error" role="alert" aria-live="assertive">
           <span className="book-detail-error-text">{error}</span>
-          <button
-            type="button"
-            className="book-detail-error-retry"
-            onClick={handleRetryFetch}
-          >
+          <button type="button" className="book-detail-error-retry" onClick={onRetry}>
             다시 시도
           </button>
         </div>
       )}
     </>
+  );
+}
+
+function CharactersPanel({ characterLists, isOpen, onToggle, showMore, onToggleShowMore }) {
+  const { unique, sortedMain, sortedOther } = characterLists;
+  return (
+    <div className="book-detail-panel">
+      <CollapsiblePanelHeader
+        titleId="book-detail-characters-heading"
+        title="등장 인물"
+        countLabel={`${unique.length}명`}
+        isOpen={isOpen}
+        onToggle={onToggle}
+        controlsId="book-detail-characters-region"
+        toggleOpenLabel="등장 인물 접기"
+        toggleClosedLabel="등장 인물 펼치기"
+      />
+      <div
+        id="book-detail-characters-region"
+        className={libraryPanelBodyClass(isOpen)}
+        role="region"
+        aria-labelledby="book-detail-characters-heading"
+        aria-hidden={!isOpen}
+      >
+        {sortedMain.length > 0 && (
+          <ul className="book-detail-characters-list">
+            {sortedMain.map((character) => (
+              <CharacterRow key={character.id ?? character.name} character={character} isMain />
+            ))}
+          </ul>
+        )}
+
+        {sortedOther.length > 0 && (
+          <>
+            {showMore && (
+              <ul className="book-detail-characters-list book-detail-characters-list--secondary">
+                {sortedOther.map((character) => (
+                  <CharacterRow key={character.id ?? character.name} character={character} />
+                ))}
+              </ul>
+            )}
+            <button
+              type="button"
+              className="book-detail-more-btn"
+              onClick={onToggleShowMore}
+              aria-expanded={showMore}
+            >
+              {showMore ? '일반 인물 접기' : `일반 인물 더보기 · ${sortedOther.length}명`}
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ChaptersPanel({ chapters, bookTitle, currentChapterIndex, isOpen, onToggle, onContinue }) {
+  return (
+    <div className="book-detail-panel">
+      <CollapsiblePanelHeader
+        titleId="book-detail-chapters-heading"
+        title="목차"
+        countLabel={`${chapters.length}챕터`}
+        isOpen={isOpen}
+        onToggle={onToggle}
+        controlsId="book-detail-chapters-region"
+        toggleOpenLabel="목차 접기"
+        toggleClosedLabel="목차 펼치기"
+      />
+      <div
+        id="book-detail-chapters-region"
+        className={libraryPanelBodyClass(isOpen)}
+        role="region"
+        aria-labelledby="book-detail-chapters-heading"
+        aria-hidden={!isOpen}
+      >
+        <ol className="book-detail-chapters-list">
+          {chapters.map((chapter, index) => {
+            const { rawTitle, chapterLine, chapterKey, isCurrent, displayNum } =
+              formatChapterRowMeta(chapter, bookTitle, index, currentChapterIndex);
+            return (
+              <li
+                key={chapterKey}
+                className={
+                  isCurrent
+                    ? 'book-detail-chapter-item book-detail-chapter-item--current'
+                    : 'book-detail-chapter-item'
+                }
+              >
+                <span className="book-detail-chapter-num">{displayNum}</span>
+                <span className="book-detail-chapter-title" title={rawTitle || undefined}>
+                  {chapterLine}
+                </span>
+                {isCurrent ? (
+                  <button
+                    type="button"
+                    className="book-detail-chapter-current-badge"
+                    onClick={onContinue}
+                    aria-label="이어 읽기"
+                  >
+                    이어 읽기
+                  </button>
+                ) : null}
+              </li>
+            );
+          })}
+        </ol>
+      </div>
+    </div>
+  );
+}
+
+const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'grid' }) => {
+  const navigate = useNavigate();
+  const [showMoreCharacters, setShowMoreCharacters] = useState(false);
+  const [charactersPanelOpen, setCharactersPanelOpen] = useState(true);
+  const [chaptersPanelOpen, setChaptersPanelOpen] = useState(true);
+  const closeButtonRef = useRef(null);
+  const dialogRef = useRef(null);
+
+  const serverBookId = resolveServerBookId(book);
+  const { bookDetails, loading, error, progressInfo, setProgressInfo, retry: handleRetryFetch } =
+    useBookDetails(book, serverBookId, isOpen);
+
+  const characterLists = useMemo(
+    () => dedupeAndSortCharacters(bookDetails?.characters),
+    [bookDetails?.characters]
+  );
+
+
+  const cachedProgress = serverBookId != null ? getProgressFromCache(serverBookId) : null;
+  const progressLocator = resolveProgressLocator(cachedProgress || progressInfo);
+  const readPercent = resolveLibraryReadingProgressPercent(book);
+
+  const libraryRelativeUpdated = book?.updatedAt
+    ? formatRelativeTime(book.updatedAt, { withTime: false })
+    : '';
+  const libraryUpdatedAtIso = toLibraryIsoDateOrNull(book?.updatedAt);
+
+  useEffect(() => {
+    if (isOpen) {
+      setShowMoreCharacters(false);
+    }
+  }, [isOpen, book?.id]);
+
+  useEffect(() => {
+    const len = bookDetails?.chapters?.length ?? 0;
+    if (len > 12) {
+      setChaptersPanelOpen(false);
+    } else if (len > 0) {
+      setChaptersPanelOpen(true);
+    }
+  }, [bookDetails?.id, bookDetails?.chapters?.length]);
+
+  const confirms = useDeleteConfirms({
+    isOpen, book, serverBookId, onDelete, onClose, progressInfo, setProgressInfo,
+  });
+
+  // 중첩된 ConfirmDialog(삭제 확인)가 열려있는 동안은 Tab 트랩만 양보 — "이전 포커스" 캡처는
+  // isOpen 기준으로 유지해 중첩 다이얼로그가 열고 닫힐 때마다 포커스가 두 번 튀지 않게 함
+  useModalFocusTrap(isOpen, dialogRef, undefined, {
+    initialFocusRef: closeButtonRef,
+    suspended: confirms.book || confirms.progress,
+  });
+
+  const getBookIdentifier = useCallback(() => {
+    const id = book?.id ?? resolveServerBookId(book);
+    return id != null ? String(id) : '';
+  }, [book]);
+
+  const navigateToBookPage = useCallback(
+    (pathPrefix) => {
+      const id = getBookIdentifier();
+      if (!id) {
+        toast.error('책 정보가 없어 이동할 수 없습니다.');
+        return;
+      }
+      onClose();
+      navigate(`${pathPrefix}/${id}`, { state: { book } });
+    },
+    [book, getBookIdentifier, onClose, navigate]
+  );
+
+  const handleReadClick = useCallback(() => navigateToBookPage(USER_VIEWER_PREFIX), [navigateToBookPage]);
+
+  const handleGraphClick = useCallback(() => navigateToBookPage(USER_GRAPH_PREFIX), [navigateToBookPage]);
+
+  const toggleCharactersPanel = useCallback(() => {
+    setCharactersPanelOpen((o) => !o);
+  }, []);
+
+  const toggleChaptersPanel = useCallback(() => {
+    setChaptersPanelOpen((o) => !o);
+  }, []);
+
+  const toggleShowMoreCharacters = useCallback(() => {
+    setShowMoreCharacters((v) => !v);
+  }, []);
+
+  if (!isOpen) return null;
+
+  const { coverSrc, displayTitle, chapterStripBookTitle, displayAuthor } =
+    resolveBookDisplay(book, bookDetails);
+  const isListView = viewMode === 'list';
+  const hasProgress = readPercent > 0 || !!progressInfo;
+
+  const titleBlock = (
+    <div className="book-detail-title-row">
+      <h2 id="book-detail-title" className="book-detail-title">
+        {displayTitle}
+      </h2>
+      <span className="book-detail-author">{displayAuthor}</span>
+    </div>
   );
 
   return (
@@ -629,12 +763,20 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
           </button>
 
           <div className={`book-detail-header${isListView ? ' book-detail-header--list' : ''}`}>
-            {coverBlock}
+            <BookCover key={book?.id} src={coverSrc} title={displayTitle} />
             <div className="book-detail-info">
               {titleBlock}
-              {loading && !error && progressSkeleton}
-              {!loading && hasProgress && progressMeta}
-              {statusBlocks}
+              {loading && !error && <ProgressSkeleton />}
+              {!loading && hasProgress && (
+                <ProgressMeta
+                  readPercent={readPercent}
+                  relativeUpdated={libraryRelativeUpdated}
+                  updatedAtIso={libraryUpdatedAtIso}
+                  hasServerProgress={Boolean(progressInfo)}
+                  onDeleteClick={confirms.openProgress}
+                />
+              )}
+              <StatusBlocks loading={loading} error={error} onRetry={handleRetryFetch} />
             </div>
           </div>
 
@@ -642,135 +784,25 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
             <div className="book-detail-body">
               {bookDetails && (
                 <>
-
-                {characterLists.unique.length > 0 && (
-                  <div className="book-detail-panel">
-                    <CollapsiblePanelHeader
-                      titleId="book-detail-characters-heading"
-                      title="등장 인물"
-                      countLabel={`${characterLists.unique.length}명`}
+                  {characterLists.unique.length > 0 && (
+                    <CharactersPanel
+                      characterLists={characterLists}
                       isOpen={charactersPanelOpen}
                       onToggle={toggleCharactersPanel}
-                      controlsId="book-detail-characters-region"
-                      toggleOpenLabel="등장 인물 접기"
-                      toggleClosedLabel="등장 인물 펼치기"
+                      showMore={showMoreCharacters}
+                      onToggleShowMore={toggleShowMoreCharacters}
                     />
-                    <div
-                      id="book-detail-characters-region"
-                      className={libraryPanelBodyClass(charactersPanelOpen)}
-                      role="region"
-                      aria-labelledby="book-detail-characters-heading"
-                      aria-hidden={!charactersPanelOpen}
-                    >
-                      {characterLists.sortedMain.length > 0 && (
-                        <ul className="book-detail-characters-list">
-                          {characterLists.sortedMain.map((character) => (
-                            <CharacterRow
-                              key={character.id ?? character.name}
-                              character={character}
-                              isMain
-                            />
-                          ))}
-                        </ul>
-                      )}
-
-                      {characterLists.sortedOther.length > 0 && (
-                        <>
-                          {showMoreCharacters && (
-                            <ul className="book-detail-characters-list book-detail-characters-list--secondary">
-                              {characterLists.sortedOther.map((character) => (
-                                <CharacterRow
-                                  key={character.id ?? character.name}
-                                  character={character}
-                                />
-                              ))}
-                            </ul>
-                          )}
-                          <button
-                            type="button"
-                            className="book-detail-more-btn"
-                            onClick={toggleShowMoreCharacters}
-                            aria-expanded={showMoreCharacters}
-                          >
-                            {showMoreCharacters
-                              ? '일반 인물 접기'
-                              : `일반 인물 더보기 · ${characterLists.sortedOther.length}명`}
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {bookDetails.chapters && bookDetails.chapters.length > 0 && (
-                  <div className="book-detail-panel">
-                    <CollapsiblePanelHeader
-                      titleId="book-detail-chapters-heading"
-                      title="목차"
-                      countLabel={`${bookDetails.chapters.length}챕터`}
+                  )}
+                  {bookDetails.chapters?.length > 0 && (
+                    <ChaptersPanel
+                      chapters={bookDetails.chapters}
+                      bookTitle={chapterStripBookTitle}
+                      currentChapterIndex={progressLocator?.chapterIndex}
                       isOpen={chaptersPanelOpen}
                       onToggle={toggleChaptersPanel}
-                      controlsId="book-detail-chapters-region"
-                      toggleOpenLabel="목차 접기"
-                      toggleClosedLabel="목차 펼치기"
+                      onContinue={handleReadClick}
                     />
-                    <div
-                      id="book-detail-chapters-region"
-                      className={libraryPanelBodyClass(chaptersPanelOpen)}
-                      role="region"
-                      aria-labelledby="book-detail-chapters-heading"
-                      aria-hidden={!chaptersPanelOpen}
-                    >
-                      <ol className="book-detail-chapters-list">
-                        {bookDetails.chapters.map((chapter, index) => {
-                          const {
-                            rawTitle,
-                            chapterLine,
-                            chapterKey,
-                            isCurrent,
-                            displayNum,
-                          } = formatChapterRowMeta(
-                            chapter,
-                            chapterStripBookTitle,
-                            index,
-                            progressLocator?.chapterIndex,
-                          );
-                          return (
-                            <li
-                              key={chapterKey}
-                              className={
-                                isCurrent
-                                  ? 'book-detail-chapter-item book-detail-chapter-item--current'
-                                  : 'book-detail-chapter-item'
-                              }
-                            >
-                              <span className="book-detail-chapter-num">
-                                {displayNum}
-                              </span>
-                              <span
-                                className="book-detail-chapter-title"
-                                title={rawTitle || undefined}
-                              >
-                                {chapterLine}
-                              </span>
-                              {isCurrent ? (
-                                <button
-                                  type="button"
-                                  className="book-detail-chapter-current-badge"
-                                  onClick={handleReadClick}
-                                  aria-label="이어 읽기"
-                                >
-                                  이어 읽기
-                                </button>
-                              ) : null}
-                            </li>
-                          );
-                        })}
-                      </ol>
-                    </div>
-                  </div>
-                )}
-
+                  )}
                 </>
               )}
             </div>
@@ -778,7 +810,7 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
 
           <div className="book-detail-footer-stack">
             <div className="book-detail-actions book-detail-actions--footer">
-              <div className="book-detail-footer-row" role="group" aria-label="관계도 및 서재 삭제">
+              <div className="book-detail-footer-row" role="group" aria-label="관계도 및 서재에서 숨기기">
                 <button
                   className="book-detail-secondary-btn"
                   onClick={handleGraphClick}
@@ -789,11 +821,11 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
                 </button>
                 <button
                   className="book-detail-danger-btn book-detail-danger-btn--inline"
-                  onClick={() => setBookDeleteConfirm(true)}
+                  onClick={confirms.openBook}
                   type="button"
-                  aria-label="서재에서 이 책 삭제"
+                  aria-label="서재에서 이 책 숨기기"
                 >
-                  서재에서 삭제
+                  서재에서 숨기기
                 </button>
               </div>
             </div>
@@ -802,19 +834,19 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
       </div>
 
       <ConfirmDialog
-        isOpen={bookDeleteConfirm}
-        onClose={() => setBookDeleteConfirm(false)}
-        onConfirm={handleConfirmDeleteBook}
-        title="책 삭제"
-        message="서재에서 이 책을 삭제할까요? 이 작업은 되돌릴 수 없습니다."
-        confirmLabel="삭제"
+        isOpen={confirms.book}
+        onClose={confirms.closeBook}
+        onConfirm={confirms.confirmDeleteBook}
+        title={HIDE_BOOK_COPY.title}
+        message={HIDE_BOOK_COPY.message}
+        confirmLabel={HIDE_BOOK_COPY.confirmLabel}
         manageChrome={false}
       />
 
       <ConfirmDialog
-        isOpen={progressDeleteConfirm}
-        onClose={() => setProgressDeleteConfirm(false)}
-        onConfirm={handleConfirmDeleteProgress}
+        isOpen={confirms.progress}
+        onClose={confirms.closeProgress}
+        onConfirm={confirms.confirmDeleteProgress}
         title="진도 삭제"
         message="독서 진도를 삭제할까요?"
         confirmLabel="삭제"
@@ -823,14 +855,6 @@ const BookDetailModal = memo(({ book, isOpen, onClose, onDelete, viewMode = 'gri
     </>
   );
 });
-
-BookDetailModal.propTypes = {
-  book: PropTypes.object,
-  isOpen: PropTypes.bool.isRequired,
-  onClose: PropTypes.func.isRequired,
-  onDelete: PropTypes.func,
-  viewMode: PropTypes.oneOf(['grid', 'list']),
-};
 
 BookDetailModal.displayName = 'BookDetailModal';
 

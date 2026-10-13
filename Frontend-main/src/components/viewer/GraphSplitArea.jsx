@@ -1,5 +1,4 @@
 import { lazy, Suspense, useMemo, useRef, memo, useCallback, useEffect, useState, useId } from 'react';
-import PropTypes from 'prop-types';
 import { useNavigate, useParams } from 'react-router-dom';
 import { AlertCircle, Filter, Inbox, Loader2, Maximize, Minimize } from 'lucide-react';
 import CytoscapeGraphUnified from '../graph/CytoscapeGraphUnified';
@@ -108,7 +107,6 @@ const GraphSplitTopBar = memo(function GraphSplitTopBar({
           onToggleEdgeLabel={() => setEdgeLabelVisible((v) => !v)}
           filterStage={filterStage}
           onFilterChange={setFilterStage}
-          showLegend
         />
       </div>
     </div>
@@ -319,6 +317,151 @@ const GraphContainer = memo(function GraphContainer({
   );
 });
 
+/**
+ * 그래프 패널에 무엇을 보여줄지 결정하는 파생 상태.
+ * - canShowGraph: 확정 이벤트 + 타깃 callKey 일치 + elements 있음 → 캔버스 노출 (이전 이벤트 stale 금지)
+ * - isDataLoadCompleteAndEmpty: 로딩이 끝났고 이 챕터엔 표시할 이벤트가 없음 → 빈 상태 패널
+ * - isGraphRefreshing: 이벤트 전환 중 → 캔버스는 유지한 채 오버레이만 노출
+ * - shouldShowLoading / resolvedApiError: 캔버스를 아직 그릴 수 없을 때의 대체 패널
+ */
+function resolveGraphPanelStatus({
+  graphPhase,
+  isEventTransition,
+  isDataReady,
+  hasResolvedEvent,
+  hasElements,
+  graphMatchesTarget,
+  isDataEmpty,
+  apiError,
+  isLocationDetermined,
+  transitionType,
+}) {
+  const canShowGraph = isDataReady && hasResolvedEvent && hasElements && graphMatchesTarget;
+  const isGraphRefreshing = graphPhase === 'event' || isEventTransition;
+  const isDataLoadCompleteAndEmpty =
+    graphPhase === 'idle' && isDataReady && isDataEmpty && !hasElements && hasResolvedEvent && graphMatchesTarget;
+  const resolvedApiError = normalizeGraphApiError(apiError);
+  const shouldShowLoading = !canShowGraph && !isDataLoadCompleteAndEmpty && !resolvedApiError;
+  // 에러가 있으면 "이벤트 반영 중" 칩과 동시에 겹쳐 보이지 않도록 에러를 우선한다.
+  const showRefreshOverlay = canShowGraph && isGraphRefreshing && !resolvedApiError;
+  const loadingNotice = getViewerGraphLoadingNotice(
+    isGraphRefreshing || !isDataReady || !hasResolvedEvent || !graphMatchesTarget,
+    isLocationDetermined,
+    transitionType
+  );
+  return {
+    canShowGraph,
+    isDataLoadCompleteAndEmpty,
+    resolvedApiError,
+    shouldShowLoading,
+    showRefreshOverlay,
+    loadingNotice,
+  };
+}
+
+/** 확정 이벤트·타깃 그래프 callKey (이벤트 미확정이면 null) */
+function resolveTargetGraphKey({ book, currentChapter, currentEvent, hasResolvedEvent }) {
+  if (!hasResolvedEvent) return null;
+  const ctx = resolveGraphCallContext({ book, currentChapter, currentEvent });
+  return ctx?.eventIdx >= 1 ? ctx.callKey : null;
+}
+
+/** 캔버스를 못 그리는 동안에는 마지막으로 표시한 이벤트 메타 유지 (새 이벤트+옛 elements 혼선 방지) */
+function useMountedGraphMeta(canShowGraph, currentEvent, currentChapter, prevValidEvent) {
+  const [mounted, setMounted] = useState({ currentEvent, currentChapter, prevValidEvent });
+  useEffect(() => {
+    if (!canShowGraph) return;
+    // 값이 같으면 이전 객체 유지 (불필요한 재렌더 방지)
+    setMounted((prev) => (
+      prev.currentEvent === currentEvent &&
+      prev.currentChapter === currentChapter &&
+      prev.prevValidEvent === prevValidEvent
+        ? prev
+        : { currentEvent, currentChapter, prevValidEvent }
+    ));
+  }, [canShowGraph, currentEvent, currentChapter, prevValidEvent]);
+  return canShowGraph ? { currentEvent, currentChapter, prevValidEvent } : mounted;
+}
+
+function GraphPanelButton({ variant = 'primary', onClick, children }) {
+  return (
+    <button type="button" className={`graph-panel-btn graph-panel-btn--${variant}`} onClick={onClick}>
+      {children}
+    </button>
+  );
+}
+
+function GraphEmptyEventsNotice({ onToggleGraph, onOpenRelationGraph }) {
+  return (
+    <GraphNoticePanel
+      variant="empty"
+      title="아직 이벤트가 없습니다"
+      description="이 챕터에는 표시할 그래프 데이터가 없습니다. 본문을 더 읽거나 그래프를 닫을 수 있습니다."
+      icon={<Inbox size={24} strokeWidth={1.75} aria-hidden />}
+      actions={
+        <>
+          {onToggleGraph ? (
+            <GraphPanelButton variant="secondary" onClick={onToggleGraph}>그래프 닫기</GraphPanelButton>
+          ) : null}
+          <GraphPanelButton onClick={onOpenRelationGraph}>전체 관계도 열기</GraphPanelButton>
+        </>
+      }
+    />
+  );
+}
+
+function GraphRefreshOverlay() {
+  return (
+    <div className="graph-refresh-overlay" role="status" aria-live="polite" aria-label="그래프 전환 중">
+      <div className="graph-refresh-chip">
+        <Loader2 size={16} className="graph-spin" strokeWidth={2} aria-hidden />
+        <span>이벤트 반영 중</span>
+      </div>
+    </div>
+  );
+}
+
+function GraphFilteredEmptyNotice({ className, onReset }) {
+  return (
+    <div className={className}>
+      <GraphNoticePanel
+        variant="empty"
+        title="조건에 맞는 인물이 없습니다"
+        description="현재 필터에 해당하는 핵심 인물이 이 챕터에는 없습니다. 필터를 해제하면 전체 인물을 볼 수 있습니다."
+        icon={<Filter size={24} strokeWidth={1.75} aria-hidden />}
+        actions={<GraphPanelButton onClick={onReset}>필터 해제</GraphPanelButton>}
+      />
+    </div>
+  );
+}
+
+function GraphLoadingNotice({ className, notice }) {
+  return (
+    <div className={className}>
+      <GraphNoticePanel
+        variant="loading"
+        title={notice.title}
+        description={notice.description}
+        icon={<Loader2 size={20} className="graph-spin" strokeWidth={2} aria-hidden />}
+      />
+    </div>
+  );
+}
+
+function GraphErrorNotice({ className, error }) {
+  return (
+    <div className={`${className} graph-fill-overlay--error`}>
+      <GraphNoticePanel
+        variant="error"
+        title={error.message || '문제가 발생했습니다'}
+        description={error.details || '잠시 후 다시 시도해 주세요.'}
+        icon={<AlertCircle size={24} strokeWidth={2} aria-hidden />}
+        actions={error.retry ? <GraphPanelButton onClick={error.retry}>다시 시도</GraphPanelButton> : null}
+      />
+    </div>
+  );
+}
+
 const GraphSplitArea = memo(function GraphSplitArea({
   graphState,
   graphActions,
@@ -384,25 +527,16 @@ const GraphSplitArea = memo(function GraphSplitArea({
   );
 
   const hasResolvedEvent = eventUtils.resolveEventNum(currentEvent) > 0;
-  const targetGraphKey = useMemo(() => {
-    if (!hasResolvedEvent) return null;
-    const ctx = resolveGraphCallContext({ book, currentChapter, currentEvent });
-    return ctx?.eventIdx >= 1 ? ctx.callKey : null;
-  }, [book, currentChapter, currentEvent, hasResolvedEvent]);
-  const graphMatchesTarget =
-    Boolean(targetGraphKey) &&
-    Boolean(appliedGraphKey) &&
-    appliedGraphKey === targetGraphKey;
+  const targetGraphKey = useMemo(
+    () => resolveTargetGraphKey({ book, currentChapter, currentEvent, hasResolvedEvent }),
+    [book, currentChapter, currentEvent, hasResolvedEvent],
+  );
+  const graphMatchesTarget = Boolean(targetGraphKey) && appliedGraphKey === targetGraphKey;
 
   const hasLocationHint =
     hasGraphPanelLocationHint(cachedLocation, { requireEventNum: true }) ||
     hasGraphPanelLocationHint(resumeAnchor);
-
-  const isLocationDetermined = useMemo(() => {
-    if (!currentChapter || currentChapter < 1) return hasLocationHint;
-    if (!currentEvent) return hasLocationHint;
-    return true;
-  }, [currentChapter, currentEvent, hasLocationHint]);
+  const isLocationDetermined = (currentChapter >= 1 && Boolean(currentEvent)) || hasLocationHint;
 
   const { finalElements } = useGraphElementPipeline({
     elements,
@@ -422,48 +556,6 @@ const GraphSplitArea = memo(function GraphSplitArea({
     setFilterStage?.(0);
   }, [setFilterStage]);
 
-  /**
-   * 그래프 패널에 무엇을 보여줄지 결정하는 파생 상태를 한곳에 모음.
-   * - canShowGraph: 확정 이벤트 + 타깃 callKey 일치 + elements 있음 → 캔버스 노출 (이전 이벤트 stale 금지)
-   * - isDataLoadCompleteAndEmpty: 로딩이 끝났고 이 챕터엔 표시할 이벤트가 없음 → 빈 상태 패널
-   * - isGraphRefreshing: 이벤트 전환 중 → 캔버스는 유지한 채 오버레이만 노출
-   * - shouldShowLoading / resolvedApiError: 캔버스를 아직 그릴 수 없을 때의 대체 패널
-   */
-  const graphStatus = useMemo(() => {
-    const isGraphIdle = graphPhase === 'idle';
-    const canShowGraph = isDataReady && hasResolvedEvent && hasElements && graphMatchesTarget;
-    const isGraphRefreshing = graphPhase === 'event' || isEventTransition;
-    const isDataLoadCompleteAndEmpty =
-      isGraphIdle && isDataReady && isDataEmpty && !hasElements && hasResolvedEvent && graphMatchesTarget;
-    const resolvedApiError = normalizeGraphApiError(apiError);
-    const shouldShowLoading = !canShowGraph && !isDataLoadCompleteAndEmpty && !resolvedApiError;
-    // 에러가 있으면 "이벤트 반영 중" 칩과 동시에 겹쳐 보이지 않도록 에러를 우선한다.
-    const showRefreshOverlay = canShowGraph && isGraphRefreshing && !resolvedApiError;
-    const loadingNotice = getViewerGraphLoadingNotice(
-      isGraphRefreshing || !isDataReady || !hasResolvedEvent || !graphMatchesTarget,
-      isLocationDetermined,
-      transitionState.type
-    );
-    return {
-      canShowGraph,
-      isDataLoadCompleteAndEmpty,
-      resolvedApiError,
-      shouldShowLoading,
-      showRefreshOverlay,
-      loadingNotice,
-    };
-  }, [
-    graphPhase,
-    isEventTransition,
-    isDataReady,
-    hasResolvedEvent,
-    hasElements,
-    graphMatchesTarget,
-    isDataEmpty,
-    apiError,
-    isLocationDetermined,
-    transitionState.type,
-  ]);
   const {
     canShowGraph,
     isDataLoadCompleteAndEmpty,
@@ -471,22 +563,34 @@ const GraphSplitArea = memo(function GraphSplitArea({
     shouldShowLoading,
     showRefreshOverlay,
     loadingNotice,
-  } = graphStatus;
+  } = useMemo(
+    () => resolveGraphPanelStatus({
+      graphPhase,
+      isEventTransition,
+      isDataReady,
+      hasResolvedEvent,
+      hasElements,
+      graphMatchesTarget,
+      isDataEmpty,
+      apiError,
+      isLocationDetermined,
+      transitionType: transitionState.type,
+    }),
+    [
+      graphPhase,
+      isEventTransition,
+      isDataReady,
+      hasResolvedEvent,
+      hasElements,
+      graphMatchesTarget,
+      isDataEmpty,
+      apiError,
+      isLocationDetermined,
+      transitionState.type,
+    ],
+  );
 
-  // hidden 동안에는 이전에 표시 중이던 이벤트 메타를 유지 (새 이벤트+옛 elements 혼선 방지)
-  const [mountedEvent, setMountedEvent] = useState(currentEvent);
-  const [mountedChapter, setMountedChapter] = useState(currentChapter);
-  const [mountedPrevValidEvent, setMountedPrevValidEvent] = useState(prevValidEvent);
-  useEffect(() => {
-    if (!canShowGraph) return;
-    setMountedEvent(currentEvent);
-    setMountedChapter(currentChapter);
-    setMountedPrevValidEvent(prevValidEvent);
-  }, [canShowGraph, currentEvent, currentChapter, prevValidEvent]);
-
-  const graphEventForCanvas = canShowGraph ? currentEvent : mountedEvent;
-  const graphChapterForCanvas = canShowGraph ? currentChapter : mountedChapter;
-  const graphPrevValidForCanvas = canShowGraph ? prevValidEvent : mountedPrevValidEvent;
+  const canvasMeta = useMountedGraphMeta(canShowGraph, currentEvent, currentChapter, prevValidEvent);
 
   const openRelationGraphPage = useCallback(() => {
     const id = resolvePositiveBookId(routeBookId, book?.id, bookKey, routeFilename);
@@ -499,12 +603,8 @@ const GraphSplitArea = memo(function GraphSplitArea({
     });
   }, [book, bookKey, currentChapter, navigate, routeBookId, routeFilename]);
 
-  const fillOverlayClass = [
-    'graph-fill-overlay',
-    hasElements ? null : 'graph-fill-overlay--bare',
-  ]
-    .filter(Boolean)
-    .join(' ');
+  const fillOverlayClass = hasElements ? 'graph-fill-overlay' : 'graph-fill-overlay graph-fill-overlay--bare';
+  const showFilteredEmpty = isFilteredToEmpty && !resolvedApiError && !shouldShowLoading && !showRefreshOverlay;
 
   return (
     <div className="graph-page-shell graph-page-shell--fill">
@@ -518,33 +618,16 @@ const GraphSplitArea = memo(function GraphSplitArea({
 
       <div className="graph-page-inner">
         {isDataLoadCompleteAndEmpty ? (
-          <GraphNoticePanel
-            variant="empty"
-            title="아직 이벤트가 없습니다"
-            description="이 챕터에는 표시할 그래프 데이터가 없습니다. 본문을 더 읽거나 그래프를 닫을 수 있습니다."
-            icon={<Inbox size={24} strokeWidth={1.75} aria-hidden />}
-            actions={
-              <>
-                {onToggleGraph ? (
-                  <button type="button" className="graph-panel-btn graph-panel-btn--secondary" onClick={onToggleGraph}>
-                    그래프 닫기
-                  </button>
-                ) : null}
-                <button type="button" className="graph-panel-btn graph-panel-btn--primary" onClick={openRelationGraphPage}>
-                  전체 관계도 열기
-                </button>
-              </>
-            }
-          />
+          <GraphEmptyEventsNotice onToggleGraph={onToggleGraph} onOpenRelationGraph={openRelationGraphPage} />
         ) : (
           <>
             {/* 기존 elements를 유지한 채 Cytoscape id diff로 추가·삭제만 반영 */}
             {hasElements ? (
               <div className="graph-canvas-area">
                 <GraphContainer
-                  currentEvent={graphEventForCanvas}
-                  currentChapter={graphChapterForCanvas}
-                  chapterDisplayLabel={formatChapterOrdinalLabel(graphChapterForCanvas)}
+                  currentEvent={canvasMeta.currentEvent}
+                  currentChapter={canvasMeta.currentChapter}
+                  chapterDisplayLabel={formatChapterOrdinalLabel(canvasMeta.currentChapter)}
                   edgeLabelVisible={edgeLabelVisible}
                   filename={routeBookId ?? bookKey ?? ''}
                   elements={finalElements}
@@ -553,7 +636,7 @@ const GraphSplitArea = memo(function GraphSplitArea({
                   filteredElements={filteredElements}
                   fitNodeIds={fitNodeIds}
                   filterStage={filterStage}
-                  prevValidEvent={graphPrevValidForCanvas ?? null}
+                  prevValidEvent={canvasMeta.prevValidEvent ?? null}
                   activeTooltip={activeTooltip}
                   onClearTooltip={onClearTooltip}
                   onSetActiveTooltip={onSetActiveTooltip}
@@ -563,92 +646,20 @@ const GraphSplitArea = memo(function GraphSplitArea({
                   cyRef={cyRef}
                   showZoomControls
                 />
-                {showRefreshOverlay ? (
-                  <div
-                    className="graph-refresh-overlay"
-                    role="status"
-                    aria-live="polite"
-                    aria-label="그래프 전환 중"
-                  >
-                    <div className="graph-refresh-chip">
-                      <Loader2 size={16} className="graph-spin" strokeWidth={2} aria-hidden />
-                      <span>이벤트 반영 중</span>
-                    </div>
-                  </div>
-                ) : null}
-                {isFilteredToEmpty && !resolvedApiError && !shouldShowLoading && !showRefreshOverlay ? (
-                  <div className={fillOverlayClass}>
-                    <GraphNoticePanel
-                      variant="empty"
-                      title="조건에 맞는 인물이 없습니다"
-                      description="현재 필터에 해당하는 핵심 인물이 이 챕터에는 없습니다. 필터를 해제하면 전체 인물을 볼 수 있습니다."
-                      icon={<Filter size={24} strokeWidth={1.75} aria-hidden />}
-                      actions={
-                        <button type="button" className="graph-panel-btn graph-panel-btn--primary" onClick={resetFilterStage}>
-                          필터 해제
-                        </button>
-                      }
-                    />
-                  </div>
+                {showRefreshOverlay ? <GraphRefreshOverlay /> : null}
+                {showFilteredEmpty ? (
+                  <GraphFilteredEmptyNotice className={fillOverlayClass} onReset={resetFilterStage} />
                 ) : null}
               </div>
             ) : null}
 
-            {shouldShowLoading ? (
-              <div className={fillOverlayClass}>
-                <GraphNoticePanel
-                  variant="loading"
-                  title={loadingNotice.title}
-                  description={loadingNotice.description}
-                  icon={<Loader2 size={20} className="graph-spin" strokeWidth={2} aria-hidden />}
-                />
-              </div>
-            ) : null}
-
-            {resolvedApiError ? (
-              <div className={`${fillOverlayClass} graph-fill-overlay--error`}>
-                <GraphNoticePanel
-                  variant="error"
-                  title={resolvedApiError.message || '문제가 발생했습니다'}
-                  description={resolvedApiError.details || '잠시 후 다시 시도해 주세요.'}
-                  icon={<AlertCircle size={24} strokeWidth={2} aria-hidden />}
-                  actions={
-                    resolvedApiError.retry ? (
-                      <button type="button" className="graph-panel-btn graph-panel-btn--primary" onClick={resolvedApiError.retry}>
-                        다시 시도
-                      </button>
-                    ) : null
-                  }
-                />
-              </div>
-            ) : null}
+            {shouldShowLoading ? <GraphLoadingNotice className={fillOverlayClass} notice={loadingNotice} /> : null}
+            {resolvedApiError ? <GraphErrorNotice className={fillOverlayClass} error={resolvedApiError} /> : null}
           </>
         )}
       </div>
     </div>
   );
 });
-
-GraphSplitArea.propTypes = {
-  graphState: PropTypes.object.isRequired,
-  graphActions: PropTypes.object.isRequired,
-  viewerState: PropTypes.object.isRequired,
-  searchState: PropTypes.object,
-  searchActions: PropTypes.object,
-  tooltipProps: PropTypes.shape({
-    activeTooltip: PropTypes.object,
-    onClearTooltip: PropTypes.func,
-    onSetActiveTooltip: PropTypes.func,
-    graphClearRef: PropTypes.object,
-  }).isRequired,
-  transitionState: PropTypes.shape({
-    type: PropTypes.string,
-    inProgress: PropTypes.bool,
-  }).isRequired,
-  apiError: PropTypes.oneOfType([PropTypes.object, PropTypes.string]),
-  cachedLocation: PropTypes.object,
-  resumeAnchor: PropTypes.object,
-  onToggleGraph: PropTypes.func,
-};
 
 export default GraphSplitArea;

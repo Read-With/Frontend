@@ -6,15 +6,13 @@ import GraphCanvas from "./GraphCanvas";
 import ChapterSidebar from "./ChapterSidebar";
 import "./RelationGraph.css";
 
-import { createGraphStylesheet, getEdgeStyle } from "../../utils/styles/graphStyles";
-import { COLORS } from "../../utils/styles/styles.js";
+import { createGraphStylesheet, getEdgeStyle, GRAPH_COLORS } from "../../utils/styles/graphStyles";
 import {
   GRAPH_LAYOUT_CONSTANTS,
   resolveChapterSidebarWidth,
-  calculateLastEventForChapter,
 } from '../../utils/graph/graphCore';
 import { isGraphDragEndEvent } from '../../utils/graph/graphCy';
-import { userViewerPath, errorUtils } from '../../utils/common/urlUtils';
+import { userViewerPath } from '../../utils/common/urlUtils';
 import {
   useGraphSearch,
   useGraphState,
@@ -22,16 +20,15 @@ import {
   useIsNarrowViewport,
 } from '../../hooks/graph/useGraphViewState';
 import { useApiGraphData, useChapterPovSummaries } from '../../hooks/graph/useApiGraphData';
-import { resolveServerBookIdOrFallback, useLocalStorageNumber } from '../../hooks/common/hooksShared';
+import { useLocalStorageNumber } from '../../hooks/common/hooksShared';
 import {
   convertGraphSourceToElements,
   commitVisibleGraphElements,
-  DEFAULT_GRAPH_TRANSFORM_DEPS,
 } from '../../utils/viewer/viewerGraph';
 import { extractNodeWeightsFromElements, getGraphEventState } from '../../utils/graph/graphModel';
-import { eventUtils, formatFallbackChapterLabel, stripRedundantBookTitlePrefix, resolveChapterTitleMeta } from '../../utils/viewer/viewerCore';
+import { eventUtils, resolveServerBookId, formatFallbackChapterLabel, stripRedundantBookTitlePrefix, resolveChapterTitleMeta } from '../../utils/viewer/viewerCore';
 import { hasGraphPayload } from '../../utils/api/graphApi';
-import { toPositiveNumberOrNull } from '../../utils/common/valueUtils';
+import { toPositiveNumberOrNull, errorUtils } from '../../utils/common/valueUtils';
 import {
   shouldIgnoreGraphOutsideClick,
   useGraphTooltipSelection,
@@ -40,12 +37,13 @@ import {
 import {
   getChapterData,
   findManifestEventInChapter,
+  resolveLastEventIdxForChapter,
 } from '../../utils/common/cache/manifestCache.js';
 
 const pageRootStyle = {
   width: '100vw',
   height: '100vh',
-  background: COLORS.backgroundLighter,
+  background: GRAPH_COLORS.backgroundLighter,
   overflow: 'hidden',
 };
 
@@ -55,11 +53,11 @@ const emptyGraphBannerStyle = {
   left: '50%',
   transform: 'translate(-50%, -50%)',
   zIndex: GRAPH_LAYOUT_CONSTANTS.Z_INDEX_TOOLTIP,
-  background: COLORS.surfaceGlass,
-  border: `1px solid ${COLORS.border}`,
+  background: GRAPH_COLORS.surfaceGlass,
+  border: `1px solid ${GRAPH_COLORS.border}`,
   borderRadius: 10,
   padding: '8px 12px',
-  color: COLORS.textGray,
+  color: GRAPH_COLORS.textGray,
   fontSize: 12,
   fontWeight: 600,
 };
@@ -103,6 +101,8 @@ function RelationGraphWrapper() {
   const prevChapterNum = useRef(currentChapter);
   const prevEventNum = useRef();
   const profileApplyTokenRef = useRef(0);
+  // 언마운트 시 이미지 재시도 루프 중단
+  useEffect(() => () => { profileApplyTokenRef.current += 1; }, []);
   const pendingChapterChangeRef = useRef(null);
   const locationRef = useRef({ state: location.state, pathname: location.pathname });
 
@@ -128,7 +128,7 @@ function RelationGraphWrapper() {
   }, [chapterFromViewer, currentChapter, setCurrentChapter]);
 
   const serverBookId = useMemo(
-    () => resolveServerBookIdOrFallback(book, bookId),
+    () => resolveServerBookId(book, bookId),
     [book, bookId],
   );
 
@@ -267,7 +267,6 @@ function RelationGraphWrapper() {
         graphApiPayload,
         currentChapter,
         currentEvent,
-        DEFAULT_GRAPH_TRANSFORM_DEPS,
         extractNodeWeightsFromElements(previousEventState?.elements),
         { bookId: serverBookId },
       ).elements;
@@ -419,11 +418,11 @@ function RelationGraphWrapper() {
       pendingChapterChangeRef.current = null;
       setCurrentChapter(chapter);
 
-      const lastEventNum = calculateLastEventForChapter({
-        manifestChapters: manifestData?.chapters,
-        manifestBookId: serverBookId,
+      const lastEventNum = resolveLastEventIdxForChapter(
+        serverBookId,
         chapter,
-      });
+        manifestData?.chapters?.length ? { chapters: manifestData.chapters } : undefined
+      );
       const normalized = Number(lastEventNum);
       if (Number.isFinite(normalized) && normalized >= 1) {
         setCurrentEvent(normalized);
