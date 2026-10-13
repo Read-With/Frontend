@@ -56,13 +56,13 @@
 
 - 겹침(overlap) 해결 알고리즘은 대상 노드가 **2000개(`MAX_NODES`)를 넘으면 전체를 계산하는 대신, 이동 중인 노드·선택된 노드·그 주변·화면에 보이는 노드 중 일부를 샘플링**해 계산량을 줄입니다(`utils/graph/graphModel.js`).
 - 사용자가 필터 단계를 올리면 `filterMainCharacters`가 주요 인물 위주로만 그래프를 표시해 렌더링 대상 노드 수를 직접 줄일 수 있습니다.
-- 엣지 툴팁(`UnifiedEdgeTooltip`)은 지연 로딩(`lazy`)되어 실제로 열기 전까지 번들에 포함되지 않습니다.
+- 엣지 툴팁(`EdgeDetail`)은 지연 로딩(`lazy`)되어 실제로 열기 전까지 번들에 포함되지 않습니다.
 
 ### 뷰어 분할 그래프 vs 전체 관계도
 
 같은 그래프 컴포넌트를 쓰지만 두 화면은 목적이 다릅니다.
 
-| | 뷰어 분할 그래프 (`GraphSplitArea`, `/user/viewer/:filename`) | 전체 관계도 (`RelationGraphWrapper`, `/user/graph/:filename`) |
+| | 뷰어 분할 그래프 (`GraphSplitArea`, `/user/viewer/:filename`) | 전체 관계도 (`GraphPage`, `/user/graph/:filename`) |
 | --- | --- | --- |
 | 위치 | 뷰어 내부(본문과 분할 또는 확대) | 별도 풀스크린 페이지 |
 | 범위 | **현재 읽는 이벤트까지만** 누적 (읽기 진행에 따라 자동 갱신) | **챕터 사이드바**로 원하는 챕터까지 자유 탐색 (책 전체 범위) |

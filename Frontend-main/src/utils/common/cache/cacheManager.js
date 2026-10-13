@@ -14,17 +14,6 @@ export const CHAPTER_EVENT_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 /** 챕터 이벤트 localStorage 키 — v2: convert 단일 진입점 이후 elements 스키마 */
 export const CHAPTER_EVENT_CACHE_PREFIX = 'chapter_events_v2_';
 
-export const CHAPTER_GRAPH_CACHE_SOURCE = Object.freeze({
-  API: 'api',
-  INVALID: 'invalid',
-});
-
-/** 과거에 write됐던 source — 재사용하지 않고 rediscover */
-export const isUnusableChapterGraphCacheSource = (source) =>
-  source === CHAPTER_GRAPH_CACHE_SOURCE.INVALID ||
-  source === 'empty' ||
-  source === 'manifest-only';
-
 function getStorage(storageType = 'localStorage') {
   if (typeof window === 'undefined') return null;
   try {

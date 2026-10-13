@@ -1,10 +1,11 @@
-/** hooks 공통: bookId · latest ref · localStorage · error · manifest */
+/** hooks 공통: latest ref · viewport · focus trap · localStorage · manifest */
 
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { getBookManifest } from '../../utils/api/booksApi';
 import { getManifestFromCache } from '../../utils/common/cache/manifestCache';
 import { errorUtils } from '../../utils/common/valueUtils';
 import { lockBodyScroll } from '../../utils/styles/styles';
+import { useQuery } from '@tanstack/react-query';
 
 /** body 스크롤 잠금 (중첩 안전 — lockBodyScroll 참고) */
 export function useBodyScrollLock(active = true) {
@@ -18,7 +19,7 @@ export function useLatestRef(value) {
 }
 
 /** 뷰어·그래프 공통 모바일 브레이크포인트 */
-const NARROW_VIEWPORT_MQ = '(max-width: 767px)';
+export const NARROW_VIEWPORT_MQ = '(max-width: 767px)';
 
 export function useIsNarrowViewport(mediaQuery = NARROW_VIEWPORT_MQ) {
   const [isNarrow, setIsNarrow] = useState(() =>
@@ -46,27 +47,31 @@ const MODAL_FOCUS_TRAP_SELECTOR =
  * @param {{
  *   initialFocusRef?: import('react').RefObject<HTMLElement>,
  *   suspended?: boolean,
+ *   returnFocusRef?: import('react').RefObject<HTMLElement>,
+ *   capture?: boolean,
  * }} [options]
  *   initialFocusRef: 첫 포커스 가능 요소 대신 특정 요소(예: 취소 버튼)로 초기 포커스를 보내고 싶을 때 지정
  *   suspended: 중첩된 다른 다이얼로그가 열려 이 트랩이 일시적으로 제어권을 넘겨야 할 때 true.
  *     Tab 트랩과 초기 포커스 이동만 멈추고, 최초 진입 시 캡처한 "이전 포커스"는 건드리지 않아
  *     중첩 다이얼로그가 열고 닫힐 때마다 포커스가 불필요하게 두 번 튀는 것을 막는다.
+ *   returnFocusRef: 닫힐 때 "열 때의 포커스" 대신 돌려보낼 요소 (재마운트로 열린 모달처럼 이전 포커스가 body일 때)
+ *   capture: keydown을 캡처 단계에서 처리 (Escape가 하위 요소의 keydown 핸들러에 닿기 전에 가로챔)
  */
 export function useModalFocusTrap(isOpen, dialogRef, onClose, options = {}) {
-  const { initialFocusRef = null, suspended = false } = options;
+  const { initialFocusRef = null, suspended = false, returnFocusRef = null, capture = false } = options;
   const previouslyFocusedRef = useRef(null);
 
   // isOpen이 실제로 열림→닫힘으로 바뀔 때만 이전 포커스를 캡처·복원 (suspended 토글에는 반응하지 않음)
   useEffect(() => {
     if (!isOpen) return undefined;
-    previouslyFocusedRef.current = document.activeElement;
+    previouslyFocusedRef.current = returnFocusRef?.current || document.activeElement;
     return () => {
       const prev = previouslyFocusedRef.current;
       if (prev && typeof prev.focus === 'function') {
         prev.focus();
       }
     };
-  }, [isOpen]);
+  }, [isOpen, returnFocusRef]);
 
   // Tab 트랩 + 초기 포커스 이동은 suspended일 때만 일시 중단
   useEffect(() => {
@@ -108,12 +113,12 @@ export function useModalFocusTrap(isOpen, dialogRef, onClose, options = {}) {
       }
     };
 
-    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('keydown', onKeyDown, capture);
 
     return () => {
-      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('keydown', onKeyDown, capture);
     };
-  }, [isOpen, suspended, dialogRef, onClose, initialFocusRef]);
+  }, [isOpen, suspended, dialogRef, onClose, initialFocusRef, capture]);
 }
 
 /** 언마운트 후 setState 방지용: 마운트 상태를 ref로 추적 */
@@ -159,35 +164,6 @@ export function useAsyncRequestGuard() {
   return { nextRequestId, isStale, invalidate, requestIdRef };
 }
 
-export function useErrorHandler(context = '알 수 없는 컨텍스트') {
-  const handleError = useCallback((error, additionalContext = '', options = {}) => {
-    const errorMessage = error?.message || error?.toString() || '알 수 없는 오류가 발생했습니다';
-    const errorStatus = error?.status || error?.statusCode || null;
-    const errorCode = error?.code || null;
-
-    const errorInfo = {
-      message: errorMessage,
-      context: additionalContext || context,
-      status: errorStatus,
-      code: errorCode,
-      timestamp: Date.now(),
-      stack: error?.stack,
-      originalError: error,
-    };
-
-    errorUtils.logError(context, error, {
-      additionalContext,
-      status: errorStatus,
-      code: errorCode,
-      ...options.metadata,
-    });
-
-    return errorInfo;
-  }, [context]);
-
-  return { handleError };
-}
-
 export function useLocalStorageNumber(key, initialValue, options = {}) {
   const { forceInitialValue = false } = options;
 
@@ -215,112 +191,54 @@ export function useLocalStorageNumber(key, initialValue, options = {}) {
   });
 
   const setValue = useCallback((value) => {
-    const valueToStore = value instanceof Function ? value(storedValue) : value;
-    const numericValue = Number(valueToStore);
-    const previousValue = storedValue;
+    setStoredValue((prev) => {
+      const next = Number(value instanceof Function ? value(prev) : value);
+      if (isNaN(next)) return prev;
+      try {
+        localStorage.setItem(key, next.toString());
+        return next;
+      } catch (error) {
+        errorUtils.logWarning('useLocalStorageNumber', '저장 실패', { key, message: error?.message });
+        return prev;
+      }
+    });
+  }, [key]);
 
-    if (isNaN(numericValue)) {
-      return;
-    }
-
-    try {
-      localStorage.setItem(key, numericValue.toString());
-      setStoredValue(numericValue);
-
-      window.dispatchEvent(new CustomEvent('localStorageChange', {
-        detail: { key, newValue: numericValue.toString() }
-      }));
-    } catch (error) {
-      errorUtils.logWarning('useLocalStorageNumber', '저장 실패', { key, message: error?.message });
-      setStoredValue(previousValue);
-    }
-  }, [key, storedValue]);
-
+  // 다른 탭의 변경 반영
   useEffect(() => {
     const handleStorageChange = (e) => {
-      if (e.key === key && e.newValue !== null) {
-        try {
-          const parsedValue = Number(e.newValue);
-          if (!isNaN(parsedValue)) {
-            setStoredValue(parsedValue);
-          }
-        } catch (error) {
-          errorUtils.logWarning('useLocalStorageNumber', 'storage 이벤트 처리 실패', { key, message: error?.message });
-        }
-      }
+      if (e.key !== key || e.newValue === null) return;
+      const parsedValue = Number(e.newValue);
+      if (!isNaN(parsedValue)) setStoredValue(parsedValue);
     };
-
-    const handleCustomStorageChange = (e) => {
-      if (e.detail?.key === key && e.detail?.newValue !== null) {
-        handleStorageChange({ key: e.detail.key, newValue: e.detail.newValue });
-      }
-    };
-
     window.addEventListener('storage', handleStorageChange);
-    window.addEventListener('localStorageChange', handleCustomStorageChange);
-
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-      window.removeEventListener('localStorageChange', handleCustomStorageChange);
-    };
+    return () => window.removeEventListener('storage', handleStorageChange);
   }, [key]);
 
   return [storedValue, setValue];
 }
 
-/**
- * @param {number|string|null|undefined} bookId
- * @returns {Promise<{
- *   manifest: object|null,
- *   ok: boolean,
- *   skipped?: boolean,
- *   fromCache?: boolean,
- *   response?: object|null,
- *   error?: Error,
- * }>}
- */
-async function ensureBookManifest(bookId) {
-  const numericBookId = Number(bookId);
-  if (!Number.isFinite(numericBookId) || numericBookId < 1) {
-    return { manifest: null, ok: true, skipped: true };
-  }
-
-  const cached = getManifestFromCache(numericBookId);
-  if (cached) {
-    return { manifest: cached, ok: true, fromCache: true, response: null };
-  }
-
+async function fetchBookManifest(bookId) {
   try {
-    const response = await getBookManifest(numericBookId);
+    const response = await getBookManifest(bookId);
     const manifest =
       response?.fromCache === true
         ? response.result
-        : (getManifestFromCache(numericBookId) ?? response?.result ?? null);
-    const ok = response?.isSuccess !== false && Boolean(manifest);
-    return { manifest, ok, fromCache: false, response };
+        : (getManifestFromCache(bookId) ?? response?.result ?? null);
+    if (response?.isSuccess === false || !manifest) {
+      throw Object.assign(new Error(response?.message || 'Manifest 로드 실패'), {
+        status: response?.code || null,
+      });
+    }
+    return manifest;
   } catch (error) {
-    return {
-      manifest: getManifestFromCache(numericBookId),
-      ok: false,
-      fromCache: false,
-      error,
-    };
+    errorUtils.logWarning('[useManifestLoaded] manifest 로드 실패', error?.message ?? '알 수 없는 오류');
+    throw error;
   }
 }
 
-function getManifestLoadState(bookId) {
-  if (!bookId) {
-    return { loaded: true, ready: true, manifest: null, error: null, skipped: true };
-  }
-  const cached = getManifestFromCache(bookId);
-  return {
-    loaded: Boolean(cached),
-    ready: Boolean(cached),
-    manifest: cached ?? null,
-    error: null,
-    skipped: false,
-  };
-}
+const noop = () => {};
+const SKIPPED_MANIFEST = { loaded: true, ready: true, manifest: null, error: null, skipped: true, retry: noop };
 
 /**
  * 뷰어/그래프용 manifest 준비 게이트.
@@ -330,53 +248,32 @@ function getManifestLoadState(bookId) {
  * 뷰어 읽기 진행은 loaded로 fail-open 유지 가능.
  */
 export function useManifestLoaded(bookId) {
-  const [state, setState] = useState(() => getManifestLoadState(bookId));
+  const id = Number(bookId);
+  const valid = Number.isFinite(id) && id >= 1;
 
-  useEffect(() => {
-    if (!bookId) {
-      setState({ loaded: true, ready: true, manifest: null, error: null, skipped: true });
-      return undefined;
-    }
+  const query = useQuery({
+    queryKey: ['manifest', id],
+    queryFn: () => fetchBookManifest(id),
+    enabled: valid,
+    initialData: () => (valid ? getManifestFromCache(id) ?? undefined : undefined),
+    staleTime: Infinity,
+    retry: false,
+  });
 
-    const cached = getManifestFromCache(bookId);
-    if (cached) {
-      setState({ loaded: true, ready: true, manifest: cached, error: null, skipped: false });
-      return undefined;
-    }
+  const { refetch } = query;
+  const retry = useCallback(() => { void refetch(); }, [refetch]);
 
-    let cancelled = false;
-    setState({ loaded: false, ready: false, manifest: null, error: null, skipped: false });
+  if (!valid) return SKIPPED_MANIFEST;
 
-    void ensureBookManifest(bookId).then((outcome) => {
-      if (cancelled) return;
-
-      const manifest = outcome.manifest ?? getManifestFromCache(bookId);
-      let error = null;
-      if (!outcome.ok && !outcome.skipped) {
-        const message =
-          outcome.error?.message ?? outcome.response?.message ?? '알 수 없는 오류';
-        errorUtils.logWarning('[useManifestLoaded] manifest 로드 실패', message);
-        error =
-          outcome.error ??
-          Object.assign(new Error('Manifest 로드 실패'), {
-            status: outcome.response?.code || null,
-          });
-      }
-
-      const hasManifest = Boolean(manifest);
-      setState({
-        loaded: true,
-        ready: hasManifest || Boolean(outcome.skipped),
-        manifest: manifest ?? null,
-        error: hasManifest ? null : error,
-        skipped: Boolean(outcome.skipped),
-      });
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [bookId]);
-
-  return state;
+  // 실패해도 다른 경로가 채운 캐시가 있으면 사용
+  const manifest = query.data ?? getManifestFromCache(id) ?? null;
+  return {
+    loaded: query.status !== 'pending',
+    ready: Boolean(manifest),
+    manifest,
+    // 재시도 중에는 에러를 숨김
+    error: manifest || query.isFetching ? null : query.error ?? null,
+    skipped: false,
+    retry,
+  };
 }

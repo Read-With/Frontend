@@ -462,7 +462,7 @@
   border-radius: 0.25rem;
 }
 
-/* ── UnifiedEdgeTooltip theming ── */
+/* ── EdgeDetail theming ── */
 .edge-tooltip-themed {
   --rel-color: var(--rg-text-faint);
 }
@@ -742,7 +742,7 @@
 }
 
 /* ============================================================
-   UnifiedNodeInfo tooltip / sidebar
+   NodeDetail tooltip / sidebar
    (was tooltip/tooltip.css — static styles extracted from inline)
    ============================================================ */
 

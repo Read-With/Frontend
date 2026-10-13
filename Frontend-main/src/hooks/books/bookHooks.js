@@ -21,8 +21,6 @@ const BOOKS_QUERY_OPTIONS = {
   retry: 1,
 };
 
-const bookFetchState = new Map();
-
 function readHiddenBookIds() {
   const parsed = loadFromStorage(HIDDEN_BOOK_IDS_KEY);
   return new Set(Array.isArray(parsed) ? parsed.map((id) => `${id}`) : []);
@@ -139,75 +137,42 @@ export function useServerBookMatching(bookId, options = {}) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const [serverBook, setServerBook] = useState(null);
-  const [loadingServerBook, setLoadingServerBook] = useState(false);
-  const [matchedServerBook, setMatchedServerBook] = useState(null);
-
-  useEffect(() => {
-    const numericBookId = parseInt(bookId, 10);
-    if (isNaN(numericBookId) || serverBook?.id === numericBookId) return;
-    if (bookFetchState.get(numericBookId) === 'inflight') return;
-
-    let cancelled = false;
-    setLoadingServerBook(true);
-    bookFetchState.set(numericBookId, 'inflight');
-
-    getBook(numericBookId)
-      .then((response) => {
-        if (cancelled) return;
-        if (response?.isSuccess && response.result) {
-          setServerBook(response.result);
-          bookFetchState.set(numericBookId, 'done');
-        } else {
-          bookFetchState.delete(numericBookId);
-        }
-      })
-      .catch((error) => {
-        bookFetchState.delete(numericBookId);
+  const numericBookId = parseInt(bookId, 10);
+  const serverBookQuery = useQuery({
+    queryKey: ['book', numericBookId],
+    queryFn: async () => {
+      try {
+        const response = await getBook(numericBookId);
+        return response?.isSuccess && response.result ? response.result : null;
+      } catch (error) {
         errorUtils.logError('fetchServerBook', error, { bookId, numericBookId });
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingServerBook(false);
-      });
+        throw error;
+      }
+    },
+    enabled: !isNaN(numericBookId),
+    retry: false,
+  });
+  const serverBook = serverBookQuery.data ?? null;
 
-    return () => {
-      cancelled = true;
-    };
-  }, [bookId, location.state?.book, serverBook?.id]);
+  const sourceBook = location.state?.book || serverBook;
+  const titleKey = normalizeTitle(sourceBook?.title || '');
+  const authorKey = normalizeAuthor(sourceBook?.author || '');
+  const canMatch = location.state?.fromLibrary !== true && Boolean(titleKey && authorKey);
 
-  useEffect(() => {
-    if (location.state?.fromLibrary === true) {
-      setMatchedServerBook(null);
-      return;
-    }
-
-    const sourceBook = location.state?.book || serverBook;
-    const titleKey = normalizeTitle(sourceBook?.title || '');
-    const authorKey = normalizeAuthor(sourceBook?.author || '');
-    if (!titleKey || !authorKey) {
-      setMatchedServerBook(null);
-      return;
-    }
-
-    let cancelled = false;
-    const resolveCanonical = async () => {
+  const matchQuery = useQuery({
+    queryKey: ['canonicalBook', titleKey, authorKey],
+    queryFn: async () => {
       try {
         let books = queryClient.getQueryData(BOOKS_QUERY_KEY)?.books;
-        if (!Array.isArray(books)) {
-          books = await getBooksArray();
-        }
-        if (cancelled) return;
-        setMatchedServerBook(findCanonicalBook(books, titleKey, authorKey));
+        if (!Array.isArray(books)) books = await getBooksArray();
+        return findCanonicalBook(books, titleKey, authorKey);
       } catch {
-        if (!cancelled) setMatchedServerBook(null);
+        return null;
       }
-    };
-
-    resolveCanonical();
-    return () => {
-      cancelled = true;
-    };
-  }, [bookId, location.state?.book, location.state?.fromLibrary, serverBook, queryClient]);
+    },
+    enabled: canMatch,
+  });
+  const matchedServerBook = canMatch ? matchQuery.data ?? null : null;
 
   useEffect(() => {
     if (skipBookIdRedirectRef?.current) return;
@@ -237,7 +202,7 @@ export function useServerBookMatching(bookId, options = {}) {
 
   return {
     serverBook,
-    loadingServerBook,
+    loadingServerBook: serverBookQuery.isLoading,
     matchedServerBook,
   };
 }

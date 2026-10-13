@@ -420,11 +420,17 @@ const BookmarksPage = () => {
     patchBookmark,
   } = useBookmarks(serverBookId);
 
+  // 검색 문자열은 목록이 바뀔 때만 생성 — 키 입력마다 locator 파싱·포맷 반복하지 않음
+  const bookmarkHaystacks = useMemo(
+    () => (bookmarks || []).map((bookmark) => buildBookmarkHaystack(bookmark, serverBookId)),
+    [bookmarks, serverBookId]
+  );
+
   const filteredBookmarks = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
     if (!term) return bookmarks || [];
-    return (bookmarks || []).filter((bookmark) => buildBookmarkHaystack(bookmark, serverBookId).includes(term));
-  }, [bookmarks, searchTerm, serverBookId]);
+    return (bookmarks || []).filter((_, i) => bookmarkHaystacks[i].includes(term));
+  }, [bookmarks, bookmarkHaystacks, searchTerm]);
 
   const chapterGroups = useMemo(
     () => groupBookmarksByChapter(filteredBookmarks, sortOrder, serverBookId),

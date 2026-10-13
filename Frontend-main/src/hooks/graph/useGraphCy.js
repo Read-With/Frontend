@@ -1,70 +1,36 @@
-/** Cytoscape 런타임: tap·선택·layout·instance·tooltip dismiss + 캔버스 a11y */
+/** Cytoscape 런타임: tap·선택·instance·tooltip dismiss·캔버스 키보드 (마운트·동기화·레이아웃은 useCyLifecycle) */
 
 import {
-  createElement,
-  Fragment,
   useCallback,
   useEffect,
-  useId,
   useMemo,
   useRef,
   useState,
 } from 'react';
+import { isSidebarElement, openTooltipFromTap } from '../../utils/graph/graphCy';
+import {
+  captureCyViewport,
+  centerSelectionOnElementId,
+  fitGraphToNodes,
+  handleGraphCanvasHotkeys,
+  restoreCyViewport,
+} from '../../utils/graph/graphViewport';
 import {
   applySelectionHighlight,
   buildTapShowArgs,
   calculateGraphTooltipPosition,
-  captureCyViewport,
-  centerSelectionOnElementId,
   clearHighlightClassesOn,
-  ensureElementsInBounds,
-  fitGraphToNodes,
-  fitGraphViewportInContainer,
-  handleGraphCanvasHotkeys,
-  isElementsFitInViewport,
-  isGraphDragEndEvent,
-  isGraphContainerSizeReady,
-  isSidebarElement,
-  openTooltipFromTap,
   resolveGraphTooltipAnchor,
-  restoreCyViewport,
-  syncReciprocalPairJunctionOffsets,
-  runPresetLayout,
-  runCoseBilkentLayout,
-} from '../../utils/graph/graphCy';
-import {
-  detectAndResolveOverlap,
-  hasOverlappingNodes,
-  collectNeighborhoodNodeIds,
-  OVERLAP_RESOLVE,
-  OVERLAP_PROFILES,
-} from '../../utils/graph/graphModel';
+} from '../../utils/graph/graphHighlight';
 import {
   GRAPH_LAYOUT_CONSTANTS,
   GRAPH_ZOOM,
-  GRAPH_CHARACTER_FILTER_STAGE_OPTIONS,
 } from '../../utils/graph/graphCore.js';
 import { errorUtils } from '../../utils/common/valueUtils';
 import { useLatestRef } from '../common/hooksShared';
 
 function toCyId(value) {
   return String(value);
-}
-
-function elementDataIds(elements) {
-  return (Array.isArray(elements) ? elements : [])
-    .map((el) => el?.data?.id)
-    .filter((id) => id != null && id !== '')
-    .map(String);
-}
-
-function collectCyElementsByIds(cy, ids) {
-  let coll = cy.collection();
-  ids.forEach((id) => {
-    const el = cy.getElementById(toCyId(id));
-    if (el.length > 0) coll = coll.union(el);
-  });
-  return coll;
 }
 
 /**
@@ -241,305 +207,6 @@ export function useCyInstance(cyRef, isReady = true) {
   }, [cyRef, isReady]);
 }
 
-/**
- * elementsUpdateRef 소비 후 분기:
- * 1) hasChanges          → layout(incremental preset | cose) → styles → rAF(complete: bounds/overlap/fit/junction)
- * 2) dataChanged only    → sizes refresh
- * 3) stylesheet|initial  → sizes refresh; initial이면 complete(fit+junction 포함)
- */
-export function useGraphLayout({
-  cy,
-  elementsFingerprint,
-  elementsLength,
-  stylesheet,
-  elementsUpdateRef,
-  updateStylesheet,
-  applyNodeSizes,
-  isInitialLoad,
-  setIsInitialLoad,
-  containerRef,
-  pendingInitialFitRef = null,
-  canApplyPendingViewportFit = null,
-  clearPendingViewportFitBlock = null,
-}) {
-  const prevStylesheetRef = useRef(stylesheet);
-
-  const handleLayoutComplete = useCallback(
-    (cyInstance, shouldFitOnInitialLoad, options = {}) => {
-      const {
-        skipOverlap = false,
-        skipEnsureBounds = false,
-        movableIds = null,
-      } = options;
-      if (!cyInstance) return;
-
-      // 전체 재배치(초기·챕터 전환)가 아닌 증분 갱신(이벤트 확정 등)에서는 기존 배치를
-      // 흔들지 않는 게 원칙이지만, 늘어난 노드·간선(라벨 포함)이 현재 팬·줌 뷰포트를
-      // 벗어나면 좁은 화면 안으로 욱여넣어(cramping) 겹치는 대신 카메라를 재조정한다.
-      if (!shouldFitOnInitialLoad && isGraphContainerSizeReady(containerRef.current)) {
-        const visible = cyInstance.elements(':visible');
-        if (
-          visible.length > 0 &&
-          !isElementsFitInViewport(cyInstance, visible, GRAPH_ZOOM.FIT_PADDING)
-        ) {
-          // fitGraphViewportInContainer는 fit 직후 동기적으로 ensureElementsInBounds를
-          // 돌리므로(애니메이션 중 팬·줌 값을 기준으로 하면 어긋남) duration 0(즉시)을 유지한다.
-          const refit = fitGraphViewportInContainer(cyInstance, containerRef.current, {
-            eles: visible,
-          });
-          if (refit) {
-            syncReciprocalPairJunctionOffsets(cyInstance);
-            return;
-          }
-        }
-      }
-
-      const runBounds = () => {
-        if (skipEnsureBounds || !isGraphContainerSizeReady(containerRef.current)) return;
-        if (!movableIds) {
-          ensureElementsInBounds(cyInstance, containerRef.current);
-          return;
-        }
-        // 전체 fit이 없는 증분 추가: 새로 들어온 노드만 캔버스 안으로 제약하고
-        // 기존 노드는 사용자가 기억한 배치를 그대로 유지한다.
-        const idSet = movableIds instanceof Set ? movableIds : new Set([...movableIds].map(String));
-        if (idSet.size === 0) return;
-        const scopedNodes = cyInstance.nodes().filter((n) => idSet.has(String(n.id())));
-        if (scopedNodes.length > 0) {
-          ensureElementsInBounds(cyInstance, containerRef.current, { nodes: scopedNodes });
-        }
-      };
-
-      runBounds();
-      if (!skipOverlap) {
-        const profile = shouldFitOnInitialLoad
-          ? OVERLAP_PROFILES.INITIAL
-          : OVERLAP_PROFILES.INCREMENTAL;
-        detectAndResolveOverlap(cyInstance, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE, {
-          ...(movableIds ? { movableIds } : {}),
-          ...profile,
-        });
-        // 밀어내기 후 화면 밖 노드 재제약 → 경계에서 생긴 겹침 경량 재해결
-        runBounds();
-        if (!skipEnsureBounds && isGraphContainerSizeReady(containerRef.current)) {
-          detectAndResolveOverlap(cyInstance, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE, {
-            ...(movableIds ? { movableIds } : {}),
-            ...OVERLAP_PROFILES.RESIZE,
-          });
-        }
-        // 최초 로딩: bounds/resize 후에도 본체 겹침이 남으면 제거
-        if (
-          shouldFitOnInitialLoad &&
-          hasOverlappingNodes(cyInstance, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE, {
-            ...OVERLAP_PROFILES.APPEAR,
-          })
-        ) {
-          detectAndResolveOverlap(cyInstance, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE, {
-            ...OVERLAP_PROFILES.APPEAR,
-          });
-          runBounds();
-        }
-      }
-      if (shouldFitOnInitialLoad) {
-        // 컨테이너 미준비 시 pending 유지 → resize에서 재시도
-        if (pendingInitialFitRef) pendingInitialFitRef.current = true;
-        if (
-          (typeof canApplyPendingViewportFit !== 'function' || canApplyPendingViewportFit()) &&
-          fitGraphViewportInContainer(cyInstance, containerRef.current)
-        ) {
-          if (pendingInitialFitRef) pendingInitialFitRef.current = false;
-          clearPendingViewportFitBlock?.();
-        }
-      }
-      syncReciprocalPairJunctionOffsets(cyInstance);
-    },
-    [containerRef, pendingInitialFitRef, canApplyPendingViewportFit, clearPendingViewportFitBlock],
-  );
-
-  useEffect(() => {
-    if (!cy || !elementsLength) return;
-
-
-    const {
-      nodesToAdd = [],
-      edgesToAdd = [],
-      hasChanges = false,
-      dataChangedIds = [],
-      incrementalLayoutScope = false,
-      needsLocalReorder = false,
-    } = elementsUpdateRef.current || {};
-
-    elementsUpdateRef.current = {
-      nodesToAdd: [],
-      edgesToAdd: [],
-      hasChanges: false,
-      dataChangedIds: [],
-      incrementalLayoutScope: false,
-      needsLocalReorder: false,
-    };
-
-    const stylesheetChanged = prevStylesheetRef.current !== stylesheet;
-    prevStylesheetRef.current = stylesheet;
-
-    const pendingFit = pendingInitialFitRef?.current === true;
-    const pendingFitAllowed =
-      !pendingFit ||
-      typeof canApplyPendingViewportFit !== 'function' ||
-      canApplyPendingViewportFit();
-    const shouldFitViewport =
-      Boolean(isInitialLoad) || (pendingFit && pendingFitAllowed);
-
-    const edgesOnlyIncremental =
-      hasChanges && nodesToAdd.length === 0 && edgesToAdd.length > 0;
-    const hasDataOnlyVisualChange = !hasChanges && dataChangedIds.length > 0;
-    const addedNodeIds = elementDataIds(nodesToAdd);
-
-    const refreshStyles = ({
-      forceSheet = false,
-      forceSizes = false,
-      lightUpdate = false,
-    } = {}) => {
-      if (forceSheet || stylesheetChanged) {
-        updateStylesheet(cy);
-      } else if (lightUpdate) {
-        try {
-          cy.style().update();
-        } catch (err) {
-          errorUtils.logDebug('useGraphCy', 'style update 실패', {
-            message: err?.message,
-          });
-        }
-      }
-      if (stylesheet && (forceSizes || stylesheetChanged)) {
-        applyNodeSizes(cy);
-      }
-    };
-
-    const finishInitialLoad = () => {
-      if (isInitialLoad) setIsInitialLoad(false);
-    };
-
-    if (hasChanges) {
-      const useIncrementalPreset =
-        incrementalLayoutScope &&
-        addedNodeIds.length > 0 &&
-        !shouldFitViewport;
-
-      const resolveOverlapCascade = (seedIds, forceExpand = false) => {
-        const appearOpts = { ...OVERLAP_PROFILES.APPEAR };
-        const incrementalOpts = { ...OVERLAP_PROFILES.INCREMENTAL };
-
-        const stillAppearsOverlapping = (movableIds) =>
-          hasOverlappingNodes(cy, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE, {
-            movableIds,
-            ...appearOpts,
-          });
-
-        const resolveAppear = (movableIds) => {
-          detectAndResolveOverlap(cy, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE, {
-            ...appearOpts,
-            movableIds,
-          });
-          return stillAppearsOverlapping(movableIds);
-        };
-
-        const resolveIncremental = (movableIds) => {
-          detectAndResolveOverlap(cy, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE, {
-            ...incrementalOpts,
-            movableIds,
-          });
-          return hasOverlappingNodes(cy, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE, {
-            movableIds,
-            ...incrementalOpts,
-          });
-        };
-
-        // 1) 신규 등장 노드끼리: tolerance 0으로 본체 겹침 제거
-        if (seedIds.length >= 2) {
-          let remain = resolveAppear(seedIds);
-          for (let i = 0; remain && i < 2; i += 1) {
-            remain = resolveAppear(seedIds);
-          }
-        }
-
-        // 2) 기존과의 겹침: 신규만 → 필요 시 1·2-hop
-        if (!forceExpand && seedIds.length > 0 && !resolveIncremental(seedIds)) return;
-
-        const hop1 = [...collectNeighborhoodNodeIds(cy, seedIds, 1)];
-        if (!resolveIncremental(hop1)) return;
-
-        const hop2 = [...collectNeighborhoodNodeIds(cy, seedIds, 2)];
-        resolveIncremental(hop2);
-
-        // 신규끼리 잔여가 있으면 마지막으로 한 번 더 분리 (이웃 이동 후 재겹침 방지)
-        if (seedIds.length >= 2 && stillAppearsOverlapping(seedIds)) {
-          resolveAppear(seedIds);
-        }
-        // 중간 갱신에서는 사용자가 기억한 전체 배치를 보존한다.
-        // 잔여 경미 겹침 때문에 전체 그래프 또는 cose로 확대하지 않는다.
-      };
-
-      if (edgesOnlyIncremental) {
-        if (stylesheet) applyNodeSizes(cy);
-      } else if (useIncrementalPreset) {
-        runPresetLayout(cy, collectCyElementsByIds(cy, addedNodeIds));
-        refreshStyles({
-          forceSheet: stylesheetChanged,
-          forceSizes: true,
-          lightUpdate: !stylesheetChanged,
-        });
-      } else {
-        refreshStyles({ forceSheet: true, forceSizes: true });
-        runCoseBilkentLayout(cy);
-      }
-
-      requestAnimationFrame(() => {
-        if (useIncrementalPreset) {
-          resolveOverlapCascade(addedNodeIds, needsLocalReorder);
-          // 전체 fit이 없는 경로라도, 새로 추가된 노드는 항상 캔버스 안으로 제약해
-          // 이벤트 이동 시 잘려 보이지 않게 한다(기존 노드 배치는 movableIds 범위로 보존).
-          handleLayoutComplete(cy, shouldFitViewport, {
-            skipOverlap: true,
-            skipEnsureBounds: false,
-            movableIds: addedNodeIds,
-          });
-        } else {
-          handleLayoutComplete(cy, shouldFitViewport, {
-            skipOverlap: edgesOnlyIncremental,
-            movableIds: null,
-            skipEnsureBounds: !shouldFitViewport && edgesOnlyIncremental,
-          });
-        }
-        finishInitialLoad();
-      });
-    } else if (hasDataOnlyVisualChange) {
-      // 이미지 blob resolve 등 data-only 변경: background-image 반영을 위해 style update
-      refreshStyles({ forceSizes: true, lightUpdate: true });
-      finishInitialLoad();
-    } else if (stylesheetChanged || isInitialLoad) {
-      refreshStyles({ forceSizes: true });
-      if (isInitialLoad) {
-        handleLayoutComplete(cy, true);
-        finishInitialLoad();
-      }
-    }
-
-    return undefined;
-  }, [
-    cy,
-    elementsFingerprint,
-    elementsLength,
-    stylesheet,
-    updateStylesheet,
-    applyNodeSizes,
-    handleLayoutComplete,
-    isInitialLoad,
-    setIsInitialLoad,
-    elementsUpdateRef,
-    pendingInitialFitRef,
-    canApplyPendingViewportFit,
-  ]);
-}
 
 const GRAPH_OUTSIDE_DISMISS_ATTACH_DELAY_MS = 10;
 
@@ -552,17 +219,13 @@ function eventClosest(event, selector) {
   return Boolean(event.target.closest?.(selector));
 }
 
-function shouldIgnoreCanvasOrDragEnd(event) {
-  return eventClosest(event, '.graph-canvas-area') || isGraphDragEndEvent(event);
-}
-
 function shouldIgnoreOutsideClick(event, { ignoreSidebar = false, extraSelectors = [] } = {}) {
   if (ignoreSidebar && isSidebarElement(event)) return true;
   if (eventClosest(event, '.modal-overlay')) return true;
   for (const selector of extraSelectors) {
     if (eventClosest(event, selector)) return true;
   }
-  return shouldIgnoreCanvasOrDragEnd(event);
+  return eventClosest(event, '.graph-canvas-area');
 }
 
 /** @param {'page' | 'viewer'} surface */
@@ -578,7 +241,6 @@ function useGraphOutsideDismiss({
   onDismiss,
   shouldIgnoreClick,
   attachDelayMs = GRAPH_OUTSIDE_DISMISS_ATTACH_DELAY_MS,
-  blockDragEndEvents = false,
 }) {
   const shouldIgnoreRef = useLatestRef(shouldIgnoreClick);
   const onDismissRef = useLatestRef(onDismiss);
@@ -591,31 +253,15 @@ function useGraphOutsideDismiss({
       onDismissRef.current?.(event);
     };
 
-    const handleDragEnd = (event) => {
-      event.preventDefault?.();
-      event.stopPropagation?.();
-    };
-
-    let dragEndBound = false;
-
     const timeoutId = setTimeout(() => {
       document.addEventListener('click', handleOutsideClick, true);
-      if (blockDragEndEvents) {
-        document.addEventListener('graphDragEnd', handleDragEnd, true);
-        document.addEventListener('dragend', handleDragEnd, true);
-        dragEndBound = true;
-      }
     }, attachDelayMs);
 
     return () => {
       clearTimeout(timeoutId);
       document.removeEventListener('click', handleOutsideClick, true);
-      if (dragEndBound) {
-        document.removeEventListener('graphDragEnd', handleDragEnd, true);
-        document.removeEventListener('dragend', handleDragEnd, true);
-      }
     };
-  }, [enabled, shouldIgnoreRef, onDismissRef, attachDelayMs, blockDragEndEvents]);
+  }, [enabled, shouldIgnoreRef, onDismissRef, attachDelayMs]);
 }
 
 /** 상단바 오른쪽 도구 너비 → CSS 변수 (--graph-split-tools-reserve) */
@@ -642,6 +288,34 @@ export function useGraphTopbarToolsReserve(topbarRef, toolsRef, enabled = true) 
 }
 
 /**
+ * 선택 포커스 전 뷰포트 저장/복원. 첫 centerSelection 직전 뷰포트를 저장해두고 release 시 복원.
+ * @param {object} centerOptions centerSelectionOnElementId 옵션 (duration은 복원에도 사용). 매 렌더 최신값 사용
+ */
+export function usePreFocusViewport(cyRef, centerOptions) {
+  const preFocusViewportRef = useRef(null);
+  const optionsRef = useLatestRef(centerOptions);
+
+  /** 저장된 뷰포트를 비우고, restore면 복원 */
+  const releasePreFocusViewport = useCallback((restore = true) => {
+    const snapshot = preFocusViewportRef.current;
+    preFocusViewportRef.current = null;
+    if (!restore) return;
+    restoreCyViewport(cyRef.current, snapshot, { duration: optionsRef.current.duration });
+  }, [cyRef, optionsRef]);
+
+  const centerSelection = useCallback((elementId) => {
+    const cy = cyRef.current;
+    if (!cy || elementId == null || elementId === '') return;
+    if (!preFocusViewportRef.current) {
+      preFocusViewportRef.current = captureCyViewport(cy);
+    }
+    centerSelectionOnElementId(cy, elementId, optionsRef.current);
+  }, [cyRef, optionsRef]);
+
+  return { centerSelection, releasePreFocusViewport };
+}
+
+/**
  * 그래프 캔버스의 뷰포트 포커스 저장/복원과 선택·툴팁 해제 로직을 한데 묶은 훅.
  * 노드/간선 선택 시 현재 뷰포트를 저장해뒀다가, 선택 해제(사이드바 닫힘, 챕터 전환 등) 시 복원한다.
  */
@@ -654,50 +328,23 @@ export function useGraphViewportFocus({
   startClosing,
   cancelClosing,
 }) {
-  const preFocusViewportRef = useRef(null);
+  // 좌(챕터 레일)는 캔버스 offset으로 이미 제외. 우(정보 슬라이드바)는 오버레이라 예약.
+  const { centerSelection, releasePreFocusViewport } = usePreFocusViewport(cyRef, {
+    duration: GRAPH_LAYOUT_CONSTANTS.FOCUS_PAN_MS,
+    reserveRight: GRAPH_LAYOUT_CONSTANTS.TOOLTIP_SIDEBAR_WIDTH,
+    reserveLeft: isNarrow && isSidebarOpen ? GRAPH_LAYOUT_CONSTANTS.SIDEBAR.OPEN_WIDTH : 0,
+    padding: 40,
+  });
 
   const clearGraphSelection = useCallback((options = {}) => {
     graphClearRef.current?.(options);
-    if (options.restoreViewport === false) {
-      preFocusViewportRef.current = null;
-      return;
-    }
-    const snapshot = preFocusViewportRef.current;
-    preFocusViewportRef.current = null;
-    restoreCyViewport(cyRef.current, snapshot, {
-      duration: GRAPH_LAYOUT_CONSTANTS.FOCUS_PAN_MS,
-    });
-  }, [cyRef, graphClearRef]);
-
-  // 좌(챕터 레일)는 캔버스 offset으로 이미 제외. 우(정보 슬라이드바)는 오버레이라 예약.
-  const centerSelection = useCallback((elementId) => {
-    const cy = cyRef.current;
-    if (!cy || elementId == null || elementId === '') return;
-
-    if (!preFocusViewportRef.current) {
-      preFocusViewportRef.current = captureCyViewport(cy);
-    }
-
-    const reserveLeft = isNarrow && isSidebarOpen
-      ? GRAPH_LAYOUT_CONSTANTS.SIDEBAR.OPEN_WIDTH
-      : 0;
-
-    centerSelectionOnElementId(cy, elementId, {
-      duration: GRAPH_LAYOUT_CONSTANTS.FOCUS_PAN_MS,
-      reserveRight: GRAPH_LAYOUT_CONSTANTS.TOOLTIP_SIDEBAR_WIDTH,
-      reserveLeft,
-      padding: 40,
-    });
-  }, [cyRef, isNarrow, isSidebarOpen]);
+    releasePreFocusViewport(options.restoreViewport !== false);
+  }, [graphClearRef, releasePreFocusViewport]);
 
   const onClearTooltip = useCallback(() => {
     closeSidebar();
-    const snapshot = preFocusViewportRef.current;
-    preFocusViewportRef.current = null;
-    restoreCyViewport(cyRef.current, snapshot, {
-      duration: GRAPH_LAYOUT_CONSTANTS.FOCUS_PAN_MS,
-    });
-  }, [cyRef, closeSidebar]);
+    releasePreFocusViewport();
+  }, [closeSidebar, releasePreFocusViewport]);
 
   const dismissTooltip = useCallback(() => {
     clearGraphSelection({ fitViewport: false });
@@ -727,7 +374,6 @@ export function useGraphTooltipSelection({
   onDismiss,
   shouldIgnoreClick,
   attachDelayMs,
-  blockDragEndEvents = false,
 }) {
   const centerSelectionRef = useLatestRef(centerSelection);
   const focusTooltipId =
@@ -763,7 +409,6 @@ export function useGraphTooltipSelection({
     onDismiss,
     shouldIgnoreClick,
     attachDelayMs,
-    blockDragEndEvents,
   });
 
   return { onShowNodeTooltip, onShowEdgeTooltip };
@@ -814,173 +459,4 @@ export function useGraphCanvasKeyboard({
     liveAnnouncement,
     ariaLabel: GRAPH_CANVAS_ARIA_LABEL,
   };
-}
-
-function countGraphElements(elements) {
-  let nodeCount = 0;
-  let edgeCount = 0;
-  if (!Array.isArray(elements)) return { nodeCount, edgeCount };
-
-  for (const el of elements) {
-    const group = el?.group;
-    const hasEdgeEnds = el?.data?.source != null && el?.data?.target != null;
-    if (group === 'edges' || (!group && hasEdgeEnds)) {
-      edgeCount += 1;
-    } else {
-      nodeCount += 1;
-    }
-  }
-  return { nodeCount, edgeCount };
-}
-
-function resolveFilterStageLabel(filterStage) {
-  return (
-    GRAPH_CHARACTER_FILTER_STAGE_OPTIONS.find((o) => o.value === filterStage)?.label
-    ?? '전체'
-  );
-}
-
-function describeGraphSelection(activeTooltip) {
-  if (!activeTooltip) return '';
-
-  if (activeTooltip.type === 'node') {
-    const name =
-      activeTooltip.common_name
-      || activeTooltip.name
-      || activeTooltip.label
-      || activeTooltip.data?.common_name
-      || activeTooltip.data?.name
-      || activeTooltip.data?.label
-      || '이름 없음';
-    return `인물 ${name} 상세가 열렸습니다.`;
-  }
-
-  if (activeTooltip.type === 'edge') {
-    const src =
-      activeTooltip.sourceEndpoint?.label
-      || activeTooltip.sourceEndpoint?.common_name
-      || '인물';
-    const tgt =
-      activeTooltip.targetEndpoint?.label
-      || activeTooltip.targetEndpoint?.common_name
-      || '인물';
-    return `${src}와 ${tgt}의 관계 상세가 열렸습니다.`;
-  }
-
-  return '';
-}
-
-function buildGraphA11ySummary({
-  chapterLabel,
-  eventNum,
-  nodeCount = 0,
-  edgeCount = 0,
-  filterLabel,
-  isSearchActive = false,
-  searchTerm = '',
-  selectionText = '',
-  isLoading = false,
-}) {
-  const parts = [];
-
-  if (isLoading) {
-    parts.push('그래프를 불러오는 중입니다.');
-  }
-
-  const chapter = chapterLabel || '챕터';
-  const eventLabel =
-    Number.isFinite(Number(eventNum)) && Number(eventNum) > 0
-      ? `이벤트 ${Number(eventNum)}`
-      : '이벤트 미확정';
-  parts.push(`${chapter}, ${eventLabel}.`);
-  parts.push(`인물 ${nodeCount}명, 관계 ${edgeCount}개.`);
-
-  if (filterLabel) {
-    parts.push(`표시 범위 ${filterLabel}.`);
-  }
-
-  const term = typeof searchTerm === 'string' ? searchTerm.trim() : '';
-  if (isSearchActive && term) {
-    parts.push(
-      nodeCount === 0
-        ? `"${term}" 검색 결과가 없습니다.`
-        : `"${term}" 검색이 적용되었습니다.`,
-    );
-  }
-
-  if (selectionText) {
-    parts.push(selectionText);
-  } else {
-    parts.push('화살표·Enter로 탐색. Escape로 해제.');
-  }
-
-  return parts.join(' ');
-}
-
-/**
- * 그래프 캔버스용 스크린리더 요약 (시각적으로 숨김, aria-live)
- * 부모 region에 aria-describedby={statusId} 연결
- */
-export function GraphA11yStatus({
-  id: idProp = null,
-  chapterLabel,
-  eventNum,
-  elements = [],
-  filterStage = 0,
-  isSearchActive = false,
-  searchTerm = '',
-  activeTooltip = null,
-  isLoading = false,
-  liveAnnouncement = '',
-}) {
-  const generatedId = useId();
-  const statusId = idProp || generatedId;
-
-  const summary = useMemo(() => {
-    const { nodeCount, edgeCount } = countGraphElements(elements);
-    return buildGraphA11ySummary({
-      chapterLabel,
-      eventNum,
-      nodeCount,
-      edgeCount,
-      filterLabel: resolveFilterStageLabel(filterStage),
-      isSearchActive,
-      searchTerm,
-      selectionText: describeGraphSelection(activeTooltip),
-      isLoading,
-    });
-  }, [
-    chapterLabel,
-    eventNum,
-    elements,
-    filterStage,
-    isSearchActive,
-    searchTerm,
-    activeTooltip,
-    isLoading,
-  ]);
-
-  return createElement(
-    Fragment,
-    null,
-    createElement(
-      'p',
-      {
-        id: statusId,
-        className: 'sr-only',
-        'aria-live': 'polite',
-        'aria-atomic': 'true',
-      },
-      summary,
-    ),
-    createElement(
-      'p',
-      {
-        className: 'sr-only',
-        'aria-live': 'polite',
-        'aria-atomic': 'true',
-      },
-      liveAnnouncement,
-    ),
-  );
 }

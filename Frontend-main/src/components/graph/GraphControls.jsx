@@ -2,154 +2,12 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Search, SearchX, SlidersHorizontal } from "lucide-react";
 import { useClickOutside } from "../../hooks/ui/tooltipHooks";
-import { findExactSuggestionMatch } from "../../utils/graph/graphCy.js";
+import { findExactSuggestionMatch } from "../../utils/graph/graphHighlight.js";
 import {
   GRAPH_CHARACTER_FILTER_STAGE_OPTIONS,
-  GRAPH_LAYOUT_CONSTANTS,
-  formatGraphEventMetaLabel,
+  getCharacterFilterStageLabel,
 } from "../../utils/graph/graphCore.js";
-import { resolveEventOrdinalForDisplay } from "../../utils/viewer/viewerSession";
-import { GRAPH_COLORS } from "../../utils/styles/graphStyles.js";
-import { joinClasses } from "../../utils/styles/styles.js";
 import "./RelationGraph.css";
-
-/** 인물 이미지 없을 때 공통 실루엣 */
-export function PersonSilhouette({
-  size = 48,
-  circleFill = GRAPH_COLORS.border,
-  bodyFill = '#bdbdbd',
-}) {
-  const cx = size / 2;
-  return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} fill="none" aria-hidden>
-      <circle cx={cx} cy={cx} r={cx} fill={circleFill} />
-      <ellipse cx={cx} cy={size * 0.375} rx={size * 0.21} ry={size * 0.21} fill={bodyFill} />
-      <ellipse cx={cx} cy={size * 0.79} rx={size * 0.29} ry={size * 0.17} fill={bodyFill} />
-    </svg>
-  );
-}
-
-/** 노드/간선 툴팁 공통 닫기 버튼 */
-export function TooltipCloseButton({ onClose, ariaLabel, className }) {
-  return (
-    <button
-      type="button"
-      onClick={onClose}
-      aria-label={ariaLabel}
-      className={joinClasses('tooltip-close-btn', className)}
-    >
-      &times;
-    </button>
-  );
-}
-
-export function ActionButton({ variant = 'secondary', onClick, children, ariaLabel, title }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={ariaLabel}
-      title={title}
-      className={`tooltip-action-btn tooltip-action-btn--${variant === 'primary' ? 'primary' : 'secondary'}`}
-    >
-      {children}
-    </button>
-  );
-}
-
-/** 플로팅 노드/간선 툴팁 셸 */
-export function NodeTooltipShell({
-  children,
-  shellRef,
-  className = 'graph-node-tooltip',
-  position,
-  zIndex = GRAPH_LAYOUT_CONSTANTS.Z_INDEX_TOOLTIP,
-  showContent,
-  isDragging,
-  handleMouseDown,
-  transition,
-  closeButton = null,
-}) {
-  return (
-    <div
-      ref={shellRef}
-      className={className}
-      style={{
-        left: position.x,
-        top: position.y,
-        zIndex,
-        ...(showContent !== undefined
-          ? {
-              opacity: showContent ? 1 : 0,
-              transition,
-              cursor: isDragging ? 'grabbing' : 'grab',
-            }
-          : null),
-      }}
-      onMouseDown={handleMouseDown}
-    >
-      {closeButton}
-      {children}
-    </div>
-  );
-}
-
-export function CenteredStatus({
-  children,
-  color = GRAPH_COLORS.textSecondary,
-  fullHeight = true,
-}) {
-  return (
-    <div
-      className={`tooltip-centered-status${fullHeight ? '' : ' tooltip-centered-status--compact'}`}
-      style={{ '--status-color': color }}
-    >
-      {children}
-    </div>
-  );
-}
-
-function handleProfileImageError(e) {
-  e.target.style.display = 'none';
-  if (e.target.nextSibling) e.target.nextSibling.style.display = 'block';
-}
-
-/**
- * 인물 아바타(이미지 또는 실루엣 폴백). 사이드바/툴팁 헤더와 관계 분석 모달 헤더가 공유한다.
- * innerClassName을 null로 주면 바깥 wrapper 없이 단일 컨테이너로 렌더링(예: relation-modal-avatar).
- */
-export function NodeProfileAvatar({
-  node,
-  size = 48,
-  className = 'profile-image-placeholder',
-  innerClassName = 'profile-img',
-  style,
-}) {
-  const hasImage = !!node?.hasImage && !!node?.image;
-  const content = (
-    <>
-      {hasImage ? (
-        <img
-          src={node.image}
-          alt={node?.displayName || 'character'}
-          crossOrigin="anonymous"
-          decoding="async"
-          loading="eager"
-          onError={handleProfileImageError}
-        />
-      ) : null}
-      <div style={{ display: hasImage ? 'none' : 'block' }}>
-        <PersonSilhouette size={size} />
-      </div>
-    </>
-  );
-
-  return (
-    <div className={className} style={style}>
-      {innerClassName ? <div className={innerClassName}>{content}</div> : content}
-    </div>
-  );
-}
 
 /** 분할·전체 그래프 상단 챕터/사건 메타 (공통) */
 export function GraphTopBarMeta({ chapterLabel, chapterTitle, eventLabel }) {
@@ -164,59 +22,6 @@ export function GraphTopBarMeta({ chapterLabel, chapterTitle, eventLabel }) {
       {eventLabel != null ? (
         <span className="graph-topbar-meta-event">{eventLabel}</span>
       ) : null}
-    </div>
-  );
-}
-
-/** 분할 상단바: 챕터 + 사건 메타 (계산중 포함) */
-export function GraphChapterEventMeta({
-  bookId,
-  progressTopBar,
-  currentEvent,
-  prevValidEvent,
-  resolvedServerChapter,
-  chapterDisplayLabel,
-}) {
-  const eventNum = resolveEventOrdinalForDisplay({
-    currentEvent,
-    prevValidEvent,
-    currentChapter: resolvedServerChapter,
-    progressTopBar: progressTopBar ?? { eventNum: null },
-    fallback: 0,
-  });
-
-  if (bookId && progressTopBar === undefined && !(eventNum > 0)) {
-    return <span className="graph-topbar-meta-event">계산중…</span>;
-  }
-
-  return (
-    <GraphTopBarMeta
-      chapterLabel={chapterDisplayLabel}
-      chapterTitle={chapterDisplayLabel}
-      eventLabel={formatGraphEventMetaLabel(eventNum > 0 ? eventNum : null)}
-    />
-  );
-}
-
-/** 빈/로딩/에러 패널 (분할·전체 그래프) */
-export function GraphNoticePanel({ variant, title, description, icon, actions }) {
-  const isLoading = variant === 'loading';
-  const TitleTag = isLoading ? 'p' : 'h3';
-
-  return (
-    <div
-      className={`graph-panel-status graph-panel-status--${variant}`}
-      role={isLoading ? 'status' : variant === 'error' ? 'alert' : undefined}
-      aria-live={isLoading ? 'polite' : undefined}
-    >
-      <div className={`graph-panel-status-icon graph-panel-status-icon--${variant}`} aria-hidden>
-        {icon}
-      </div>
-      <div className="graph-panel-status-copy">
-        <TitleTag className="graph-panel-status-title">{title}</TitleTag>
-        {description ? <p className="graph-panel-status-desc">{description}</p> : null}
-      </div>
-      {actions ? <div className="graph-panel-status-actions">{actions}</div> : null}
     </div>
   );
 }
@@ -272,14 +77,11 @@ function getSuggestionDisplayName(suggestion) {
   return suggestion?.label || suggestion?.common_name || "Unknown";
 }
 
-function useModKeyLabel() {
-  const [mod, setMod] = useState("Ctrl");
-  useEffect(() => {
-    const isMac = /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent);
-    setMod(isMac ? "⌘" : "Ctrl");
-  }, []);
-  return mod;
-}
+const MOD_KEY_LABEL =
+  typeof navigator !== "undefined" &&
+  /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent)
+    ? "⌘"
+    : "Ctrl";
 
 function GraphSearchPalette({
   open,
@@ -293,7 +95,6 @@ function GraphSearchPalette({
   selectedIndex = -1,
   onSelectedIndexChange,
   onKeyDown,
-  onCloseSuggestions,
   isSearchActive = false,
 }) {
   const inputRef = useRef(null);
@@ -301,7 +102,6 @@ function GraphSearchPalette({
   const [toastMessage, setToastMessage] = useState("");
   const trimmedTerm = (searchTerm || "").trim();
   const canShowResults = open && trimmedTerm.length >= 2;
-  const modKey = useModKeyLabel();
 
   useEffect(() => {
     if (!open) return undefined;
@@ -318,13 +118,12 @@ function GraphSearchPalette({
       if (e.key === "Escape") {
         e.preventDefault();
         e.stopPropagation();
-        onCloseSuggestions?.();
         onClose();
       }
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [open, onClose, onCloseSuggestions]);
+  }, [open, onClose]);
 
   useEffect(() => {
     return () => {
@@ -399,10 +198,7 @@ function GraphSearchPalette({
         type="button"
         className="graph-search-palette-scrim"
         aria-label="검색 닫기"
-        onClick={() => {
-          onCloseSuggestions?.();
-          onClose();
-        }}
+        onClick={onClose}
       />
       <div className="graph-search-palette-panel">
         {toastMessage ? (
@@ -436,7 +232,7 @@ function GraphSearchPalette({
               초기화
             </button>
           ) : null}
-          <kbd className="graph-search-palette-kbd">{modKey}+K</kbd>
+          <kbd className="graph-search-palette-kbd">{MOD_KEY_LABEL}+K</kbd>
         </form>
 
         {canShowResults && showSuggestions ? (
@@ -515,7 +311,6 @@ export function GraphFloatingControls({
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const optionsRef = useClickOutside(() => setOptionsOpen(false), optionsOpen);
-  const modKey = useModKeyLabel();
 
   const {
     searchTerm,
@@ -525,12 +320,13 @@ export function GraphFloatingControls({
     selectedIndex = -1,
   } = searchState;
 
+  // useGraphSearch().searchActions 형태 그대로 받음
   const {
     onSearchSubmit,
-    onClearSearch,
+    clearSearch: onClearSearch,
     onGenerateSuggestions,
-    onKeyDown,
-    onCloseSuggestions,
+    handleKeyDown: onKeyDown,
+    closeSuggestions: onCloseSuggestions,
     onSelectedIndexChange,
   } = searchActions;
 
@@ -558,8 +354,7 @@ export function GraphFloatingControls({
     return () => window.removeEventListener("keydown", onKey);
   }, [paletteOpen]);
 
-  const filterLabel =
-    GRAPH_CHARACTER_FILTER_STAGE_OPTIONS.find((o) => o.value === filterStage)?.label ?? "필터";
+  const filterLabel = getCharacterFilterStageLabel(filterStage) ?? "필터";
 
   return (
     <>
@@ -573,7 +368,7 @@ export function GraphFloatingControls({
           type="button"
           className={`graph-floating-btn${isSearchActive ? " is-active" : ""}`}
           aria-label={isSearchActive ? `인물 검색 (활성: ${searchTerm})` : "인물 검색"}
-          title={`인물 검색 (${modKey}+K)`}
+          title={`인물 검색 (${MOD_KEY_LABEL}+K)`}
           aria-haspopup="dialog"
           aria-expanded={paletteOpen}
           onClick={openPalette}
@@ -599,9 +394,7 @@ export function GraphFloatingControls({
                 <span className="graph-topbar-more-label">간선</span>
                 <EdgeLabelToggle
                   visible={edgeLabelVisible}
-                  onToggle={() => {
-                    onToggleEdgeLabel();
-                  }}
+                  onToggle={() => onToggleEdgeLabel()}
                 />
               </div>
               <div className="graph-topbar-more-section" role="none">
@@ -626,7 +419,6 @@ export function GraphFloatingControls({
         selectedIndex={selectedIndex}
         onSelectedIndexChange={onSelectedIndexChange}
         onKeyDown={onKeyDown}
-        onCloseSuggestions={onCloseSuggestions}
         isSearchActive={isSearchActive}
       />
     </>

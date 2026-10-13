@@ -29,7 +29,7 @@ const opacityTransition = `opacity ${ANIMATION_VALUES.DURATION.NORMAL}`;
 const createConditionalTransition = (condition, normalTransition, disabledTransition = 'none') =>
   condition ? disabledTransition : normalTransition;
 
-/** UnifiedNodeInfo 드래그 중 transition 억제 */
+/** NodeDetail 드래그 중 transition 억제 */
 export const unifiedNodeAnimations = {
   tooltipSimpleTransition: (isDragging) =>
     createConditionalTransition(isDragging, opacityTransition, 'none'),

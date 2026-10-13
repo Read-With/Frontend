@@ -720,8 +720,8 @@ export const getLastManifestEventInChapter = (
 };
 
 /** 챕터 manifest events 중 가장 처음(최소 인덱스) 이벤트 */
-export const getFirstManifestEventInChapter = (bookId, chapterIdx) => {
-  const events = asArray(getChapterData(bookId, chapterIdx)?.events);
+export const getFirstManifestEventInChapter = (bookId, chapterIdx, manifestOverride = undefined) => {
+  const events = asArray(getChapterData(bookId, chapterIdx, manifestOverride)?.events);
   return events.reduce((first, event) => {
     const num = manifestEventIndex(event);
     if (!num) return first;
@@ -761,7 +761,7 @@ const buildBookManifestEventIds = (bookId, manifest) => {
  * v2 manifest 챕터의 이벤트 인덱스 상한(힌트). 그래프 본문은 relationship-deltas.
  * events가 없으면 null — 가짜 1로 probe/누적을 막지 않음.
  */
-export const getLastEventIdxFromChapterData = (chapterData) => {
+const getLastEventIdxFromChapterData = (chapterData) => {
   if (!chapterData || typeof chapterData !== 'object') return null;
   if (!Array.isArray(chapterData.events) || chapterData.events.length === 0) {
     return null;

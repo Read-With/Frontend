@@ -6,8 +6,9 @@ import {
 import {Radar,RadarChart,PolarGrid,PolarAngleAxis,PolarRadiusAxis,ResponsiveContainer,} from 'recharts';
 import { getPositivityDisplay, GRAPH_COLORS, brandAlpha } from '../../utils/styles/graphStyles.js';
 import { truncateWithEllipsis, cycleIndex } from '../../utils/common/valueUtils.js';
-import { joinClasses, lockBodyScroll } from '../../utils/styles/styles.js';
-import { NodeProfileAvatar } from './GraphControls';
+import { joinClasses } from '../../utils/styles/styles.js';
+import { NodeProfileAvatar } from './GraphTooltipParts';
+import { useLatestRef, useModalFocusTrap, useBodyScrollLock } from '../../hooks/common/hooksShared';
 import './RelationGraph.css';
 
 const NAME_LABEL_MAX = 19; // truncate 시 18자 + …
@@ -26,9 +27,6 @@ const SIBLING_NAV = [
   { dir: -1, label: '이전 연결 인물로 분석 전환', text: '‹' },
   { dir: 1, label: '다음 연결 인물로 분석 전환', text: '›' },
 ];
-
-const FOCUSABLE_SELECTOR =
-  'button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
 function RelationTagsRow({ tags }) {
   if (!tags?.length) return null;
@@ -284,9 +282,9 @@ function RelationAnalysisModalImpl({
 }) {
   const dialogRef = useRef(null);
   const closeBtnRef = useRef(null);
-  const activeNameRef = useRef(null);
-  const switchTargetsRef = useRef(radarChartData);
   const [activeName, setActiveName] = useState(null);
+  const activeNameRef = useLatestRef(activeName);
+  const switchTargetsRef = useLatestRef(radarChartData);
 
   const overlayStyle = useMemo(() => {
     const inset = GRAPH_LAYOUT_CONSTANTS.ANALYSIS_MODAL_INSET;
@@ -315,72 +313,30 @@ function RelationAnalysisModalImpl({
   const activeIndex = radarChartData.findIndex((item) => item.name === activeName);
 
   useEffect(() => {
-    switchTargetsRef.current = radarChartData;
-    activeNameRef.current = activeName;
-  }, [radarChartData, activeName]);
-
-  useEffect(() => {
     setActiveName(radarChartData[0]?.name ?? null);
   }, [node?.id, radarChartData]);
 
+  // 포커스 트랩·Escape(캡처 단계)·닫을 때 분석 버튼으로 포커스 복귀
+  useModalFocusTrap(true, dialogRef, onClose, {
+    initialFocusRef: closeBtnRef,
+    returnFocusRef,
+    capture: true,
+  });
+  useBodyScrollLock();
+
+  // 화살표: 연결 인물 순환 선택
   useEffect(() => {
-    const root = dialogRef.current;
-    if (!root) return undefined;
-
-    const previouslyFocused = returnFocusRef?.current || document.activeElement;
-    const getFocusable = () =>
-      [...root.querySelectorAll(FOCUSABLE_SELECTOR)].filter(
-        (el) => !el.hasAttribute('disabled') && el.getAttribute('aria-hidden') !== 'true',
-      );
-
-    closeBtnRef.current?.focus();
-
     const onKeyDown = (e) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        onClose();
-        return;
-      }
-
+      const dir = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
       const targets = switchTargetsRef.current || [];
-      const currentName = activeNameRef.current;
-      const idx = targets.findIndex((item) => item.name === currentName);
-
-      if ((e.key === 'ArrowRight' || e.key === 'ArrowDown') && targets.length) {
-        e.preventDefault();
-        setActiveName(targets[cycleIndex(idx, targets.length, 1)].name);
-        return;
-      }
-      if ((e.key === 'ArrowLeft' || e.key === 'ArrowUp') && targets.length) {
-        e.preventDefault();
-        setActiveName(targets[cycleIndex(idx, targets.length, -1)].name);
-        return;
-      }
-
-      if (e.key !== 'Tab') return;
-      const list = getFocusable();
-      if (!list.length) return;
-      const i = list.indexOf(document.activeElement);
-      if (e.shiftKey && (i <= 0)) {
-        e.preventDefault();
-        list[list.length - 1].focus();
-      } else if (!e.shiftKey && (i === list.length - 1 || i === -1)) {
-        e.preventDefault();
-        list[0].focus();
-      }
+      if (!dir || !targets.length) return;
+      e.preventDefault();
+      const idx = targets.findIndex((item) => item.name === activeNameRef.current);
+      setActiveName(targets[cycleIndex(idx, targets.length, dir)].name);
     };
-
     document.addEventListener('keydown', onKeyDown, true);
-    const unlockScroll = lockBodyScroll();
-
-    return () => {
-      document.removeEventListener('keydown', onKeyDown, true);
-      unlockScroll();
-      if (previouslyFocused && typeof previouslyFocused.focus === 'function') {
-        previouslyFocused.focus();
-      }
-    };
-  }, [onClose, returnFocusRef]);
+    return () => document.removeEventListener('keydown', onKeyDown, true);
+  }, [activeNameRef, switchTargetsRef]);
 
   const activateItem = useCallback((item) => {
     if (!item?.name) return;
@@ -566,6 +522,7 @@ function RelationAnalysisModalImpl({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="modal-header relation-modal-header">

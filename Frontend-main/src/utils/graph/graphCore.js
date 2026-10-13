@@ -352,6 +352,9 @@ export const GRAPH_CHARACTER_FILTER_STAGE_OPTIONS = [
   { value: 0, label: '전체', title: '모든 인물' },
 ];
 
+export const getCharacterFilterStageLabel = (stage) =>
+  GRAPH_CHARACTER_FILTER_STAGE_OPTIONS.find((o) => o.value === stage)?.label;
+
 export function resolveChapterSidebarWidth(isSidebarOpen, { isNarrow = false } = {}) {
   // 좁은 화면은 오버레이 드로어 — 레이아웃 offset 없음
   if (isNarrow) return 0;

@@ -125,16 +125,19 @@ export function applyNormalizedNodeSizes(
       ? new Set(scaledNodes.map((node) => node.id()))
       : null;
 
-  allNodes.forEach((node) => {
-    const baseSize = calculateNodeSizeFromWeight(
-      node.data('weight'),
-      weightRange.min,
-      weightRange.max,
-      sizeRange.min,
-      sizeRange.max,
-    );
-    const size = scaledIds?.has(node.id()) ? Math.round(baseSize * scale) : baseSize;
-    node.style({ width: size, height: size });
+  // 노드별 style 갱신을 1회 렌더 갱신으로 묶음 (레이아웃·resize 호출부는 batch 밖)
+  cy.batch(() => {
+    allNodes.forEach((node) => {
+      const baseSize = calculateNodeSizeFromWeight(
+        node.data('weight'),
+        weightRange.min,
+        weightRange.max,
+        sizeRange.min,
+        sizeRange.max,
+      );
+      const size = scaledIds?.has(node.id()) ? Math.round(baseSize * scale) : baseSize;
+      node.style({ width: size, height: size });
+    });
   });
 }
 

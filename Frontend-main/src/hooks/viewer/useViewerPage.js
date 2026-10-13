@@ -30,18 +30,11 @@ const EVENT_TRANSITION_FALLBACK_MS = 50;
 const IDLE_TRANSITION = { type: null, inProgress: false };
 const SETTINGS_SAVE_ERROR_MESSAGE = '설정 저장 중 오류가 발생했습니다.';
 
-function resetTransitionState(setTransitionState) {
-  setTransitionState((prev) => (
-    prev.type == null && !prev.inProgress ? prev : IDLE_TRANSITION
-  ));
-}
-
-function reportSettingsSaveFailure(result, fallbackMessage) {
+function reportSettingsSaveFailure(result) {
   if (result.success) return true;
-  errorUtils.logWarning('useViewerPage', result.message || fallbackMessage, {
-    action: 'saveSettings',
-  });
-  toast.error(result.message || fallbackMessage);
+  const message = result.message || SETTINGS_SAVE_ERROR_MESSAGE;
+  errorUtils.logWarning('useViewerPage', message, { action: 'saveSettings' });
+  toast.error(message);
   return false;
 }
 
@@ -141,7 +134,9 @@ function useViewerTransition({ currentEvent, currentChapter, isDataReady }) {
   const [prevChapter, setPrevChapter] = useState(currentChapter);
 
   const resetTransition = useCallback(() => {
-    resetTransitionState(setTransitionState);
+    setTransitionState((prev) => (
+      prev.type == null && !prev.inProgress ? prev : IDLE_TRANSITION
+    ));
   }, []);
 
   useEffect(() => {
@@ -405,7 +400,7 @@ export function useViewerPage() {
         graphChanged = Boolean(next?.showGraph) !== Boolean(prev.showGraph);
         return next;
       });
-      if (!reportSettingsSaveFailure(result, SETTINGS_SAVE_ERROR_MESSAGE)) return;
+      if (!reportSettingsSaveFailure(result)) return;
       if (graphChanged) setReloadKey((k) => k + 1);
       toast.success('설정이 적용되었습니다');
     },
@@ -430,7 +425,7 @@ export function useViewerPage() {
 
   const toggleGraph = useCallback(async () => {
     const result = setSettings((prev) => ({ ...prev, showGraph: !prev.showGraph }));
-    if (!reportSettingsSaveFailure(result, SETTINGS_SAVE_ERROR_MESSAGE)) return;
+    if (!reportSettingsSaveFailure(result)) return;
 
     const restored = await restoreAfterViewerLayoutChange();
     if (!restored) {
@@ -453,12 +448,11 @@ export function useViewerPage() {
   }, [setProgress]);
 
   const onToggleBookmarkList = useCallback(() => {
-    const apiId = resolveServerBookId(book, bookKey || bookId);
-    const path = userViewerBookmarksPath(apiId);
+    const path = userViewerBookmarksPath(bookmarkBookId);
     if (!path) {
       errorUtils.logWarning('useViewerPage', '북마크 목록 경로 생성 실패', {
         action: 'openBookmarks',
-        bookId: apiId ?? bookId,
+        bookId: bookmarkBookId ?? bookId,
       });
       toast.error('책 정보가 없어 북마크 목록을 열 수 없습니다.');
       return;
@@ -466,7 +460,7 @@ export function useViewerPage() {
     navigate(path, {
       state: { ...(location.state || {}), book },
     });
-  }, [navigate, bookKey, bookId, location.state, book]);
+  }, [navigate, bookmarkBookId, bookId, location.state, book]);
 
   const exitToMypage = useCallback(() => {
     skipViewerHistoryMutationRef.current = true;

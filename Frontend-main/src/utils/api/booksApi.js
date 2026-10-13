@@ -200,8 +200,6 @@ export function normalizeChapterPovSummariesResult(raw) {
   };
 }
 
-const chapterPovSummariesInflight = new Map();
-
 export const getChapterPovSummaries = async (bookId, chapterIdx) => {
   const normalizedBookId = toPositiveNumberOrNull(bookId);
   const normalizedChapterIdx = toOneBasedChapterIndexOrNull(chapterIdx);
@@ -212,15 +210,14 @@ export const getChapterPovSummaries = async (bookId, chapterIdx) => {
     throw new Error('chapterIdx는 1 이상의 정수여야 합니다.');
   }
 
-  return withInflight(chapterPovSummariesInflight, `${normalizedBookId}:${normalizedChapterIdx}`, () =>
-    authenticatedRequest(
-      `/v2/books/${normalizedBookId}/chapters/${normalizedChapterIdx}/pov-summaries`,
-      { softFailStatuses: SOFT_FAIL_403_404 }
-    ).catch((error) => {
-      errorUtils.logError('getChapterPovSummaries', error);
-      throw error;
-    })
-  );
+  // 중복 요청 방지는 호출부(useChapterPovSummaries)의 react-query가 담당
+  return authenticatedRequest(
+    `/v2/books/${normalizedBookId}/chapters/${normalizedChapterIdx}/pov-summaries`,
+    { softFailStatuses: SOFT_FAIL_403_404 }
+  ).catch((error) => {
+    errorUtils.logError('getChapterPovSummaries', error);
+    throw error;
+  });
 };
 
 const normalizeBookmarkDto = (b) => {

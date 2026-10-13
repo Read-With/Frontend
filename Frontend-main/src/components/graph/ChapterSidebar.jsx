@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BookOpen, ChevronLeft, ChevronRight } from 'lucide-react';
 import { buildChapterSidebarItems } from '../../utils/graph/graphCore.js';
-import { useIsNarrowViewport } from '../../hooks/graph/useGraphViewState.js';
+import { useIsNarrowViewport } from '../../hooks/common/hooksShared';
 import { joinClasses } from '../../utils/styles/styles.js';
 import './RelationGraph.css';
 

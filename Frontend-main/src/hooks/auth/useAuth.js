@@ -7,7 +7,6 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from 'react';
 import {
@@ -29,6 +28,7 @@ import {
   setStoredGoogleUserJson,
   removeStoredGoogleUser,
   clearAuthData,
+  AUTH_CLEARED_EVENT,
 } from '../../utils/security/authTokenStorage';
 
 const AuthContext = createContext(null);
@@ -43,6 +43,11 @@ function profileFromUserData(userData) {
   };
 }
 
+function storeTokens(userData) {
+  if (userData.accessToken) setStoredAccessToken(userData.accessToken);
+  if (userData.refreshToken) setStoredRefreshToken(userData.refreshToken);
+}
+
 const isCorruptedName = (name) => {
   if (!name) return false;
   return /[ìíîïðñòóôõö]/.test(name) || /\\x[0-9A-Fa-f]{2}/.test(name);
@@ -55,12 +60,7 @@ function restoreSavedUser() {
   let profile = null;
   try {
     const userData = JSON.parse(savedUser);
-    if (userData.accessToken) {
-      setStoredAccessToken(userData.accessToken);
-    }
-    if (userData.refreshToken) {
-      setStoredRefreshToken(userData.refreshToken);
-    }
+    storeTokens(userData);
     profile = profileFromUserData(userData);
     setStoredGoogleUserJson(JSON.stringify(profile));
 
@@ -77,7 +77,6 @@ function restoreSavedUser() {
 function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const tokenRefreshIntervalRef = useRef(null);
 
   useEffect(() => {
     if (isOAuthCallbackRoute()) return undefined;
@@ -96,13 +95,8 @@ function AuthProvider({ children }) {
     };
 
     void checkAndRefreshToken();
-    tokenRefreshIntervalRef.current = setInterval(checkAndRefreshToken, 45 * 1000);
-
-    return () => {
-      if (tokenRefreshIntervalRef.current) {
-        clearInterval(tokenRefreshIntervalRef.current);
-      }
-    };
+    const intervalId = setInterval(checkAndRefreshToken, 45 * 1000);
+    return () => clearInterval(intervalId);
   }, []);
 
   useEffect(() => {
@@ -121,11 +115,9 @@ function AuthProvider({ children }) {
         await ensureSessionAccessToken();
         if (cancelled) return;
 
+        // 구버전 snake_case 키 정리 (authTokenStorage는 camelCase만 마이그레이션)
         try {
-          const oldToken = localStorage.getItem('access_token');
-          if (oldToken) {
-            localStorage.removeItem('access_token');
-          }
+          localStorage.removeItem('access_token');
         } catch {
           /* ignore */
         }
@@ -164,12 +156,7 @@ function AuthProvider({ children }) {
 
     try {
       setStoredGoogleUserJson(JSON.stringify(profile));
-      if (userData.accessToken) {
-        setStoredAccessToken(userData.accessToken);
-      }
-      if (userData.refreshToken) {
-        setStoredRefreshToken(userData.refreshToken);
-      }
+      storeTokens(userData);
     } catch {
       /* ignore */
     }
@@ -184,17 +171,20 @@ function AuthProvider({ children }) {
     }
   }, []);
 
-  const isAuthenticated = useCallback(() => {
-    if (!user) return false;
-
-    try {
-      const hasToken = !!getStoredAccessToken();
-      const hasGoogleUser = !!getStoredGoogleUserJson();
-      return hasToken && hasGoogleUser;
-    } catch {
-      return false;
-    }
-  }, [user]);
+  // 토큰 만료·로그아웃으로 저장소가 비면 user도 해제
+  // AUTH_CLEARED_EVENT는 같은 탭만, storage 이벤트는 다른 탭의 로그아웃을 전달
+  useEffect(() => {
+    const onCleared = () => setUser(null);
+    const onStorage = () => {
+      if (!getStoredGoogleUserJson()) setUser(null);
+    };
+    window.addEventListener(AUTH_CLEARED_EVENT, onCleared);
+    window.addEventListener('storage', onStorage);
+    return () => {
+      window.removeEventListener(AUTH_CLEARED_EVENT, onCleared);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, []);
 
   const value = useMemo(
     () => ({
@@ -202,9 +192,9 @@ function AuthProvider({ children }) {
       isLoading,
       login,
       logout,
-      isAuthenticated,
+      isAuthenticated: Boolean(user),
     }),
-    [user, isLoading, login, logout, isAuthenticated],
+    [user, isLoading, login, logout],
   );
 
   return createElement(AuthContext.Provider, { value }, children);

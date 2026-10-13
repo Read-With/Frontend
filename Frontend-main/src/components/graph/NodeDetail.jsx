@@ -1,25 +1,17 @@
 import { lazy, memo, Suspense, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useParams } from "react-router-dom";
 import {
-  processRelations,
-  isGraphNodeElement,
   GRAPH_LAYOUT_CONSTANTS,
   buildProcessedNode,
-  buildNodeIdentityContext,
-  isSameNodeIdentifier,
-  collectUndirectedRelations,
   resolvePovSummary,
   resolveRelationConnectionKind,
   clearPovSpoilerSession,
   NODE_TOOLTIP_VIEW_STATUS,
 } from "../../utils/graph/graphCore";
-import { getEventDataByIndex } from "../../utils/graph/graphModel.js";
-import { extractRadarChartData } from "../../utils/graph/graphCy.js";
-import { hasGraphPayload } from "../../utils/api/graphApi.js";
+import { checkNodeAppearance, buildRadarChartData, EMPTY_RADAR_RESULT } from "../../utils/graph/graphCharts.js";
 import { useFloatingTooltip } from "../../hooks/ui/tooltipHooks";
 import { getUnifiedEventInfoForTooltip } from "../../utils/viewer/viewerSession";
-import { USER_GRAPH_PREFIX } from "../../utils/common/urlUtils";
-import { clampPositivity, extractApiBookId } from "../../utils/common/valueUtils";
+import { extractApiBookId } from "../../utils/common/valueUtils";
 import { mergeRefs, unifiedNodeAnimations } from "../../utils/styles/styles.js";
 import { GRAPH_COLORS } from "../../utils/styles/graphStyles.js";
 import {
@@ -29,143 +21,11 @@ import {
   NodeTooltipShell,
   CenteredStatus,
   NodeProfileAvatar,
-} from './GraphControls';
+} from './GraphTooltipParts';
 
 const RelationAnalysisModal = lazy(() => import('./RelationAnalysisModal'));
 
-const RADAR_EMPTY = Object.freeze({ items: [], status: NODE_TOOLTIP_VIEW_STATUS.NO_DATA });
-const radarOk = (items) => ({
-  items,
-  status: items.length > 0 ? NODE_TOOLTIP_VIEW_STATUS.OK : NODE_TOOLTIP_VIEW_STATUS.NO_DATA,
-});
-const radarError = (message) => ({
-  items: [],
-  status: NODE_TOOLTIP_VIEW_STATUS.ERROR,
-  error: message || '관계 분석 데이터를 만들지 못했습니다.',
-});
-
 const SUMMARY = { COLLAPSED: 'collapsed', WARNING: 'warning', CONTENT: 'content' };
-
-const nameOf = (obj) => obj?.common_name ?? obj?.label;
-
-function checkNodeAppearance({ isSidebar, data, node, currentChapter, folderKey, eventNum, elements }) {
-  const isGraphOnlyPage =
-    typeof window !== 'undefined' && window.location.pathname.includes(`${USER_GRAPH_PREFIX}/`);
-  if (isSidebar || isGraphOnlyPage) {
-    return { appeared: true, error: null };
-  }
-  if (!data || !currentChapter || currentChapter <= 0) {
-    return { appeared: false, error: null };
-  }
-
-  try {
-    const json = getEventDataByIndex(folderKey, currentChapter, eventNum);
-    const idCtx = buildNodeIdentityContext({
-      id: node?.id ?? data?.id ?? data?.data?.id,
-      common_name: nameOf(node) ?? nameOf(data) ?? nameOf(data?.data),
-    });
-
-    const inElements = Array.isArray(elements) && elements.some((el) => {
-      if (!el || el.data?.source) return false;
-      return isSameNodeIdentifier(
-        { id: el.data?.id ?? el.id, name: el.data?.common_name ?? el.data?.label },
-        idCtx,
-      );
-    });
-
-    if (!json?.relations) {
-      return { appeared: inElements, error: null };
-    }
-
-    const relations = processRelations(json.relations);
-    const inCharacters = Array.isArray(json.characters)
-      && json.characters.some((c) => isSameNodeIdentifier(c, idCtx));
-    const inRelations = relations.some(
-      (rel) =>
-        isSameNodeIdentifier({ id: rel.id1, name: rel.name1 }, idCtx) ||
-        isSameNodeIdentifier({ id: rel.id2, name: rel.name2 }, idCtx),
-    );
-
-    return { appeared: inCharacters || inRelations || inElements, error: null };
-  } catch (err) {
-    return { appeared: false, error: err.message };
-  }
-}
-
-function buildRadarChartData({
-  node,
-  currentChapter,
-  apiBookGraphData,
-  elements,
-  folderKey,
-  eventNum,
-}) {
-  if (!node?.id || !currentChapter) return RADAR_EMPTY;
-
-  try {
-    // 빈 []도 truthy이므로 hasGraphPayload로 실제 데이터가 있을 때만 API 소스 사용
-    if (hasGraphPayload(apiBookGraphData)) {
-      const { relations, characters } = apiBookGraphData;
-      const bookElements = characters.map((char) => {
-        const charName = char.common_name || char.name || '';
-        return {
-          data: {
-            id: String(char.id),
-            label: charName || `인물 ${char.id}`,
-            common_name: charName || `인물 ${char.id}`,
-          },
-        };
-      });
-
-      const targetNodeId = node.id;
-      return radarOk(
-        extractRadarChartData(
-          targetNodeId,
-          collectUndirectedRelations(relations, targetNodeId),
-          bookElements,
-          8,
-        ),
-      );
-    }
-
-    if (!elements?.length) return RADAR_EMPTY;
-
-    const edgeRels = elements
-      .filter((el) => el?.data?.source && el?.data?.target)
-      .map((el) => ({
-        id1: el.data.source,
-        id2: el.data.target,
-        relation: el.data.relation || ['관계'],
-        count: el.data.count || el.data.strength || 1,
-        positivity: clampPositivity(el.data.positivity),
-      }));
-
-    if (edgeRels.length > 0) {
-      const nodeElements = elements.filter((el) => isGraphNodeElement(el));
-      return radarOk(
-        extractRadarChartData(
-          node.id,
-          collectUndirectedRelations(edgeRels, node.id),
-          nodeElements,
-          8,
-        ),
-      );
-    }
-
-    if (!folderKey) return RADAR_EMPTY;
-    const json = getEventDataByIndex(folderKey, currentChapter, eventNum);
-    if (!json?.relations) return RADAR_EMPTY;
-
-    const relations = collectUndirectedRelations(json.relations);
-    const ids = new Set(relations.flatMap((rel) => [String(rel.id1), String(rel.id2)]));
-    const filtered = elements.filter(
-      (el) => !el.data.source && ids.has(String(el.data.id)),
-    );
-    return radarOk(extractRadarChartData(node.id, relations, filtered, 8));
-  } catch (err) {
-    return radarError(err?.message);
-  }
-}
 
 function RelationAnalysisCta({
   node,
@@ -258,7 +118,6 @@ function NodeErrorView({ error, isSidebar, onClose, shellRef, position }) {
       shellRef={shellRef}
       className="graph-node-tooltip error"
       position={position}
-      zIndex={GRAPH_LAYOUT_CONSTANTS.Z_INDEX_TOOLTIP}
     >
       {errorContent}
     </NodeTooltipShell>
@@ -410,7 +269,7 @@ function useAnalysisModalState(pendingKeepAnalysisOpenRef, onSelectRelatedNode, 
   return { isOpen, open, close, selectRelatedNode: onSelectRelatedNode ? selectRelatedNode : null };
 }
 
-function UnifiedNodeInfo({
+function NodeDetail({
   displayMode = 'tooltip',
   data,
   x,
@@ -464,8 +323,8 @@ function UnifiedNodeInfo({
   );
 
   const { appeared, error } = useMemo(
-    () => checkNodeAppearance({
-      isSidebar,
+    // 사이드바 = 그래프 전용 페이지(GraphCanvas)에서만 사용 → 등장 여부 검사 불필요
+    () => isSidebar ? { appeared: true, error: null } : checkNodeAppearance({
       data,
       node,
       currentChapter,
@@ -490,7 +349,7 @@ function UnifiedNodeInfo({
       : '해당 인물 시점의 요약';
 
   const radarResult = useMemo(() => {
-    if (!isSidebar) return RADAR_EMPTY;
+    if (!isSidebar) return EMPTY_RADAR_RESULT;
     return buildRadarChartData({
       node,
       currentChapter,
@@ -530,7 +389,6 @@ function UnifiedNodeInfo({
   const floatingShell = {
     shellRef: mergeRefs(tooltipRef, clickOutsideRef),
     position,
-    zIndex: GRAPH_LAYOUT_CONSTANTS.Z_INDEX_TOOLTIP,
     showContent,
     isDragging,
     handleMouseDown,
@@ -581,11 +439,7 @@ function UnifiedNodeInfo({
       >
         <CenteredStatus fullHeight={false}>
           <div className="tooltip-not-appeared-avatar">
-            <PersonSilhouette
-              size={40}
-              circleFill={GRAPH_COLORS.border}
-              bodyFill={GRAPH_COLORS.textSecondary}
-            />
+            <PersonSilhouette size={40} bodyFill={GRAPH_COLORS.textSecondary} />
           </div>
           <h3 className="tooltip-not-appeared-title">{node?.displayName}</h3>
           <p className="tooltip-not-appeared-msg">아직 등장하지 않은 인물입니다</p>
@@ -632,4 +486,4 @@ function UnifiedNodeInfo({
   );
 }
 
-export default memo(UnifiedNodeInfo);
+export default memo(NodeDetail);

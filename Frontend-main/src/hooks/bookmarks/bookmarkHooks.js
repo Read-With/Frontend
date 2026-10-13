@@ -114,14 +114,14 @@ export const useBookmarks = (bookId, options = {}) => {
       });
       return result;
     } catch (err) {
+      const msg = friendlyError(err, messages.error);
       // API 레이어가 이미 logError한 경우 많음 → UI는 컨텍스트 warn만
-      errorUtils.logWarning(LOG, friendlyError(err, messages.error), {
+      errorUtils.logWarning(LOG, msg, {
         action: messages.action,
         bookId: serverBookId,
         message: err?.message,
         status: err?.status ?? err?.statusCode,
       });
-      const msg = friendlyError(err, messages.error);
       toast.error(msg);
       return { success: false, message: msg };
     } finally {

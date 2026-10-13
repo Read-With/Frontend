@@ -7,12 +7,8 @@ import { getPositivityDisplay, getRelationColor, GRAPH_COLORS } from "../../util
 import { ANIMATION_VALUES, mergeRefs } from "../../utils/styles/styles";
 import { clampPositivity, toNumberOrNull, toPositiveNumberOrNull } from "../../utils/common/valueUtils";
 import { buildRelationTagDisplayItems } from "../../utils/graph/graphCore";
-import {
-  isLongEdgeTimeline,
-  getSparseEdgeTickValues,
-  buildEdgeRechartsLineData,
-} from "../../utils/graph/graphCy";
-import { TooltipCloseButton } from './GraphControls';
+import { isLongEdgeTimeline, getSparseEdgeTickValues, buildEdgeRechartsLineData } from "../../utils/graph/graphCharts";
+import { TooltipCloseButton, NodeTooltipShell } from './GraphTooltipParts';
 
 const NO_RELATION_MESSAGE = '이 위치에서는 표시할 관계가 없습니다.';
 
@@ -360,7 +356,7 @@ function EdgeChartPanel({ relation, chart, title, missingEvent, heightPx, isSide
   );
 }
 
-function UnifiedEdgeTooltip({
+function EdgeDetail({
   data,
   x,
   y,
@@ -532,35 +528,18 @@ function UnifiedEdgeTooltip({
   }
 
   return (
-    <div
-      ref={mergeRefs(tooltipRef, clickOutsideRef)}
+    <NodeTooltipShell
+      shellRef={mergeRefs(tooltipRef, clickOutsideRef)}
       className="edge-tooltip-container"
-      style={{
-        left: position.x,
-        top: position.y,
-        opacity: showContent ? 1 : 0,
-        transition: isDragging ? 'none' : `opacity ${ANIMATION_VALUES.DURATION.NORMAL} ease-in-out`,
-        cursor: isDragging ? 'grabbing' : 'grab',
-      }}
-      onMouseDown={handleMouseDown}
+      position={position}
+      showContent={showContent}
+      isDragging={isDragging}
+      handleMouseDown={handleMouseDown}
+      transition={isDragging ? 'none' : `opacity ${ANIMATION_VALUES.DURATION.NORMAL} ease-in-out`}
     >
       {tooltipInner}
-    </div>
+    </NodeTooltipShell>
   );
 }
 
-export default memo(UnifiedEdgeTooltip, (prevProps, nextProps) => {
-  return (
-    prevProps.data === nextProps.data &&
-    prevProps.x === nextProps.x &&
-    prevProps.y === nextProps.y &&
-    prevProps.onClose === nextProps.onClose &&
-    prevProps.currentChapter === nextProps.currentChapter &&
-    prevProps.eventNum === nextProps.eventNum &&
-    prevProps.variant === nextProps.variant &&
-    prevProps.bookId === nextProps.bookId &&
-    prevProps.sourceEndpoint === nextProps.sourceEndpoint &&
-    prevProps.targetEndpoint === nextProps.targetEndpoint &&
-    prevProps.tooltipBoundsRef === nextProps.tooltipBoundsRef
-  );
-});
+export default memo(EdgeDetail);

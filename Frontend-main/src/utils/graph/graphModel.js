@@ -1,28 +1,22 @@
 /**
- * graphModel: 캐릭터·relations → Cytoscape elements 변환 + 챕터/델타 캐시.
- * (파일 분리 없이 섹션으로만 구분)
+ * graphModel: 캐릭터·relations → Cytoscape elements 변환 + 챕터 캐시.
+ * 노드 겹침 해소·신규 노드 배치는 graphLayout, relationship-deltas 누적은 graphDeltas.
  *
  * 섹션:
- * 1. Character maps / profile URL
+ * 1. Character maps (프로필 URL 정규화·이미지 resolve는 graphProfileImages)
  * 2. Node weights
  * 3. Elements build
  * 4. Diff / fingerprints
- * 5. Filter / subgraph / overlap
+ * 5. Filter / subgraph
  * 6. Chapter cache payload / reconstruct / book summary / cache → events
  * 7. Chapter discover / prefetch / ensure
- * 8. Book relationship deltas / macro graph response
+ * 8. Macro graph response
  */
 
-import {
-  sanitizeAssetUrl,
-  resolveApiArtifactUrl,
-  isProtectedPublicAsset,
-} from '../common/urlUtils';
 import {
   isGraphEdgeElement,
   isGraphNodeElement,
   normalizeElementId,
-  sortElementsByDataId,
   undirectedPairKey,
   directedEdgeElementId,
   uniqueStrings,
@@ -40,7 +34,7 @@ import {
   extractCharacterId,
   resolveManifestEventId,
   processRelations,
-  appendRelationLabelHistory,
+  sortElementsByDataId,
 } from './graphCore';
 import { eventUtils, cacheKeyUtils, ELEMENTS_TO_RELATIONS_OPTS } from '../viewer/viewerCore';
 import {
@@ -53,21 +47,19 @@ import {
   toPositiveNumberOrNull,
   sleep,
   toTrimmedStringOrNull,
-  clampPositivity,
   errorUtils,
   stringOrEmpty,
   compareLocale,
 } from '../common/valueUtils';
-import { buildGraphEventMeta, fetchRelationshipDeltasList, FETCH_STATUS, hasGraphPayload } from '../api/graphApi';
+import { buildGraphEventMeta, FETCH_STATUS, hasGraphPayload } from '../api/graphApi';
 import { requireBookId, toUnifiedApiResponse } from '../api/authApi';
-import { getBookManifest, fetchAuthenticatedAssetBlobUrl } from '../api/booksApi';
+import { getBookManifest } from '../api/booksApi';
+import { validateAndNormalizeProfileImageUrl } from './graphProfileImages';
 import {
   getChapterData,
   getManifestFromCache,
   calculateMaxChapterFromChapters,
   getLastManifestEventInChapter,
-  getFirstManifestEventInChapter,
-  listBookManifestEventIds,
 } from '../common/cache/manifestCache';
 import {
   setBounded,
@@ -79,12 +71,28 @@ import {
   GRAPH_BOOK_CACHE_PREFIX,
   CHAPTER_EVENT_CACHE_MAX_AGE_MS,
   CHAPTER_EVENT_CACHE_PREFIX,
-  CHAPTER_GRAPH_CACHE_SOURCE,
-  isUnusableChapterGraphCacheSource,
 } from '../common/cache/cacheManager';
+import {
+  sortDeltasForAccumulate,
+  createDeltaAccumulateWalker,
+  accumulateDeltasToGraphResult,
+  resolveChapterEventIdOrder,
+  ensureBookRelationshipDeltas,
+} from './graphDeltas';
+
+const CHAPTER_GRAPH_CACHE_SOURCE = Object.freeze({
+  API: 'api',
+  INVALID: 'invalid',
+});
+
+/** 과거에 write됐던 source — 재사용하지 않고 rediscover */
+const isUnusableChapterGraphCacheSource = (source) =>
+  source === CHAPTER_GRAPH_CACHE_SOURCE.INVALID ||
+  source === 'empty' ||
+  source === 'manifest-only';
 
 /* ═══════════════════════════════════════════════════════════════════════════
- * 1. Character maps / profile URL
+ * 1. Character maps (프로필 URL 정규화·이미지 resolve는 graphProfileImages)
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 const createEmptyCharacterMaps = () => ({
@@ -155,129 +163,6 @@ function createCharacterMaps(characters) {
     errorUtils.logError('createCharacterMaps', error);
     return createEmptyCharacterMaps();
   }
-}
-
-function validateAndNormalizeProfileImageUrl(profileImage) {
-  if (!profileImage || typeof profileImage !== 'string') {
-    return null;
-  }
-
-  const trimmed = sanitizeAssetUrl(profileImage.trim());
-  if (trimmed === '') {
-    return null;
-  }
-
-  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-    try {
-      new URL(trimmed);
-      return trimmed;
-    } catch {
-      if (import.meta.env.DEV) {
-        errorUtils.logDebug('graphModel', '유효하지 않은 절대 URL');
-      }
-      return null;
-    }
-  }
-
-  if (trimmed.startsWith('//')) {
-    try {
-      const resolved = new URL(trimmed, 'https://placeholder.local');
-      return resolved.origin + resolved.pathname + resolved.search + resolved.hash;
-    } catch {
-      if (import.meta.env.DEV) {
-        errorUtils.logDebug('graphModel', '유효하지 않은 프로토콜 상대 URL');
-      }
-      return null;
-    }
-  }
-
-  if (trimmed.startsWith('/')) {
-    return resolveApiArtifactUrl(trimmed) || trimmed;
-  }
-
-  if (import.meta.env.DEV) {
-    errorUtils.logDebug('graphModel', '유효하지 않은 이미지 URL 형식');
-  }
-  return null;
-}
-
-/* ─── 프로필 이미지 resolve (보호 자산 → blob, 직접 URL → 로드 프로브) ─── */
-
-export const GRAPH_IMAGE_DEFERRED_RETRY_MS = 1_500;
-
-const stillNeedsProtectedImageResolve = (image) =>
-  !!image && isProtectedPublicAsset(image) && !String(image).startsWith('blob:');
-
-/**
- * /public/ 밖의 직접 URL(CDN 등)은 인증 없이 그대로 <img>/캔버스에 쓰인다 — CORS 차단이나
- * 파일 부재 시 브라우저가 조용히 로드를 실패시켜, 그래프 노드에 이미지도 배경색도 없이
- * 빈 원만 남는다. 실제 로드 가능 여부를 한 번 프로브해 실패분은 image 필드를 제거,
- * 스타일시트의 기본 배경색(node 셀렉터)으로 폴백시킨다.
- */
-const directImageLoadableCache = new Map();
-const DIRECT_IMAGE_PROBE_TIMEOUT_MS = 4_000;
-
-const needsDirectImageVerification = (image) =>
-  !!image && !isProtectedPublicAsset(image) && !String(image).startsWith('blob:');
-
-function probeImageLoadable(url) {
-  if (typeof Image === 'undefined') return Promise.resolve(true);
-  return new Promise((resolve) => {
-    let settled = false;
-    const finish = (ok) => {
-      if (settled) return;
-      settled = true;
-      resolve(ok);
-    };
-    const img = new Image();
-    // Cytoscape는 background-image를 기본 crossOrigin='anonymous'로 로드한다(캔버스 오염 방지).
-    // 여기서도 동일하게 설정해야, CORS 헤더가 없는 origin의 이미지를 "로드 가능"으로 오판하지 않는다
-    // (crossOrigin 없는 <img> 프로브는 통과하지만 실제 캔버스 렌더링은 CORS로 차단되는 불일치 방지).
-    img.crossOrigin = 'anonymous';
-    img.onload = () => finish(true);
-    img.onerror = () => finish(false);
-    // 응답이 느릴 뿐 실패는 아닐 수 있으므로, 타임아웃은 실패로 단정하지 않고 통과시킨다.
-    setTimeout(() => finish(true), DIRECT_IMAGE_PROBE_TIMEOUT_MS);
-    img.src = url;
-  });
-}
-
-async function isDirectImageLoadable(url) {
-  if (directImageLoadableCache.has(url)) return directImageLoadableCache.get(url);
-  const ok = await probeImageLoadable(url);
-  directImageLoadableCache.set(url, ok);
-  return ok;
-}
-
-async function resolveOneGraphProfileImage(el, { force = false } = {}) {
-  const image = el?.data?.image;
-  if (!image) return el;
-
-  if (stillNeedsProtectedImageResolve(image)) {
-    const blobUrl = await fetchAuthenticatedAssetBlobUrl(image, { force });
-    if (!blobUrl || blobUrl === image) return el;
-    return { ...el, data: { ...el.data, image: blobUrl } };
-  }
-
-  if (needsDirectImageVerification(image)) {
-    const loadable = await isDirectImageLoadable(image);
-    if (loadable) return el;
-    const { image: _unused, ...restData } = el.data;
-    return { ...el, data: restData };
-  }
-
-  return el;
-}
-
-export function graphElementsHaveUnresolvedProfileImages(elements) {
-  if (!Array.isArray(elements) || elements.length === 0) return false;
-  return elements.some((el) => stillNeedsProtectedImageResolve(el?.data?.image));
-}
-
-export async function resolveGraphElementsProfileImages(elements, options = {}) {
-  if (!Array.isArray(elements) || elements.length === 0) return elements;
-  const { force = false } = options;
-  return Promise.all(elements.map((el) => resolveOneGraphProfileImage(el, { force })));
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -1052,7 +937,7 @@ export function buildElementsStructureFingerprint(elements) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
- * 5. Filter / subgraph / overlap
+ * 5. Filter / subgraph
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 /**
@@ -1090,7 +975,7 @@ export function expandConnectedSubgraph(
 }
 
 /**
- * 3단계 필터링 로직 (RelationGraphWrapper, GraphSplitArea 등에서 공통 사용)
+ * 3단계 필터링 로직 (GraphPage, GraphSplitArea 등에서 공통 사용)
  * @param {Array} elements - 그래프 요소 배열
  * @param {number} filterStage - 필터링 단계 (0: 전체, 1: 핵심인물만, 2: 핵심인물과 연결된 인물)
  * @returns {Array} 필터링된 요소 배열
@@ -1116,326 +1001,6 @@ export function filterMainCharacters(elements, filterStage) {
     });
   }
   return elements;
-}
-
-export function readNodeRadius(node, fallbackSize = 40) {
-  try {
-    const w = typeof node.outerWidth === 'function' ? node.outerWidth() : 0;
-    const h = typeof node.outerHeight === 'function' ? node.outerHeight() : 0;
-    if (Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0) {
-      return Math.max(w, h) / 2;
-    }
-  } catch {
-    /* ignore */
-  }
-  const size = typeof fallbackSize === 'number' && fallbackSize > 0 ? fallbackSize : 40;
-  return size / 2;
-}
-
-/** detectAndResolveOverlap / 호출부 공용 기본값 */
-export const OVERLAP_RESOLVE = Object.freeze({
-  FALLBACK_NODE_SIZE: 40,
-  PADDING: 8,
-  MAX_ITERATIONS: 8,
-  MAX_ITERATIONS_LIGHT: 3,
-  /** 메인 반복 후에도 겹치면 추가 패스 */
-  EXTRA_PASSES: 1,
-  /** 양측·편측 밀어내기 공통 여유(px) */
-  PUSH_EXTRA: 2,
-  /** 이 깊이(px) 이하의 본체 겹침은 시각적 안정성을 위해 허용 */
-  OVERLAP_TOLERANCE: 3,
-  /** 이 깊이(px) 이상이면 완전한 여유 간격까지 강하게 분리 */
-  SEVERE_OVERLAP: 12,
-});
-
-export const OVERLAP_PROFILES = Object.freeze({
-  /** 최초 로딩·전체 재배치: 본체 겹침 허용 없음. 정착 상태이므로 여유 간격을 크게 둔다 */
-  INITIAL: Object.freeze({ padding: 16, tolerance: 0, maxIterations: 16, extraPasses: 3 }),
-  /** 동시 등장 신규 노드끼리: 본체 겹침 허용 없음. INITIAL과 동일한 여유로 배치 밀도를 맞춘다 */
-  APPEAR: Object.freeze({ padding: 16, tolerance: 0, maxIterations: 12, extraPasses: 2 }),
-  INCREMENTAL: Object.freeze({ padding: 6, tolerance: 3, maxIterations: 4, extraPasses: 1 }),
-  RESIZE: Object.freeze({ padding: 5, tolerance: 3, maxIterations: 2, extraPasses: 0 }),
-  /** 사용자 드래그: 본체 겹침 즉시 반응, 드래그 노드는 movableIds에서 제외해 자유 배치 유지 */
-  USER_DRAG: Object.freeze({
-    padding: 10,
-    tolerance: 0,
-    maxIterations: 8,
-    extraPasses: 1,
-    pushExtra: 2,
-    severeOverlap: 1,
-  }),
-});
-
-function collectNearbyPairIndexes(nodePositions, padding) {
-  const maxRadius = nodePositions.reduce((max, item) => Math.max(max, item.radius), 1);
-  const cellSize = Math.max(1, maxRadius * 2 + padding);
-  const buckets = new Map();
-  nodePositions.forEach((item, index) => {
-    const x = Math.floor(item.pos.x / cellSize);
-    const y = Math.floor(item.pos.y / cellSize);
-    const key = `${x}:${y}`;
-    if (!buckets.has(key)) buckets.set(key, []);
-    buckets.get(key).push(index);
-  });
-
-  const pairs = [];
-  nodePositions.forEach((item, i) => {
-    const x = Math.floor(item.pos.x / cellSize);
-    const y = Math.floor(item.pos.y / cellSize);
-    for (let dx = -1; dx <= 1; dx += 1) {
-      for (let dy = -1; dy <= 1; dy += 1) {
-        const candidates = buckets.get(`${x + dx}:${y + dy}`) || [];
-        for (const j of candidates) {
-          if (j <= i) continue;
-          pairs.push([i, j]);
-        }
-      }
-    }
-  });
-  return pairs;
-}
-
-function pairStillOverlaps(nodePositions, movableIdSet, padding, tolerance = 0) {
-  const pairs = collectNearbyPairIndexes(nodePositions, padding);
-  for (const [i, j] of pairs) {
-      const a = nodePositions[i];
-      const b = nodePositions[j];
-      const aMovable = !movableIdSet || movableIdSet.has(a.id);
-      const bMovable = !movableIdSet || movableIdSet.has(b.id);
-      if (!aMovable && !bMovable) continue;
-      const minDistance = Math.max(0, a.radius + b.radius - tolerance);
-      const dx = a.pos.x - b.pos.x;
-      const dy = a.pos.y - b.pos.y;
-      if (dx * dx + dy * dy < minDistance * minDistance) return true;
-  }
-  return false;
-}
-
-function runOverlapPushPasses(
-  nodePositions,
-  movableIdSet,
-  padding,
-  pushExtra,
-  maxIterations,
-  tolerance,
-  severeOverlap,
-) {
-  let hasOverlap = false;
-  for (let iter = 0; iter < maxIterations; iter += 1) {
-    let movedThisPass = false;
-
-    const pairs = collectNearbyPairIndexes(nodePositions, padding);
-    for (const [i, j] of pairs) {
-        const { node: node1, id: id1, pos: pos1, radius: r1 } = nodePositions[i];
-        const { node: node2, id: id2, pos: pos2, radius: r2 } = nodePositions[j];
-
-        const node1Movable = !movableIdSet || movableIdSet.has(id1);
-        const node2Movable = !movableIdSet || movableIdSet.has(id2);
-        if (!node1Movable && !node2Movable) continue;
-
-        const bodyDistance = r1 + r2;
-        const activationDistance = Math.max(0, bodyDistance - tolerance);
-        const dx = pos1.x - pos2.x;
-        const dy = pos1.y - pos2.y;
-        const distanceSquared = dx * dx + dy * dy;
-
-        if (distanceSquared >= activationDistance * activationDistance) continue;
-
-        hasOverlap = true;
-        movedThisPass = true;
-        const distance = Math.sqrt(distanceSquared);
-        const penetration = bodyDistance - distance;
-        const severe = penetration >= severeOverlap;
-        const targetGap = severe ? padding : Math.min(padding, 2);
-        const targetSeparation = bodyDistance + targetGap + (severe ? pushExtra : 0);
-        const angle =
-          distance < 1e-6
-            ? (i + j) * 0.7
-            : Math.atan2(dy, dx);
-        const pushDistance = targetSeparation - distance;
-        const cos = Math.cos(angle);
-        const sin = Math.sin(angle);
-
-        if (node1Movable && node2Movable) {
-          const half = pushDistance * 0.5;
-          const newPos1 = { x: pos1.x + cos * half, y: pos1.y + sin * half };
-          const newPos2 = { x: pos2.x - cos * half, y: pos2.y - sin * half };
-          node1.position(newPos1);
-          node2.position(newPos2);
-          nodePositions[i].pos = newPos1;
-          nodePositions[j].pos = newPos2;
-        } else if (node1Movable) {
-          const newPos1 = {
-            x: pos2.x + cos * targetSeparation,
-            y: pos2.y + sin * targetSeparation,
-          };
-          node1.position(newPos1);
-          nodePositions[i].pos = newPos1;
-        } else {
-          const newPos2 = {
-            x: pos1.x - cos * targetSeparation,
-            y: pos1.y - sin * targetSeparation,
-          };
-          node2.position(newPos2);
-          nodePositions[j].pos = newPos2;
-        }
-    }
-
-    if (!movedThisPass) break;
-  }
-  return hasOverlap;
-}
-
-/** 숫자 옵션: allowZero면 >= 0, 아니면 > 0 일 때만 채택 */
-const numOpt = (value, fallback, allowZero = true) =>
-  typeof value === 'number' && (allowZero ? value >= 0 : value > 0) ? value : fallback;
-
-function parseOverlapOptions(nodeSize, options = {}) {
-  const movableIdSet = options.movableIds
-    ? new Set([...options.movableIds].map(String).filter((id) => id !== ''))
-    : null;
-  return {
-    nodeSize: numOpt(nodeSize, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE, false),
-    movableIdSet,
-    padding: numOpt(options.padding, OVERLAP_RESOLVE.PADDING),
-    tolerance: numOpt(options.tolerance, OVERLAP_RESOLVE.OVERLAP_TOLERANCE),
-    pushExtra: numOpt(options.pushExtra, OVERLAP_RESOLVE.PUSH_EXTRA),
-    severeOverlap: numOpt(options.severeOverlap, OVERLAP_RESOLVE.SEVERE_OVERLAP, false),
-    maxIterations: numOpt(
-      options.maxIterations,
-      movableIdSet ? OVERLAP_RESOLVE.MAX_ITERATIONS : OVERLAP_RESOLVE.MAX_ITERATIONS_LIGHT,
-      false,
-    ),
-    extraPasses: numOpt(options.extraPasses, OVERLAP_RESOLVE.EXTRA_PASSES),
-  };
-}
-
-function buildOverlapNodePositions(cy, nodeSize) {
-  // spatial hash로 O(n) 검사라 노드 수 상한 없이 전량 대상
-  let nodes = cy.nodes(':visible').toArray();
-  if (nodes.length === 0) nodes = cy.nodes().toArray();
-  if (nodes.length < 2) return null;
-  return nodes.map((node) => ({
-    node,
-    id: String(node.id()),
-    pos: node.position(),
-    radius: readNodeRadius(node, nodeSize),
-  }));
-}
-
-/**
- * 노드 겹침 감지 및 자동 조정
- * @param {Object} cy - Cytoscape 인스턴스
- * @param {number} [nodeSize=OVERLAP_RESOLVE.FALLBACK_NODE_SIZE] - 크기 읽기 실패 시 fallback (지름)
- * @param {Object} [options]
- * @param {Iterable<string>|null} [options.movableIds] - 지정 시 해당 노드만 이동(기존 노드 위치 유지)
- * @param {number} [options.maxIterations] - 밀어내기 반복 횟수
- * @param {number} [options.extraPasses] - 잔여 겹침 시 추가 반복
- * @param {number} [options.padding] - 반경 합에 더하는 여유 간격
- * @returns {boolean} 겹침이 있었는지 여부
- */
-export function detectAndResolveOverlap(
-  cy,
-  nodeSize = OVERLAP_RESOLVE.FALLBACK_NODE_SIZE,
-  options = {},
-) {
-  if (!cy) {
-    return false;
-  }
-
-  const {
-    nodeSize: size,
-    movableIdSet,
-    padding,
-    tolerance,
-    pushExtra,
-    severeOverlap,
-    maxIterations,
-    extraPasses,
-  } = parseOverlapOptions(nodeSize, options);
-  if (movableIdSet && movableIdSet.size === 0) {
-    return false;
-  }
-
-  const nodePositions = buildOverlapNodePositions(cy, size);
-  if (!nodePositions) {
-    return false;
-  }
-
-  let hasOverlap = false;
-  const runPasses = (iterations) =>
-    runOverlapPushPasses(nodePositions, movableIdSet, padding, pushExtra, iterations, tolerance, severeOverlap);
-  const apply = () => {
-    hasOverlap = runPasses(maxIterations) || hasOverlap;
-    if (pairStillOverlaps(nodePositions, movableIdSet, padding, tolerance) && extraPasses > 0) {
-      hasOverlap = runPasses(extraPasses) || hasOverlap;
-    }
-  };
-
-  if (typeof cy.batch === 'function') {
-    cy.batch(apply);
-  } else {
-    apply();
-  }
-
-  if (
-    pairStillOverlaps(nodePositions, movableIdSet, padding, tolerance)
-    && import.meta.env?.DEV
-  ) {
-    errorUtils.logDebug('detectAndResolveOverlap', 'residual overlaps remain', {
-      candidates: nodePositions.length,
-    });
-  }
-
-  return hasOverlap;
-}
-
-/**
- * movableIds가 있으면 그중 하나 이상 포함된 쌍만 검사.
- * @returns {boolean} 겹치는 쌍이 있으면 true
- */
-export function hasOverlappingNodes(
-  cy,
-  nodeSize = OVERLAP_RESOLVE.FALLBACK_NODE_SIZE,
-  options = {},
-) {
-  if (!cy) return false;
-  const { movableIdSet, padding, tolerance, nodeSize: size } = parseOverlapOptions(nodeSize, options);
-  if (movableIdSet && movableIdSet.size === 0) return false;
-
-  const nodePositions = buildOverlapNodePositions(cy, size);
-  if (!nodePositions) return false;
-  return pairStillOverlaps(nodePositions, movableIdSet, padding, tolerance);
-}
-
-/** seedIds 기준 undirected N-hop 이웃(시드 포함) */
-export function collectNeighborhoodNodeIds(cy, seedIds, hops = 1) {
-  const seeds = [...(seedIds || [])].map(String).filter(Boolean);
-  const all = new Set(seeds);
-  if (!cy || hops < 1 || seeds.length === 0) return all;
-
-  let frontier = new Set(seeds);
-  for (let h = 0; h < hops; h += 1) {
-    const next = new Set();
-    for (const id of frontier) {
-      const node = cy.getElementById(id);
-      if (!node || node.length === 0) continue;
-      try {
-        node.neighborhood('node').forEach((n) => {
-          const nid = String(n.id());
-          if (!all.has(nid)) {
-            all.add(nid);
-            next.add(nid);
-          }
-        });
-      } catch {
-        /* ignore */
-      }
-    }
-    if (next.size === 0) break;
-    frontier = next;
-  }
-  return all;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -1708,7 +1273,7 @@ export const createChapterGraphStateCursor = (
 };
 
 /** 단건 조회. 여러 시점을 볼 때는 createChapterGraphStateCursor 사용 */
-export const reconstructChapterGraphState = (cachePayload, targetEventIdx) => {
+const reconstructChapterGraphState = (cachePayload, targetEventIdx) => {
   if (!cachePayload || typeof cachePayload !== 'object') return null;
   return createChapterGraphStateCursor(cachePayload)(targetEventIdx);
 };
@@ -2620,465 +2185,8 @@ export async function ensureChapterEventsDiscovered(
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
- * 8. Book relationship deltas
+ * 8. Macro graph response (책 전체 누적 → API 응답 shape)
  * ═══════════════════════════════════════════════════════════════════════════ */
-
-/* ─── relationship-deltas 누적 (graphApi에서 이동) ─── */
-
-const orderIndexOf = (orderIndex, eventId) => {
-  const id = toTrimmedStringOrNull(eventId);
-  if (id == null || !orderIndex?.has(id)) return null;
-  return orderIndex.get(id);
-};
-
-const resolveManifestCharacterMeta = (bookId) => {
-  const byId = new Map();
-  for (const character of asArray(getManifestFromCache(bookId)?.characters)) {
-    const id = Number(character?.id);
-    if (Number.isFinite(id)) byId.set(id, character);
-  }
-  return byId;
-};
-
-const normalizeEventIdOrder = (chapterEventIdOrder) =>
-  asArray(chapterEventIdOrder).map((id) => toTrimmedStringOrNull(id)).filter(Boolean);
-
-const compareDeltasForAccumulate = (a, b, orderIndex = null) => {
-  const chapterA = Number(a?.chapterIndex);
-  const chapterB = Number(b?.chapterIndex);
-  const hasA = Number.isFinite(chapterA);
-  const hasB = Number.isFinite(chapterB);
-  if (hasA && hasB && chapterA !== chapterB) return chapterA - chapterB;
-  if (hasA !== hasB) return hasA ? -1 : 1;
-
-  if (!orderIndex?.size) return 0;
-  const ia = orderIndexOf(orderIndex, a?.eventId);
-  const ib = orderIndexOf(orderIndex, b?.eventId);
-  if (ia != null && ib != null) return ia - ib;
-  if (ia != null) return -1;
-  if (ib != null) return 1;
-  // eventId 문자열 비교는 시간 순서와 어긋날 수 있어 사용하지 않음 (안정 정렬)
-  return 0;
-};
-
-/** deltas를 챕터·manifest 이벤트 순으로 정렬 (export: discovery 공용) */
-const sortDeltasForAccumulate = (deltas, chapterEventIdOrder = null) => {
-  const list = asArray(deltas).filter((d) => d && typeof d === 'object');
-  const order = normalizeEventIdOrder(chapterEventIdOrder);
-  const orderIndex = order.length > 0 ? new Map(order.map((id, i) => [id, i])) : null;
-  return [...list].sort((a, b) => compareDeltasForAccumulate(a, b, orderIndex));
-};
-
-const createEmptyDeltaAccumulateState = () => ({
-  relationMap: new Map(),
-  weightMap: new Map(),
-  characterIds: new Set(),
-  lastDelta: null,
-});
-
-const applyNodeWeights = (state, weights) => {
-  if (!weights || typeof weights !== 'object') return;
-  for (const [rawId, meta] of Object.entries(weights)) {
-    const idNum = Number(rawId);
-    if (!Number.isFinite(idNum)) continue;
-    state.characterIds.add(idNum);
-    if (Number.isFinite(meta?.weight)) state.weightMap.set(idNum, meta.weight);
-  }
-};
-
-const mergeRelationItem = (state, item, deltaEventId) => {
-  if (!item || typeof item !== 'object') return;
-  const id1 = Number(item.fromCharacterId);
-  const id2 = Number(item.toCharacterId);
-  if (!Number.isFinite(id1) || !Number.isFinite(id2)) return;
-
-  state.characterIds.add(id1);
-  state.characterIds.add(id2);
-  const key = directedEdgeElementId(id1, id2);
-  const prev = state.relationMap.get(key);
-  const labels = asArray(item.labels);
-  const evidence = Number.isFinite(item.evidenceCount) ? item.evidenceCount : 1;
-  const positivity = toNumberOrNull(item.positivity) ?? clampPositivity(prev?.positivity);
-
-  state.relationMap.set(key, {
-    id1,
-    id2,
-    positivity,
-    count: (prev?.count ?? 0) + evidence,
-    relation: uniqueStrings([...asArray(prev?.relation), ...labels], { caseInsensitive: true }),
-    latestLabels: labels,
-    labelHistory: appendRelationLabelHistory(prev?.labelHistory, labels, deltaEventId, positivity),
-    latestReason: typeof item.reason === 'string' ? item.reason : prev?.latestReason ?? '',
-    latestEventId: deltaEventId ?? prev?.latestEventId ?? null,
-  });
-};
-
-const applyDeltasToAccumulateState = (state, deltas) => {
-  if (!state || !deltas?.length) return state;
-
-  for (const delta of deltas) {
-    if (!delta || typeof delta !== 'object') continue;
-    state.lastDelta = delta;
-    const deltaEventId = toTrimmedStringOrNull(delta.eventId);
-    applyNodeWeights(state, delta.nodeWeights);
-    for (const item of asArray(delta.items)) mergeRelationItem(state, item, deltaEventId);
-  }
-  return state;
-};
-
-const finalizeAccumulateStateToGraphResult = (
-  bookId,
-  state,
-  { chapterIndex = null, eventId = null } = {}
-) => {
-  const last = state.lastDelta;
-  const stampedId = toTrimmedStringOrNull(eventId);
-  // through 스냅샷: chapterIndex 인자 우선 / 전체 누적: last delta 우선
-  const resolvedChapter = stampedId
-    ? toNumberOrNull(chapterIndex) ?? last?.chapterIndex ?? null
-    : last?.chapterIndex ?? toNumberOrNull(chapterIndex);
-  const resolvedEventId = stampedId ?? toTrimmedStringOrNull(last?.eventId) ?? null;
-
-  const manifestChars = resolveManifestCharacterMeta(bookId);
-  const characters = [...state.characterIds]
-    .sort((a, b) => a - b)
-    .map((id) => {
-      const meta = manifestChars.get(id);
-      const commonName = pickCharacterDisplayName(meta) || '';
-      if (commonName) rememberCharacterDisplayName(bookId, id, commonName);
-      return {
-        id,
-        weight: toPositiveNumberOrNull(state.weightMap.get(id)) ?? 1,
-        count: 1,
-        common_name: commonName,
-        name: commonName,
-        names: asArray(meta?.names),
-        // 인물 소개는 personalityText (profileText는 이미지 프롬프트 등 별도 용도)
-        personalityText: stringOrEmpty(meta?.personalityText),
-        profileText: stringOrEmpty(meta?.profileText),
-        description: stringOrEmpty(meta?.personalityText),
-        profileImage: stringOrEmpty(meta?.profileImage),
-        isMainCharacter: Boolean(meta?.isMainCharacter),
-      };
-    });
-
-  return {
-    bookId: Number(bookId) || bookId || null,
-    chapterIndex: resolvedChapter,
-    eventId: resolvedEventId,
-    characters,
-    relations: [...state.relationMap.values()],
-    event: buildGraphEventMeta(resolvedEventId, resolvedChapter),
-  };
-};
-
-/** throughEventId까지 포함한 end index (exclusive). 목록에 없으면 order로 근사. */
-const resolveThroughEndExclusive = (
-  sortedDeltas,
-  throughEventId,
-  { chapterIndex = null, chapterEventIdOrder = null } = {}
-) => {
-  const list = asArray(sortedDeltas);
-  const through = toTrimmedStringOrNull(throughEventId);
-  if (!through || list.length === 0) return 0;
-
-  const cut = list.findIndex((d) => toTrimmedStringOrNull(d.eventId) === through);
-  if (cut >= 0) return cut + 1;
-
-  const targetChapter = toNumberOrNull(chapterIndex);
-  const order = normalizeEventIdOrder(chapterEventIdOrder);
-  const throughPos = order.indexOf(through);
-  if (targetChapter == null || throughPos < 0) return list.length;
-
-  const allowedInChapter = new Set(order.slice(0, throughPos + 1));
-  const orderSet = new Set(order);
-  let end = 0;
-  for (let i = 0; i < list.length; i += 1) {
-    const d = list[i];
-    const ch = Number(d?.chapterIndex);
-    const id = toTrimmedStringOrNull(d?.eventId);
-    let include = false;
-    if (Number.isFinite(ch) && ch < targetChapter) include = true;
-    else if (Number.isFinite(ch) && ch > targetChapter) include = false;
-    else if (Number.isFinite(ch) && ch === targetChapter) include = id ? allowedInChapter.has(id) : false;
-    else include = id ? !orderSet.has(id) : false;
-    if (include) end = i + 1;
-  }
-  return end;
-};
-
-/**
- * 정렬된 deltas를 이벤트 순으로 증분 누적.
- * discovery에서 phase1/phase2가 동일 walker를 재사용.
- * appliedEnd는 항상 원본 sortedDeltas 기준 exclusive index.
- */
-const createDeltaAccumulateWalker = (
-  bookId,
-  sortedDeltas,
-  { chapterIndex = null, chapterEventIdOrder = null } = {}
-) => {
-  const state = createEmptyDeltaAccumulateState();
-  let appliedEnd = 0;
-  const deltas = asArray(sortedDeltas);
-  const cutOpts = {
-    chapterIndex,
-    chapterEventIdOrder: normalizeEventIdOrder(chapterEventIdOrder),
-  };
-
-  const applyUpTo = (endExclusive) => {
-    const end = Math.max(0, Math.min(endExclusive, deltas.length));
-    if (end <= appliedEnd) return;
-    applyDeltasToAccumulateState(state, deltas.slice(appliedEnd, end));
-    appliedEnd = end;
-  };
-
-  const advanceThrough = (eventId) => {
-    const id = toTrimmedStringOrNull(eventId);
-    if (!id) return;
-    applyUpTo(resolveThroughEndExclusive(deltas, id, cutOpts));
-  };
-
-  const snapshot = (eventId) =>
-    finalizeAccumulateStateToGraphResult(bookId, state, { chapterIndex, eventId });
-
-  return {
-    advanceThrough,
-    snapshotThrough(eventId) {
-      const id = toTrimmedStringOrNull(eventId);
-      advanceThrough(id);
-      return snapshot(id);
-    },
-    snapshotAll() {
-      applyUpTo(deltas.length);
-      return snapshot(null);
-    },
-  };
-};
-
-/**
- * relationship-deltas → 기존 그래프 소비자용 characters/relations 누적.
- * @param {{ chapterIndex?: number|null, throughEventId?: string|null, chapterEventIdOrder?: string[]|null }} [options]
- */
-export const accumulateDeltasToGraphResult = (
-  bookId,
-  deltas,
-  { chapterIndex = null, throughEventId = null, chapterEventIdOrder = null } = {}
-) => {
-  const through = toTrimmedStringOrNull(throughEventId);
-  const order = normalizeEventIdOrder(chapterEventIdOrder);
-  const walker = createDeltaAccumulateWalker(
-    bookId,
-    sortDeltasForAccumulate(deltas, order),
-    { chapterIndex, chapterEventIdOrder: order }
-  );
-  return through ? walker.snapshotThrough(through) : walker.snapshotAll();
-};
-
-export const resolveChapterEventIdOrder = (bookId, chapterIndex) => {
-  if (toNumberOrNull(chapterIndex) == null) return [];
-  return asArray(getChapterData(bookId, chapterIndex)?.events)
-    .map(resolveManifestEventId)
-    .filter(Boolean);
-};
-
-const bookDeltasCache = new Map();
-const bookDeltasInflight = new Map();
-/** clear 시 증가 — 진행 중이던 fetch가 지운 캐시를 다시 채우지 않도록 */
-const bookDeltasGeneration = new Map();
-
-/**
- * 책 deltas 메모리/inflight 캐시 클리어.
- * @param {string|number} bookId
- */
-export const clearBookRelationshipDeltas = (bookId) => {
-  const key = toPositiveNumberOrNull(bookId) ?? bookId;
-  bookDeltasCache.delete(key);
-  bookDeltasInflight.delete(key);
-  bookDeltasGeneration.set(key, (bookDeltasGeneration.get(key) ?? 0) + 1);
-};
-
-const cacheCoversThrough = (cached, throughEventId, bookId) => {
-  if (!cached || !Array.isArray(cached.deltas)) return false;
-  const through = toTrimmedStringOrNull(throughEventId);
-  if (!through) return true;
-  const cachedTo = toTrimmedStringOrNull(cached.toEventId);
-  if (!cachedTo) return false;
-  if (cachedTo === through) return true;
-  const order = listBookManifestEventIds(bookId);
-  const iCached = order.indexOf(cachedTo);
-  const iThrough = order.indexOf(through);
-  if (iCached >= 0 && iThrough >= 0) return iCached >= iThrough;
-  return cached.deltas.some((d) => toTrimmedStringOrNull(d?.eventId) === through);
-};
-
-const cacheCoversChapter = (cached, chapterIndex, bookId) => {
-  const ch = toPositiveInt(chapterIndex);
-  if (!cached || ch == null) return false;
-  const covered = toPositiveInt(cached.coveredThroughChapter);
-  if (covered != null && covered >= ch) return true;
-  const lastId = resolveManifestEventId(getLastManifestEventInChapter(bookId, ch));
-  return lastId ? cacheCoversThrough(cached, lastId, bookId) : false;
-};
-
-const mergeDeltasByEventId = (baseDeltas, nextDeltas) => {
-  const merged = Array.isArray(baseDeltas) ? [...baseDeltas] : [];
-  const seen = new Set(merged.map((d) => toTrimmedStringOrNull(d?.eventId)).filter(Boolean));
-  for (const delta of asArray(nextDeltas)) {
-    if (!delta || typeof delta !== 'object') continue;
-    const id = toTrimmedStringOrNull(delta.eventId);
-    if (id && seen.has(id)) continue;
-    if (id) seen.add(id);
-    merged.push(delta);
-  }
-  return merged;
-};
-
-const buildCacheEntry = (
-  bookId,
-  deltas,
-  { toEventId = null, coveredThroughChapter = null, response = null } = {}
-) => {
-  const list = asArray(deltas);
-  return {
-    bookId,
-    deltas: list,
-    toEventId: toTrimmedStringOrNull(toEventId),
-    coveredThroughChapter: toPositiveInt(coveredThroughChapter),
-    response,
-    // 실패는 fetchAndStoreByChapter에서 throw — 캐시 항목은 항상 성공
-    isSuccess: true,
-  };
-};
-
-/** clearBookRelationshipDeltas 이후 끝난 요청이면 결과를 버림 */
-const throwIfCleared = (key, generation) => {
-  if ((bookDeltasGeneration.get(key) ?? 0) !== generation) {
-    throw new DOMException('Aborted', 'AbortError');
-  }
-};
-
-/** 챕터 단위 조회 실패 (hard/soft fail) → throw용 Error */
-const deltasFetchError = (fetched) => {
-  const err = new Error(fetched.response?.message || '관계 델타 조회에 실패했습니다.');
-  err.code = fetched.response?.code || 'ERROR';
-  err.response = fetched.response;
-  return err;
-};
-
-/**
- * 여러 챕터를 manifest eventId 범위로 1회 요청 (챕터별 N요청은 BE 커넥션 풀에서 줄 섬).
- * 성공해 캐시에 반영하면 새 항목, 범위를 못 정했거나 빈 결과·실패면 null (챕터별 폴백).
- */
-const fetchChapterRangeOnce = async (key, chapters, uptoChapter, current, generation) => {
-  const fromId = chapters
-    .map((ch) => resolveManifestEventId(getFirstManifestEventInChapter(key, ch)))
-    .find(Boolean);
-  const toId = resolveManifestEventId(getLastManifestEventInChapter(key, uptoChapter));
-  if (!fromId || !toId) return null;
-
-  try {
-    const fetched = await fetchRelationshipDeltasList(key, { fromEventId: fromId, toEventId: toId });
-    throwIfCleared(key, generation);
-    // 빈 결과는 eventId 불일치(404→soft-empty)일 수 있어 챕터별 조회로 확인
-    if (fetched.isSuccess === false || fetched.deltas.length === 0) return null;
-    const entry = buildCacheEntry(
-      fetched.bookId ?? key,
-      mergeDeltasByEventId(current?.deltas, fetched.deltas),
-      { toEventId: toId, coveredThroughChapter: uptoChapter, response: fetched.response }
-    );
-    bookDeltasCache.set(key, entry);
-    return entry;
-  } catch (error) {
-    if (error?.name === 'AbortError') throw error;
-    // 범위 조회 실패(400 등) → 챕터별 조회로 폴백
-    return null;
-  }
-};
-
-const fetchAndStoreByChapter = async (key, uptoChapter) => {
-  const generation = bookDeltasGeneration.get(key) ?? 0;
-  let current = bookDeltasCache.get(key);
-  if (current && cacheCoversChapter(current, uptoChapter, key)) return current;
-
-  const covered = toPositiveInt(current?.coveredThroughChapter) ?? 0;
-  const chapters = [];
-  for (let ch = Math.max(1, covered + 1); ch <= uptoChapter; ch += 1) {
-    if (!(current && cacheCoversChapter(current, ch, key))) chapters.push(ch);
-  }
-
-  if (chapters.length > 1) {
-    const ranged = await fetchChapterRangeOnce(key, chapters, uptoChapter, current, generation);
-    if (ranged) return ranged;
-  }
-
-  // 챕터 요청은 병렬로 보내고, 병합은 챕터 순서대로 (순차 요청 시 N챕터 = N 왕복 대기)
-  const results = await Promise.allSettled(
-    chapters.map((ch) => fetchRelationshipDeltasList(key, { chapterIndex: ch }))
-  );
-  // 일부만 받은 deltas를 성공으로 넘기면 discover가 관계 빠진 챕터 캐시를 저장함
-  throwIfCleared(key, generation);
-
-  chapters.forEach((ch, i) => {
-    if (results[i].status === 'rejected') throw results[i].reason;
-    const fetched = results[i].value;
-    // hard/soft fail을 빈 성공·커버리지로 캐시하지 않음 (재시도 가능, noRelation과 구분)
-    if (fetched.isSuccess === false) throw deltasFetchError(fetched);
-
-    const chapterLastId = resolveManifestEventId(getLastManifestEventInChapter(key, ch));
-    current = buildCacheEntry(
-      fetched.bookId ?? key,
-      mergeDeltasByEventId(current?.deltas, fetched.deltas),
-      {
-        toEventId: chapterLastId || current?.toEventId || null,
-        coveredThroughChapter: ch,
-        response: fetched.response,
-      }
-    );
-    bookDeltasCache.set(key, current);
-  });
-
-  return current ?? buildCacheEntry(key, []);
-};
-
-/**
- * 책 deltas 확보 — chapterIndex(1..N) 챕터 단위 조회. 메모리 캐시 기록.
- * @param {string|number} bookId
- * @param {{ chapterIndex?: number|null }} [options]
- * @returns {Promise<{ bookId: *, deltas: Array, toEventId: string|null, coveredThroughChapter: number|null, response: *, isSuccess: boolean }>}
- */
-export async function ensureBookRelationshipDeltas(bookId, { chapterIndex = null } = {}) {
-  requireBookId(bookId);
-
-  const key = toPositiveNumberOrNull(bookId) ?? bookId;
-  const ch = toPositiveInt(chapterIndex);
-  if (ch == null) {
-    const error = new Error('chapterIndex가 필요합니다.');
-    error.status = 400;
-    throw error;
-  }
-
-  for (;;) {
-    const existing = bookDeltasCache.get(key);
-    if (existing && cacheCoversChapter(existing, ch, key)) {
-      return existing;
-    }
-
-    const waitInflight = bookDeltasInflight.get(key);
-    if (waitInflight) {
-      try {
-        await waitInflight;
-      } catch (error) {
-        // clear로 취소된 책은 다시 받지 않음. 그 외 실패는 아래에서 재시도
-        if (error?.name === 'AbortError') throw error;
-      }
-      continue;
-    }
-
-    return awaitTracked(bookDeltasInflight, key, fetchAndStoreByChapter(key, ch));
-  }
-}
-
-/* ─── 매크로 그래프 응답 (책 전체 누적 → API 응답 shape) ─── */
 
 const handleApiError = (error, context) => {
   const statusMessages = {

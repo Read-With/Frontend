@@ -1,7 +1,8 @@
 /** 툴팁: 외부 클릭 감지·드래그 위치·활성 툴팁 상태 */
 
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { constrainToGraphCanvas, constrainToWindow } from '../../utils/graph/graphCy';
+import { constrainToGraphCanvas, constrainToWindow } from '../../utils/graph/graphViewport';
+import { useLatestRef } from '../common/hooksShared';
 
 function useCanvasAvoidPoint(center) {
   const x = center?.x;
@@ -22,78 +23,37 @@ function constrainTooltipPosition(bounds, x, y, width, height, boundsRect = null
 const TOOLTIP_CLEAR_DELAY_MS = 150;
 const TOOLTIP_ERROR_CHECK_DELAY_MS = 220;
 
-let globalDragState = {
-  isDragging: false,
-  dragEndTime: 0,
-  ignoreNextClick: false,
-};
+const GRAPH_CANVAS_SELECTOR = '#cy, .graph-canvas-area, [data-cy]';
 
+/** ref 바깥 클릭 시 callback. ignoreDrag면 그래프 캔버스에서 시작된 클릭(드래그 포함)은 무시 */
 export function useClickOutside(callback, enabled = true, ignoreDrag = false) {
   const ref = useRef(null);
-  const lastClickTime = useRef(0);
+  const callbackRef = useLatestRef(callback);
 
   useEffect(() => {
-    if (!enabled) return;
-
-    const updateDragState = (isDragging) => {
-      globalDragState.isDragging = isDragging;
-      if (!isDragging) {
-        globalDragState.dragEndTime = Date.now();
-        globalDragState.ignoreNextClick = true;
-        setTimeout(() => {
-          globalDragState.ignoreNextClick = false;
-        }, 500);
-      }
-    };
+    if (!enabled) return undefined;
+    let downOnGraph = false;
 
     const handleMouseDown = (event) => {
-      const graphContainer =
-        event.target.closest('#cy') ||
-        event.target.closest('.graph-canvas-area') ||
-        event.target.closest('[data-cy]');
-      if (graphContainer) {
-        globalDragState.isDragging = true;
-      }
+      downOnGraph = Boolean(event.target.closest?.(GRAPH_CANVAS_SELECTOR));
     };
 
-    const handleMouseUp = () => {
-      if (globalDragState.isDragging) {
-        updateDragState(false);
-      }
-    };
-
-    const handleGraphDragEnd = () => {
-      updateDragState(false);
-    };
-
-    const handleClickOutside = (event) => {
-      if (ref.current && !ref.current.contains(event.target)) {
-        const now = Date.now();
-
-        if (ignoreDrag) {
-          if (globalDragState.ignoreNextClick) return;
-          if (now - globalDragState.dragEndTime < 500) return;
-        }
-
-        if (now - lastClickTime.current < 50) return;
-
-        lastClickTime.current = now;
-        callback(event);
-      }
+    const handleClick = (event) => {
+      // 플래그는 이 mousedown에 이어진 클릭 한 번에만 적용 (키보드·프로그램 클릭은 mousedown 없음)
+      const startedOnGraph = downOnGraph;
+      downOnGraph = false;
+      if (!ref.current || ref.current.contains(event.target)) return;
+      if (ignoreDrag && startedOnGraph) return;
+      callbackRef.current(event);
     };
 
     document.addEventListener('mousedown', handleMouseDown, true);
-    document.addEventListener('mouseup', handleMouseUp, true);
-    document.addEventListener('graphDragEnd', handleGraphDragEnd);
-    document.addEventListener('click', handleClickOutside, true);
-
+    document.addEventListener('click', handleClick, true);
     return () => {
       document.removeEventListener('mousedown', handleMouseDown, true);
-      document.removeEventListener('mouseup', handleMouseUp, true);
-      document.removeEventListener('graphDragEnd', handleGraphDragEnd);
-      document.removeEventListener('click', handleClickOutside, true);
+      document.removeEventListener('click', handleClick, true);
     };
-  }, [callback, enabled, ignoreDrag]);
+  }, [enabled, ignoreDrag, callbackRef]);
 
   return ref;
 }
@@ -105,18 +65,9 @@ export function useTooltipState({
   const [activeTooltip, setActiveTooltip] = useState(null);
   const tooltipTimeoutRef = useRef(null);
   const lastTooltipOpenAtRef = useRef(0);
-  const activeTooltipRef = useRef(null);
-  const onErrorRef = useRef(onError);
-  const graphClearRefRef = useRef(graphClearRef);
-
-  useEffect(() => {
-    onErrorRef.current = onError;
-    graphClearRefRef.current = graphClearRef;
-  }, [onError, graphClearRef]);
-
-  useEffect(() => {
-    activeTooltipRef.current = activeTooltip;
-  }, [activeTooltip]);
+  const activeTooltipRef = useLatestRef(activeTooltip);
+  const onErrorRef = useLatestRef(onError);
+  const graphClearRefRef = useLatestRef(graphClearRef);
 
   const handleClearTooltip = useCallback(() => {
     if (tooltipTimeoutRef.current) {
@@ -133,7 +84,7 @@ export function useTooltipState({
     if (graphClearRefRef.current?.current) {
       graphClearRefRef.current.current();
     }
-  }, []);
+  }, [graphClearRefRef]);
 
   const handleSetActiveTooltip = useCallback((tooltipData) => {
     if (tooltipTimeoutRef.current) {
@@ -156,7 +107,7 @@ export function useTooltipState({
       }, TOOLTIP_ERROR_CHECK_DELAY_MS);
       tooltipTimeoutRef.current = timeoutId;
     }
-  }, []);
+  }, [onErrorRef, activeTooltipRef]);
 
   useEffect(() => {
     return () => {
@@ -259,13 +210,6 @@ function useTooltipPosition(initialX, initialY, options = {}) {
     };
 
     const handleMouseUp = () => {
-      if (isDraggingRef.current) {
-        document.dispatchEvent(
-          new CustomEvent('dragend', {
-            detail: { type: 'dragend', timestamp: Date.now() },
-          })
-        );
-      }
       isDraggingRef.current = false;
       setIsDragging(false);
     };

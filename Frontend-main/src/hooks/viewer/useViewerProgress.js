@@ -39,11 +39,20 @@ const {
   PERCENT_FALLBACK_ATTEMPTS: VIEWER_RESUME_PERCENT_FALLBACK_ATTEMPTS,
 } = VIEWER_RESUME_TIMING;
 
-/** ref와 state를 동시에 갱신 */
-function applyRefState(ref, setState, value) {
-  ref.current = value;
-  setState(value);
-  return value;
+/**
+ * ref(같은 실행 흐름에서 즉시 읽기)와 state(렌더)를 함께 갱신.
+ * patch에서 바뀐 값이 없으면 렌더 생략 (useState의 Object.is bail-out과 동일)
+ */
+function useRefState(initial) {
+  const [state, setState] = useState(initial);
+  const stateRef = useRef(state);
+  const patch = useCallback((partial) => {
+    const prev = stateRef.current;
+    if (Object.keys(partial).every((key) => Object.is(prev[key], partial[key]))) return;
+    stateRef.current = { ...prev, ...partial };
+    setState(stateRef.current);
+  }, []);
+  return [state, stateRef, patch];
 }
 
 /** resume 타임아웃 시 저장된 진행률(%)로 이동 시도. stale이면 즉시 중단 */
@@ -90,27 +99,26 @@ export function useViewerProgress({
   awaitingBookId = false,
 }) {
   const [progressTopBar, setProgressTopBar] = useState(undefined);
-  const [readingLocatorKey, setReadingLocatorKey] = useState('');
-  const [liveChapterProgress, setLiveChapterProgress] = useState(null);
   const [serverResumeAnchor, setServerResumeAnchor] = useState(null);
   const bookKeyRef = useLatestRef(bookKey);
   const [progress, setProgress] = useBookScopedState(bookKey, bookKeyRef, null);
-  // ready는 그 시점의 bookKey로 기록 → 책이 바뀌면 같은 렌더에서 false
-  const [readyBookKey, setReadyBookKey] = useState(NOT_READY);
-  const readyBookKeyRef = useRef(NOT_READY);
+  // 콜백·resume 루프가 같은 실행 흐름에서 즉시 읽어야 하는 값 (viewStateRef로 읽음)
+  // readyBookKey: ready는 그 시점의 bookKey로 기록 → 책이 바뀌면 같은 렌더에서 false
+  const [viewState, viewStateRef, patchViewState] = useRefState({
+    resumePending: false,
+    readyBookKey: NOT_READY,
+    readingLocatorKey: '',
+    liveChapterProgress: null,
+  });
+  const { resumePending: isResumePending, readyBookKey, readingLocatorKey, liveChapterProgress } = viewState;
   const isViewerPageReady = readyBookKey === bookKey;
-  const isViewerPageReadyRef = useMemo(() => ({
-    get current() {
-      return readyBookKeyRef.current === bookKeyRef.current;
-    },
-  }), [bookKeyRef]);
+  const isViewerPageReadyNow = useCallback(
+    () => viewStateRef.current.readyBookKey === bookKeyRef.current,
+    [viewStateRef, bookKeyRef],
+  );
 
-  const readingLocatorKeyRef = useRef('');
-  const liveChapterProgressRef = useRef(null);
   const serverResumeAppliedKeyRef = useRef(null);
   const reloadKeyBumpedForBookRef = useRef(null);
-  const resumePendingRef = useRef(false);
-  const [isResumePending, setIsResumePendingState] = useState(false);
   const manifestLocatorSyncedRef = useRef(false);
   const preferredResumeRef = useRef(null);
   const progressRef = useLatestRef(progress);
@@ -119,33 +127,13 @@ export function useViewerProgress({
   const { nextRequestId: nextProgressFetchId, isStale: isProgressFetchStale, invalidate: invalidateProgressFetch } =
     useAsyncRequestGuard();
 
-  const setResumePending = useCallback((value) => {
-    applyRefState(resumePendingRef, setIsResumePendingState, Boolean(value));
-  }, []);
-
-  const setViewerPageNotReady = useCallback(() => {
-    applyRefState(readyBookKeyRef, setReadyBookKey, NOT_READY);
-  }, []);
-
-  const applyReadingLocatorKey = useCallback((nextKey) => {
-    applyRefState(
-      readingLocatorKeyRef,
-      setReadingLocatorKey,
-      stringOrEmpty(nextKey),
-    );
-  }, []);
-
-  const applyLiveChapterProgress = useCallback((nextChapterProgress) => {
-    applyRefState(liveChapterProgressRef, setLiveChapterProgress, nextChapterProgress ?? null);
-  }, []);
-
   const markReady = useCallback(() => {
-    setResumePending(false);
-    if (!isViewerPageReadyRef.current) {
-      applyRefState(readyBookKeyRef, setReadyBookKey, bookKeyRef.current);
-    }
+    patchViewState({
+      resumePending: false,
+      ...(isViewerPageReadyNow() ? {} : { readyBookKey: bookKeyRef.current }),
+    });
     invalidateResumeRun();
-  }, [invalidateResumeRun, setResumePending, isViewerPageReadyRef, bookKeyRef]);
+  }, [invalidateResumeRun, patchViewState, isViewerPageReadyNow, bookKeyRef]);
 
   const clearPreferredResume = useCallback(() => {
     if (!preferredResumeRef.current) return;
@@ -173,19 +161,19 @@ export function useViewerProgress({
   }, [clearPreferredResume, isResumeRunStale, markReady, progressRef, viewerRef]);
 
   const markViewerPageReady = useCallback(() => {
-    if (isViewerPageReadyRef.current) return;
-    if (isViewerResumeBlocking(resumePendingRef.current, preferredResumeRef.current)) return;
+    if (isViewerPageReadyNow()) return;
+    if (isViewerResumeBlocking(viewStateRef.current.resumePending, preferredResumeRef.current)) return;
     markReady();
-  }, [markReady, isViewerPageReadyRef]);
+  }, [markReady, isViewerPageReadyNow, viewStateRef]);
 
   useEffect(() => {
     preferredResumeRef.current = preferredResumeAnchor;
     if (!preferredResumeAnchor) return;
-    setResumePending(true);
+    patchViewState({ resumePending: true });
     setServerResumeAnchor(preferredResumeAnchor);
     serverResumeAppliedKeyRef.current = null;
-    setViewerPageNotReady();
-  }, [preferredResumeAnchor, setViewerPageNotReady, setResumePending]);
+    patchViewState({ readyBookKey: NOT_READY });
+  }, [preferredResumeAnchor, patchViewState]);
 
   const progressMetricsReady = useMemo(
     () => Boolean(bookKey && manifestLoaded && canResolveProgressMetrics(bookKey)),
@@ -199,12 +187,12 @@ export function useViewerProgress({
 
   const applyLiveMetrics = useCallback((metrics) => {
     if (metrics?.chapterProgress != null) {
-      applyLiveChapterProgress(metrics.chapterProgress);
+      patchViewState({ liveChapterProgress: metrics.chapterProgress });
     }
     if (metrics?.readingProgressPercent != null) {
       setProgress(metrics.readingProgressPercent);
     }
-  }, [setProgress, applyLiveChapterProgress]);
+  }, [setProgress, patchViewState]);
 
   const applyProgressSnapshot = useCallback((snapshot, { force = false, updateResumeAnchor = false } = {}) => {
     if (!snapshot) return;
@@ -212,8 +200,8 @@ export function useViewerProgress({
       !force &&
       !shouldApplyCacheSnapshot(
         snapshot,
-        readingLocatorKeyRef.current,
-        isViewerPageReadyRef.current,
+        viewStateRef.current.readingLocatorKey,
+        isViewerPageReadyNow(),
       )
     ) {
       return;
@@ -227,7 +215,7 @@ export function useViewerProgress({
       if (nextAnchor) {
         const nextKey = viewerResumeAnchorKey(nextAnchor);
         if (serverResumeAppliedKeyRef.current !== nextKey) {
-          setResumePending(true);
+          patchViewState({ resumePending: true });
           serverResumeAppliedKeyRef.current = null;
         }
       }
@@ -237,13 +225,13 @@ export function useViewerProgress({
       setProgress(snapshot.readingProgressPercent);
     }
     if (snapshot.readingLocatorKey) {
-      applyReadingLocatorKey(snapshot.readingLocatorKey);
+      patchViewState({ readingLocatorKey: stringOrEmpty(snapshot.readingLocatorKey) });
     }
     const cp = snapshot.topBar?.chapterProgress;
     if (cp != null) {
-      applyLiveChapterProgress(cp);
+      patchViewState({ liveChapterProgress: cp });
     }
-  }, [setProgress, applyReadingLocatorKey, applyLiveChapterProgress, setResumePending, isViewerPageReadyRef]);
+  }, [setProgress, patchViewState, viewStateRef, isViewerPageReadyNow]);
 
   const syncProgressFromCache = useCallback((idStr, options = {}) => {
     const row = getProgressFromCache(idStr);
@@ -253,24 +241,19 @@ export function useViewerProgress({
 
   useEffect(() => {
     // 같은 ViewerPage 인스턴스에서 A→B→A 복귀 시 이전 ready/progress 재사용 방지
-    setViewerPageNotReady();
     setProgress(null);
     serverResumeAppliedKeyRef.current = null;
-    applyReadingLocatorKey('');
-    applyLiveChapterProgress(null);
     manifestLocatorSyncedRef.current = false;
     invalidateResumeRun();
-    setResumePending(Boolean(normalizedBookId) || Boolean(bookKey && awaitingBookId));
-
-    if (!normalizedBookId) {
-      setServerResumeAnchor(preferredResumeRef.current);
-      if (!(bookKey && awaitingBookId)) {
-        setResumePending(Boolean(preferredResumeRef.current));
-      }
-      return undefined;
-    }
-
+    patchViewState({
+      readyBookKey: NOT_READY,
+      readingLocatorKey: '',
+      liveChapterProgress: null,
+      resumePending: Boolean(normalizedBookId || (bookKey && awaitingBookId) || preferredResumeRef.current),
+    });
     setServerResumeAnchor(preferredResumeRef.current);
+
+    if (!normalizedBookId) return undefined;
 
     if (reloadKeyBumpedForBookRef.current !== bookKey) {
       reloadKeyBumpedForBookRef.current = bookKey;
@@ -286,7 +269,7 @@ export function useViewerProgress({
     const releasePendingIfNoAnchor = () => {
       const anchor =
         preferredResumeRef.current ?? resolveCachedResumeAnchor(normalizedBookId);
-      if (!anchor) setResumePending(false);
+      if (!anchor) patchViewState({ resumePending: false });
     };
 
     const recoverFromProgressFetchFailure = (message) => {
@@ -309,7 +292,7 @@ export function useViewerProgress({
         const snapshot = snapshotFromProgressRow(res.result, normalizedBookId);
         applyProgressSnapshot(snapshot, FORCE_RESUME_SNAPSHOT);
         if (!(preferredResumeRef.current ?? snapshot.anchor)) {
-          setResumePending(false);
+          patchViewState({ resumePending: false });
         }
       } catch (error) {
         if (isStale(cancelled)) return;
@@ -330,12 +313,9 @@ export function useViewerProgress({
     invalidateProgressFetch,
     nextProgressFetchId,
     isProgressFetchStale,
-    applyReadingLocatorKey,
-    applyLiveChapterProgress,
     syncProgressFromCache,
     applyProgressSnapshot,
-    setResumePending,
-    setViewerPageNotReady,
+    patchViewState,
     setProgress,
   ]);
 
@@ -414,7 +394,7 @@ export function useViewerProgress({
 
     const pct = clampPercent(progress);
     const nextCp =
-      liveChapterProgressRef.current ??
+      viewStateRef.current.liveChapterProgress ??
       resolveMetricsFromReadingLocatorKey(bookKey, readingLocatorKey, {
         metricsReady: progressMetricsReady,
       })?.chapterProgress ??
@@ -426,7 +406,7 @@ export function useViewerProgress({
         chapterProgress: nextCp,
       }),
     );
-  }, [bookKey, progress, progressMetricsReady, readingLocatorKey, liveChapterProgress]);
+  }, [bookKey, progress, progressMetricsReady, readingLocatorKey, liveChapterProgress, viewStateRef]);
 
   useEffect(() => {
     if (!bookKey || !progressMetricsReady || !readingLocatorKey) return;
@@ -442,15 +422,15 @@ export function useViewerProgress({
 
   const applyReadingLocator = useCallback(
     (lineLocator, lineEnd) => {
-      if (isViewerResumeBlocking(resumePendingRef.current, preferredResumeRef.current)) return;
+      if (isViewerResumeBlocking(viewStateRef.current.resumePending, preferredResumeRef.current)) return;
       if (lineLocator) {
-        applyReadingLocatorKey(toReadingLocatorKey(lineLocator, lineEnd));
+        patchViewState({ readingLocatorKey: stringOrEmpty(toReadingLocatorKey(lineLocator, lineEnd)) });
       }
       applyLiveMetrics(
         progressMetricsReady ? resolveProgressMetricsFromLocator(bookKey, lineLocator) : null,
       );
     },
-    [bookKey, progressMetricsReady, applyLiveMetrics, applyReadingLocatorKey],
+    [bookKey, progressMetricsReady, applyLiveMetrics, patchViewState, viewStateRef],
   );
 
   return {

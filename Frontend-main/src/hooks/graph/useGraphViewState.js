@@ -6,12 +6,12 @@ import {
   extractFitNodeIds,
   normalizeGraphSearchTerm,
   resolveGraphSearchFilter,
-} from '../../utils/graph/graphCy.js';
+} from '../../utils/graph/graphHighlight.js';
 import { filterMainCharacters } from '../../utils/graph/graphModel';
 import { sortElementsByDataId } from '../../utils/graph/graphCore';
-import { useLatestRef, useIsNarrowViewport } from '../common/hooksShared';
+import { useLatestRef, NARROW_VIEWPORT_MQ } from '../common/hooksShared';
 
-export { useIsNarrowViewport };
+const SIDEBAR_OPEN_STORAGE_KEY = 'graph-chapter-sidebar-open';
 
 /** edgeLabel / filterStage — graph 페이지·viewer 공유 */
 export function useGraphDisplayToggles() {
@@ -34,9 +34,9 @@ export function useGraphDisplayToggles() {
 export function useGraphState() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
     if (typeof window === 'undefined') return true;
-    const narrow = window.matchMedia('(max-width: 767px)').matches;
+    const narrow = window.matchMedia(NARROW_VIEWPORT_MQ).matches;
     try {
-      const raw = localStorage.getItem('graph-chapter-sidebar-open');
+      const raw = localStorage.getItem(SIDEBAR_OPEN_STORAGE_KEY);
       if (raw === '0') return false;
       if (raw === '1') return true;
     } catch {
@@ -55,7 +55,7 @@ export function useGraphState() {
 
   const persistSidebarOpen = useCallback((next) => {
     try {
-      localStorage.setItem('graph-chapter-sidebar-open', next ? '1' : '0');
+      localStorage.setItem(SIDEBAR_OPEN_STORAGE_KEY, next ? '1' : '0');
     } catch {
       /* ignore */
     }
@@ -146,6 +146,11 @@ export function useGraphSearch(elements, currentChapterData = null) {
     [isSearchActive, filteredElements],
   );
 
+  const closeSuggestions = useCallback(() => {
+    setShowSuggestions(false);
+    setSelectedIndex(-1);
+  }, []);
+
   const runSearchFilter = useCallback((sourceElements, term) => {
     const { applied, filtered } = resolveGraphSearchFilter(
       sourceElements,
@@ -173,15 +178,14 @@ export function useGraphSearch(elements, currentChapterData = null) {
     skipFilterEffectRef.current = true;
     setSearchTerm(term);
     setIsSearchActive(!!trimmed);
-    setShowSuggestions(false);
-    setSelectedIndex(-1);
+    closeSuggestions();
 
     const applied = runSearchFilter(elementsRef.current, trimmed);
     if (!applied) {
       skipFilterEffectRef.current = false;
       setIsSearchActive(false);
     }
-  }, [runSearchFilter, elementsRef]);
+  }, [runSearchFilter, elementsRef, closeSuggestions]);
 
   const clearSearch = useCallback(() => {
     suppressSuggestionsRef.current = false;
@@ -189,16 +193,14 @@ export function useGraphSearch(elements, currentChapterData = null) {
     setFilteredElements([]);
     setIsSearchActive(false);
     setSuggestions([]);
-    setShowSuggestions(false);
-    setSelectedIndex(-1);
-  }, []);
+    closeSuggestions();
+  }, [closeSuggestions]);
 
   useEffect(() => {
     const { trimmed, hasMinLength } = normalizeGraphSearchTerm(searchTerm);
     if (!hasMinLength) {
       setSuggestions([]);
-      setShowSuggestions(false);
-      setSelectedIndex(-1);
+      closeSuggestions();
       return;
     }
 
@@ -212,14 +214,11 @@ export function useGraphSearch(elements, currentChapterData = null) {
     }
 
     setShowSuggestions(true);
-  }, [searchTerm, elements, chapterDataRef]);
+  }, [searchTerm, elements, chapterDataRef, closeSuggestions]);
 
   const handleKeyDown = useCallback((e) => {
     if (e.key === 'Escape') {
-      if (showSuggestions) {
-        setShowSuggestions(false);
-        setSelectedIndex(-1);
-      }
+      if (showSuggestions) closeSuggestions();
       return;
     }
 
@@ -234,12 +233,7 @@ export function useGraphSearch(elements, currentChapterData = null) {
       if (prev < 0) return dir > 0 ? 0 : len - 1;
       return (prev + dir + len) % len;
     });
-  }, [showSuggestions, suggestions]);
-
-  const closeSuggestions = useCallback(() => {
-    setShowSuggestions(false);
-    setSelectedIndex(-1);
-  }, []);
+  }, [showSuggestions, suggestions, closeSuggestions]);
 
   const onGenerateSuggestions = useCallback((term) => {
     suppressSuggestionsRef.current = false;
@@ -248,10 +242,9 @@ export function useGraphSearch(elements, currentChapterData = null) {
     if (hasMinLength) {
       setShowSuggestions(true);
     } else {
-      setShowSuggestions(false);
-      setSelectedIndex(-1);
+      closeSuggestions();
     }
-  }, []);
+  }, [closeSuggestions]);
 
   const searchActions = useMemo(
     () => ({

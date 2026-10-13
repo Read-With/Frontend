@@ -5,10 +5,12 @@ import {
   buildElementsFromGraphPayload,
   getGraphEventState,
   getCachedChapterMaxEventIdx,
+} from '../graph/graphModel';
+import {
   resolveGraphElementsProfileImages,
   graphElementsHaveUnresolvedProfileImages,
   GRAPH_IMAGE_DEFERRED_RETRY_MS,
-} from '../graph/graphModel';
+} from '../graph/graphProfileImages';
 import {
   enrichGraphCharacters,
   applyDisplayNamesToElements,

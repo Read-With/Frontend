@@ -7,9 +7,8 @@ import {
   hasUsableChapterCacheThrough,
   ensureChapterEventsDiscovered,
   prefetchChapterEvents,
-  clearBookRelationshipDeltas,
 } from '../../utils/graph/graphModel';
-import { errorUtils, toPositiveNumberOrNull } from '../../utils/common/valueUtils';
+import { errorUtils, toPositiveNumberOrNull, sleep } from '../../utils/common/valueUtils';
 import { cacheKeyUtils, deriveGraphPhase, eventUtils } from '../../utils/viewer/viewerCore';
 import {
   saveViewerMode,
@@ -33,6 +32,7 @@ import {
 } from '../../utils/viewer/viewerGraph';
 import { useGraphSearch, useGraphDisplayToggles } from '../graph/useGraphViewState';
 import { useAsyncRequestGuard } from '../common/hooksShared';
+import { clearBookRelationshipDeltas } from '../../utils/graph/graphDeltas';
 
 const { HARD_RELOAD_SETTLE_MS } = VIEWER_GRAPH_PIPELINE;
 
@@ -118,7 +118,6 @@ export function useViewerGraphState({
 
   // 그래프를 끄면 전체화면 해제 (렌더 중 조정 → 중간 커밋 없음)
   if (!showGraph && graphFullScreen) setGraphFullScreen(false);
-
 
   // 챕터·이벤트 정합성은 렌더 중 조정 — 새 챕터 + 이전 이벤트 조합이 커밋되지 않게 함
   if (currentEvent) {
@@ -644,7 +643,7 @@ function useGraphFineLoad({
         continue;
       }
 
-      await new Promise((resolve) => setTimeout(resolve, DISCOVERY_POLL_MS));
+      await sleep(DISCOVERY_POLL_MS);
     }
 
     return { ready: false, reason: 'timeout' };
@@ -709,7 +708,7 @@ function useGraphFineLoad({
     if (callKey === refs.activeCallKeyRef.current) return;
 
     if (ensureCacheOrPending(ctx.bookId, ctx.chapter, ctx.eventIdx, callKey)) {
-      finishFineLoading(true, false, null, true);
+      finishFineLoading(true, false);
       refs.activeCallKeyRef.current = callKey;
     }
   }, [
@@ -750,7 +749,7 @@ function useGraphFineLoad({
       refs.activeCallKeyRef.current = callKey;
 
       if (ensureCacheOrPending(bookId, chapter, eventIdx, callKey)) {
-        finishFineLoading(true, false, null, true);
+        finishFineLoading(true, false);
         return;
       }
 
