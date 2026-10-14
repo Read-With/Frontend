@@ -1,13 +1,8 @@
 /** 뷰어 그래프: UI 상태·검색·mode persist + 챕터 이벤트 discovery·캐시 로드 */
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
-import {
-  applyChapterEventsFromCache,
-  getCachedChapterMaxEventIdx,
-  hasUsableChapterCacheThrough,
-  ensureChapterEventsDiscovered,
-  prefetchChapterEvents,
-} from '../../utils/graph/graphModel';
+import { applyChapterEventsFromCache, getCachedChapterMaxEventIdx } from '../../utils/graph/graphChapterCache';
+import { hasUsableChapterCacheThrough, ensureChapterEventsDiscovered, prefetchChapterEvents } from '../../utils/graph/graphChapterDiscovery';
 import { errorUtils, toPositiveNumberOrNull, sleep } from '../../utils/common/valueUtils';
 import { cacheKeyUtils, deriveGraphPhase, eventUtils } from '../../utils/viewer/viewerCore';
 import {

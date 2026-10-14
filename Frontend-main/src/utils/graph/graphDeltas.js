@@ -3,11 +3,10 @@
 import {
   directedEdgeElementId,
   uniqueStrings,
-  pickCharacterDisplayName,
-  rememberCharacterDisplayName,
   resolveManifestEventId,
   appendRelationLabelHistory,
 } from './graphCore';
+import { pickCharacterDisplayName, rememberCharacterDisplayName } from './graphCharacterNames';
 import { eventUtils } from '../viewer/viewerCore';
 import {
   asArray,

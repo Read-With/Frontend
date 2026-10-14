@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef } from 'react';
 import { X } from 'lucide-react';
 import { attachLibraryModalChrome } from '../../utils/library/libraryUtils';
-import { useModalFocusTrap } from '../../hooks/common/hooksShared';
+import ModalFrame from '../common/ModalFrame';
 import './ConfirmDialog.css';
 
 /** 서재 카드 컨텍스트 메뉴, 책 상세 모달 등에서 공용으로 쓰는 삭제/확인 다이얼로그 */
@@ -16,7 +16,6 @@ const ConfirmDialog = ({
   manageChrome = true,
 }) => {
   const titleId = useId();
-  const dialogRef = useRef(null);
   const cancelBtnRef = useRef(null);
 
   useEffect(() => {
@@ -24,25 +23,17 @@ const ConfirmDialog = ({
     return attachLibraryModalChrome({ onClose });
   }, [isOpen, manageChrome, onClose]);
 
-  // Escape는 manageChrome일 때 attachLibraryModalChrome이, 아닐 때는 상위 모달(예: BookDetailModal)이 처리 — 여기선 포커스 관리만 담당
-  useModalFocusTrap(isOpen, dialogRef, undefined, { initialFocusRef: cancelBtnRef });
-
-  if (!isOpen) return null;
-
   return (
-    <div
-      className="delete-confirm-modal-overlay"
-      onClick={onClose}
+    // Escape는 manageChrome일 때 attachLibraryModalChrome이, 아닐 때는 상위 모달(예: BookDetailModal)이 처리 — onEscape 생략
+    <ModalFrame
+      open={isOpen}
+      onClose={onClose}
+      overlayClassName="delete-confirm-modal-overlay"
+      className="delete-confirm-modal"
       role="alertdialog"
-      aria-modal="true"
-      aria-labelledby={titleId}
+      labelledBy={titleId}
+      initialFocusRef={cancelBtnRef}
     >
-      <div
-        ref={dialogRef}
-        className="delete-confirm-modal"
-        tabIndex={-1}
-        onClick={(e) => e.stopPropagation()}
-      >
         <div className="delete-confirm-header">
           <h3 id={titleId}>{title}</h3>
           <button
@@ -74,8 +65,7 @@ const ConfirmDialog = ({
             {confirmLabel}
           </button>
         </div>
-      </div>
-    </div>
+    </ModalFrame>
   );
 };
 

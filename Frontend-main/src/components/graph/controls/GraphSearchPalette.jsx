@@ -1,89 +1,18 @@
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+/** 인물 검색 팔레트 (⌘/Ctrl+K) */
+
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Search, SearchX, SlidersHorizontal } from "lucide-react";
-import { useClickOutside } from "../../hooks/ui/tooltipHooks";
-import { findExactSuggestionMatch } from "../../utils/graph/graphHighlight.js";
-import {
-  GRAPH_CHARACTER_FILTER_STAGE_OPTIONS,
-  getCharacterFilterStageLabel,
-} from "../../utils/graph/graphCore.js";
-import "./RelationGraph.css";
-
-/** 분할·전체 그래프 상단 챕터/사건 메타 (공통) */
-export function GraphTopBarMeta({ chapterLabel, chapterTitle, eventLabel }) {
-  return (
-    <div className="graph-topbar-meta">
-      <span
-        className="graph-topbar-meta-chapter"
-        title={chapterTitle || chapterLabel}
-      >
-        {chapterLabel}
-      </span>
-      {eventLabel != null ? (
-        <span className="graph-topbar-meta-event">{eventLabel}</span>
-      ) : null}
-    </div>
-  );
-}
-
-function EdgeLabelToggle({ visible, onToggle }) {
-  const labelId = useId();
-  return (
-    <div className="edge-label-toggle">
-      <span id={labelId} className="edge-label-toggle__text">
-        간선 라벨
-      </span>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={visible}
-        aria-labelledby={labelId}
-        onClick={onToggle}
-        title={visible ? "간선 라벨 숨기기" : "간선 라벨 보이기"}
-        className="edge-label-switch"
-      >
-        <span className="edge-label-switch__thumb" aria-hidden />
-      </button>
-    </div>
-  );
-}
-
-/** 인물 필터: 주요 | 주변 | 전체 */
-function CharacterFilterSegmented({ value, onChange }) {
-  return (
-    <div role="radiogroup" aria-label="인물 필터" className="character-filter">
-      {GRAPH_CHARACTER_FILTER_STAGE_OPTIONS.map((opt) => {
-        const selected = value === opt.value;
-        return (
-          <button
-            key={opt.value}
-            type="button"
-            role="radio"
-            aria-checked={selected}
-            title={opt.title}
-            onClick={() => onChange(opt.value)}
-            className="character-filter-option"
-          >
-            {opt.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
+import { Search, SearchX } from "lucide-react";
+import { pickCharacterDisplayName } from "../../../utils/graph/graphCharacterNames.js";
+import { findExactSuggestionMatch } from "../../../utils/graph/graphHighlight.js";
+import "../styles/graph.css";
 
 function getSuggestionDisplayName(suggestion) {
-  return suggestion?.label || suggestion?.common_name || "Unknown";
+  return pickCharacterDisplayName(suggestion) || "Unknown";
 }
 
-const MOD_KEY_LABEL =
-  typeof navigator !== "undefined" &&
-  /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent)
-    ? "⌘"
-    : "Ctrl";
-
-function GraphSearchPalette({
+export default function GraphSearchPalette({
+  modKeyLabel,
   open,
   onClose,
   searchTerm = "",
@@ -232,7 +161,7 @@ function GraphSearchPalette({
               초기화
             </button>
           ) : null}
-          <kbd className="graph-search-palette-kbd">{MOD_KEY_LABEL}+K</kbd>
+          <kbd className="graph-search-palette-kbd">{modKeyLabel}+K</kbd>
         </form>
 
         {canShowResults && showSuggestions ? (
@@ -294,133 +223,5 @@ function GraphSearchPalette({
       </div>
     </div>,
     document.body
-  );
-}
-
-/**
- * 검색 팔레트 · 필터 · 간선 라벨
- */
-export function GraphFloatingControls({
-  searchState,
-  searchActions,
-  edgeLabelVisible,
-  onToggleEdgeLabel,
-  filterStage,
-  onFilterChange,
-}) {
-  const [paletteOpen, setPaletteOpen] = useState(false);
-  const [optionsOpen, setOptionsOpen] = useState(false);
-  const optionsRef = useClickOutside(() => setOptionsOpen(false), optionsOpen);
-
-  const {
-    searchTerm,
-    isSearchActive,
-    suggestions = [],
-    showSuggestions = false,
-    selectedIndex = -1,
-  } = searchState;
-
-  // useGraphSearch().searchActions 형태 그대로 받음
-  const {
-    onSearchSubmit,
-    clearSearch: onClearSearch,
-    onGenerateSuggestions,
-    handleKeyDown: onKeyDown,
-    closeSuggestions: onCloseSuggestions,
-    onSelectedIndexChange,
-  } = searchActions;
-
-  const openPalette = useCallback(() => {
-    setOptionsOpen(false);
-    setPaletteOpen(true);
-  }, []);
-
-  const closePalette = useCallback(() => {
-    setPaletteOpen(false);
-    onCloseSuggestions?.();
-  }, [onCloseSuggestions]);
-
-  useEffect(() => {
-    const onKey = (e) => {
-      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "k") return;
-      const tag = e.target?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || e.target?.isContentEditable) {
-        if (!paletteOpen) return;
-      }
-      e.preventDefault();
-      setPaletteOpen((v) => !v);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [paletteOpen]);
-
-  const filterLabel = getCharacterFilterStageLabel(filterStage) ?? "필터";
-
-  return (
-    <>
-      <div
-        className="graph-floating-dock"
-        aria-label="그래프 도구"
-        onClick={(e) => e.stopPropagation()}
-        onMouseDown={(e) => e.stopPropagation()}
-      >
-        <button
-          type="button"
-          className={`graph-floating-btn${isSearchActive ? " is-active" : ""}`}
-          aria-label={isSearchActive ? `인물 검색 (활성: ${searchTerm})` : "인물 검색"}
-          title={`인물 검색 (${MOD_KEY_LABEL}+K)`}
-          aria-haspopup="dialog"
-          aria-expanded={paletteOpen}
-          onClick={openPalette}
-        >
-          <Search size={18} aria-hidden />
-        </button>
-
-        <div className="graph-floating-options" ref={optionsRef}>
-          <button
-            type="button"
-            className={`graph-floating-btn${filterStage !== 0 || !edgeLabelVisible ? " is-active" : ""}`}
-            aria-label="그래프 표시 옵션"
-            title={`표시 옵션 · 필터 ${filterLabel}`}
-            aria-haspopup="menu"
-            aria-expanded={optionsOpen}
-            onClick={() => setOptionsOpen((v) => !v)}
-          >
-            <SlidersHorizontal size={18} aria-hidden />
-          </button>
-          {optionsOpen ? (
-            <div className="graph-floating-options-panel" role="menu" aria-label="표시 옵션">
-              <div className="graph-topbar-more-section" role="none">
-                <span className="graph-topbar-more-label">간선</span>
-                <EdgeLabelToggle
-                  visible={edgeLabelVisible}
-                  onToggle={() => onToggleEdgeLabel()}
-                />
-              </div>
-              <div className="graph-topbar-more-section" role="none">
-                <span className="graph-topbar-more-label">인물 필터</span>
-                <CharacterFilterSegmented value={filterStage} onChange={onFilterChange} />
-              </div>
-            </div>
-          ) : null}
-        </div>
-
-      </div>
-
-      <GraphSearchPalette
-        open={paletteOpen}
-        onClose={closePalette}
-        searchTerm={searchTerm}
-        onSearchSubmit={onSearchSubmit}
-        onClearSearch={onClearSearch}
-        onGenerateSuggestions={onGenerateSuggestions}
-        suggestions={suggestions}
-        showSuggestions={showSuggestions}
-        selectedIndex={selectedIndex}
-        onSelectedIndexChange={onSelectedIndexChange}
-        onKeyDown={onKeyDown}
-        isSearchActive={isSearchActive}
-      />
-    </>
   );
 }

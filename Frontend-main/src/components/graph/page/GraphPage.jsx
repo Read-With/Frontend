@@ -2,40 +2,37 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 
-import GraphCanvas from "./GraphCanvas";
-import { GraphPageContext } from "./GraphPageContext";
+import GraphPageLayout from "./GraphPageLayout";
+import { GraphPageContext, GraphPageSidebarContext } from "./GraphPageContext";
 import ChapterSidebar from "./ChapterSidebar";
-import "./RelationGraph.css";
+import "../styles/graph.css";
 
-import { createGraphStylesheet, getEdgeStyle } from "../../utils/styles/graphStyles";
-import {
-  GRAPH_LAYOUT_CONSTANTS,
-  resolveChapterSidebarWidth,
-} from '../../utils/graph/graphCore';
-import { userViewerPath } from '../../utils/common/urlUtils';
+import { createGraphStylesheet, getEdgeStyle } from "../../../utils/styles/graphStyles";
+import { GRAPH_LAYOUT_CONSTANTS, resolveChapterSidebarWidth } from '../../../utils/graph/graphCore';
+import { userViewerPath } from '../../../utils/common/urlUtils';
 import {
   useGraphSearch,
   useGraphState,
   useGraphElementPipeline,
-} from '../../hooks/graph/useGraphViewState';
-import { useApiGraphData } from '../../hooks/graph/useApiGraphData';
-import { useChapterPovSummaries } from '../../hooks/graph/useChapterPovSummaries';
+} from '../../../hooks/graph/useGraphViewState';
+import { useApiGraphData } from '../../../hooks/graph/useApiGraphData';
+import { useChapterPovSummaries } from '../../../hooks/graph/useChapterPovSummaries';
 import {
   useGraphChapterEventState,
   useManifestChapterEventClamp,
   useChapterTitleMeta,
   useGraphPageElements,
   useChapterSelect,
-} from '../../hooks/graph/useGraphPage';
-import { useIsNarrowViewport, useLatestRef } from '../../hooks/common/hooksShared';
-import { resolveServerBookId } from '../../utils/viewer/viewerCore';
-import { toPositiveNumberOrNull } from '../../utils/common/valueUtils';
+} from '../../../hooks/graph/useGraphPage';
+import { useIsNarrowViewport, useLatestRef } from '../../../hooks/common/hooksShared';
+import { resolveServerBookId } from '../../../utils/viewer/viewerCore';
+import { toPositiveNumberOrNull } from '../../../utils/common/valueUtils';
 import {
   shouldIgnoreGraphOutsideClick,
   useGraphTooltipSelection,
   useGraphViewportFocus,
-} from '../../hooks/graph/useGraphCy';
-import { getChapterData } from '../../utils/common/cache/manifestCache.js';
+} from '../../../hooks/graph/useGraphCy';
+import { getChapterData } from '../../../utils/common/cache/manifestCache.js';
 
 const GRAPH_PAGE_EDGE_STYLE = getEdgeStyle('graph');
 
@@ -266,7 +263,7 @@ function GraphPage() {
   const isCanvasLoading = isGraphLoading && elements.length === 0;
   const eventNum = Math.max(currentEvent, 1);
 
-  // GraphCanvas · GraphPageSidebar가 읽는 값 (중간 컴포넌트 props 전달 없음)
+  // 상단바·캔버스(GraphPageLayout)가 읽는 값
   const graphPageValue = useMemo(() => ({
     chapterRailWidth: sidebarLayoutWidth,
     cyRef,
@@ -284,12 +281,7 @@ function GraphPage() {
     hasShownGraphOnce,
     onCanvasClick: handleCanvasClick,
     pageChromeStart,
-    // 상세 사이드바
-    bookId: serverBookId,
     isSidebarClosing,
-    closeSidebar,
-    startClosing,
-    clearGraphSelection,
     // 검색·표시 옵션
     searchState,
     searchActions,
@@ -301,19 +293,6 @@ function GraphPage() {
     onShowNodeTooltip,
     onShowEdgeTooltip,
     onClearTooltip,
-    // NodeDetail에 그대로 펼쳐 넘김
-    nodeDetail: {
-      filename,
-      elements,
-      povSummaries,
-      povError,
-      povIsLoading,
-      povCached,
-      onRetryPov: retryPov,
-      apiBookGraphData,
-      onSelectRelatedNode: handleSelectRelatedNode,
-      pendingKeepAnalysisOpenRef,
-    },
   }), [
     sidebarLayoutWidth,
     activeTooltip,
@@ -326,11 +305,7 @@ function GraphPage() {
     hasShownGraphOnce,
     handleCanvasClick,
     pageChromeStart,
-    serverBookId,
     isSidebarClosing,
-    closeSidebar,
-    startClosing,
-    clearGraphSelection,
     searchState,
     searchActions,
     edgeLabelVisible,
@@ -340,15 +315,45 @@ function GraphPage() {
     onShowNodeTooltip,
     onShowEdgeTooltip,
     onClearTooltip,
+  ]);
+
+  // NodeDetail에 그대로 펼쳐 넘기는 값
+  const nodeDetail = useMemo(() => ({
     filename,
     elements,
     povSummaries,
     povError,
     povIsLoading,
     povCached,
-    retryPov,
+    onRetryPov: retryPov,
     apiBookGraphData,
-    handleSelectRelatedNode,
+    onSelectRelatedNode: handleSelectRelatedNode,
+    pendingKeepAnalysisOpenRef,
+  }), [filename, elements, povSummaries, povError, povIsLoading, povCached, retryPov, apiBookGraphData, handleSelectRelatedNode]);
+
+  // 상세 사이드바(GraphPageSidebar)가 읽는 값 — 검색어 입력 등에는 바뀌지 않음
+  const sidebarValue = useMemo(() => ({
+    activeTooltip,
+    currentChapter,
+    eventNum,
+    bookId: serverBookId,
+    chapterRailWidth: sidebarLayoutWidth,
+    isSidebarClosing,
+    closeSidebar,
+    startClosing,
+    clearGraphSelection,
+    nodeDetail,
+  }), [
+    activeTooltip,
+    currentChapter,
+    eventNum,
+    serverBookId,
+    sidebarLayoutWidth,
+    isSidebarClosing,
+    closeSidebar,
+    startClosing,
+    clearGraphSelection,
+    nodeDetail,
   ]);
 
   const chapterList = useMemo(
@@ -380,7 +385,9 @@ function GraphPage() {
       />
 
       <GraphPageContext.Provider value={graphPageValue}>
-        <GraphCanvas />
+        <GraphPageSidebarContext.Provider value={sidebarValue}>
+          <GraphPageLayout />
+        </GraphPageSidebarContext.Provider>
       </GraphPageContext.Provider>
     </div>
   );

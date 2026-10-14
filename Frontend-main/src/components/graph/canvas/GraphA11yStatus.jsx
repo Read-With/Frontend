@@ -1,7 +1,8 @@
 /** 그래프 캔버스 스크린리더 요약 (aria-live) */
 
 import { useId, useMemo } from 'react';
-import { getCharacterFilterStageLabel, isGraphEdgeElement } from '../../utils/graph/graphCore.js';
+import { getCharacterFilterStageLabel, isGraphEdgeElement } from '../../../utils/graph/graphCore.js';
+import { pickCharacterDisplayName } from '../../../utils/graph/graphCharacterNames.js';
 
 function countGraphElements(elements) {
   if (!Array.isArray(elements)) return { nodeCount: 0, edgeCount: 0 };
@@ -14,25 +15,15 @@ function describeGraphSelection(activeTooltip) {
 
   if (activeTooltip.type === 'node') {
     const name =
-      activeTooltip.common_name
-      || activeTooltip.name
-      || activeTooltip.label
-      || activeTooltip.data?.common_name
-      || activeTooltip.data?.name
-      || activeTooltip.data?.label
+      pickCharacterDisplayName(activeTooltip)
+      || pickCharacterDisplayName(activeTooltip.data)
       || '이름 없음';
     return `인물 ${name} 상세가 열렸습니다.`;
   }
 
   if (activeTooltip.type === 'edge') {
-    const src =
-      activeTooltip.sourceEndpoint?.label
-      || activeTooltip.sourceEndpoint?.common_name
-      || '인물';
-    const tgt =
-      activeTooltip.targetEndpoint?.label
-      || activeTooltip.targetEndpoint?.common_name
-      || '인물';
+    const src = pickCharacterDisplayName(activeTooltip.sourceEndpoint) || '인물';
+    const tgt = pickCharacterDisplayName(activeTooltip.targetEndpoint) || '인물';
     return `${src}와 ${tgt}의 관계 상세가 열렸습니다.`;
   }
 

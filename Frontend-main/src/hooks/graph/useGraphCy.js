@@ -12,9 +12,9 @@ import {
   captureCyViewport,
   centerSelectionOnElementId,
   fitGraphToNodes,
-  handleGraphCanvasHotkeys,
   restoreCyViewport,
 } from '../../utils/graph/graphViewport';
+import { handleGraphCanvasHotkeys } from '../../utils/graph/graphKeyboardNav';
 import {
   applySelectionHighlight,
   buildTapShowArgs,
@@ -22,10 +22,7 @@ import {
   clearHighlightClassesOn,
   resolveGraphTooltipAnchor,
 } from '../../utils/graph/graphHighlight';
-import {
-  GRAPH_LAYOUT_CONSTANTS,
-  GRAPH_ZOOM,
-} from '../../utils/graph/graphCore.js';
+import { GRAPH_LAYOUT_CONSTANTS, GRAPH_ZOOM } from '../../utils/graph/graphCore.js';
 import { errorUtils } from '../../utils/common/valueUtils';
 import { useLatestRef } from '../common/hooksShared';
 

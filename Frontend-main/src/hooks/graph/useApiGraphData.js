@@ -16,7 +16,7 @@ import { getMaxChapter } from '../../utils/common/cache/manifestCache';
 import { toPositiveNumberOrNull, toPositiveInt } from '../../utils/common/valueUtils';
 import { useManifestLoaded } from '../common/hooksShared';
 import { cacheKeyUtils } from '../../utils/viewer/viewerCore';
-import { enrichGraphPayload } from '../../utils/graph/graphCore';
+import { enrichGraphPayload } from '../../utils/graph/graphCharacterNames';
 
 async function fetchMacroGraph(bookId, chapter) {
   let failure = null;
@@ -141,7 +141,8 @@ export function useRelationData(mode, id1, id2, chapterNum, eventNum, bookId = n
   const enabled = hasTarget && normalizedEvent != null;
 
   const query = useQuery({
-    queryKey: ['relationTimeline', mode, numericBookId, id1, id2, numericChapter, normalizedEvent],
+    // cumulative(그래프 페이지)는 챕터까지 누적이라 이벤트와 무관 → 이벤트가 바뀌어도 같은 캐시 재사용
+    queryKey: ['relationTimeline', mode, numericBookId, id1, id2, numericChapter, mode === 'cumulative' ? null : normalizedEvent],
     queryFn: () =>
       fetchRelationTimeline(mode, numericBookId, id1, id2, numericChapter, normalizedEvent),
     enabled,

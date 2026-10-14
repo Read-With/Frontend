@@ -4,8 +4,11 @@ import cytoscape from 'cytoscape';
 import coseBilkent from 'cytoscape-cose-bilkent';
 import { errorUtils } from '../common/valueUtils';
 import { GRAPH_ZOOM, normalizeRelationArray, isGraphEdgeElement } from './graphCore';
-import { buildElementsStructureFingerprint, visualElementSignature, visualSignatureImagePart } from './graphModel';
+import { pickCharacterDisplayName } from './graphCharacterNames';
+import { buildElementsStructureFingerprint, visualElementSignature, visualSignatureImagePart } from './graphElements';
 import {
+  hasOverlappingNodes,
+  collectNeighborhoodNodeIds,
   OVERLAP_RESOLVE,
   OVERLAP_PROFILES,
   readNodeRadius,
@@ -13,7 +16,12 @@ import {
   calculateAnchorAwarePlacement,
 } from './graphLayout';
 import { syncReciprocalPairJunctionOffsets } from './graphHighlight';
-import { ensureElementsInBounds, isGraphContainerSizeReady } from './graphViewport';
+import {
+  ensureElementsInBounds,
+  isGraphContainerSizeReady,
+  isElementsFitInViewport,
+  fitGraphViewportInContainer,
+} from './graphViewport';
 
 let coseBilkentRegistered = false;
 
@@ -37,7 +45,7 @@ export function safeCyCall(cy, operation, context = 'cy') {
 }
 
 /** element 정의 배열의 data를 기존 cy 노드/엣지에 동기화 */
-export function syncCyElementData(cy, defs) {
+function syncCyElementData(cy, defs) {
   if (!cy || !defs?.length) return;
   for (const def of defs) {
     const rawId = def?.data?.id;
@@ -53,7 +61,7 @@ export function syncCyElementData(cy, defs) {
 }
 
 /** props 정의에서 id Set */
-export function elementDefIdSet(defs) {
+function elementDefIdSet(defs) {
   return new Set(
     (defs || [])
       .map((d) => (d?.data?.id != null ? String(d.data.id) : ''))
@@ -66,7 +74,7 @@ export function elementDefIdSet(defs) {
  * @param {Set<string>} prevNodeIds
  * @param {Set<string>} nextNodeIds
  */
-export function collectContinuingNodeLayoutSeed(cy, prevNodeIds, nextNodeIds) {
+function collectContinuingNodeLayoutSeed(cy, prevNodeIds, nextNodeIds) {
   const placedPositions = [];
   const placedWeights = [];
   if (!cy || !prevNodeIds?.size) return { placedPositions, placedWeights };
@@ -98,7 +106,7 @@ export function stableIdListKey(ids) {
   return [...ids].map(String).filter(Boolean).sort().join('\x1f');
 }
 
-export const PRESET_LAYOUT = Object.freeze({
+const PRESET_LAYOUT = Object.freeze({
   name: 'preset',
   fit: false,
   animate: false,
@@ -205,7 +213,7 @@ function tooltipEndpointInfo(cyNode) {
   const d = cyNode.data() || {};
   return {
     id: d.id ?? (typeof cyNode.id === 'function' ? cyNode.id() : null),
-    label: d.common_name || d.name || d.label || '',
+    label: pickCharacterDisplayName(d),
     image: d.image || '',
   };
 }
@@ -398,9 +406,12 @@ export function syncElementsIntoCy(cy, elements, { prevSig, prevStructureFp, con
     [...prevNodeIds].every((id) => nextNodeIds.has(id)) &&
     [...prevEdgeIds].every((id) => nextEdgeIds.has(id));
 
+  let removedNodeCount = 0;
   if (!pureAdditive) {
     cy.nodes().forEach((n) => {
-      if (!nextNodeIds.has(String(n.id()))) n.remove();
+      if (nextNodeIds.has(String(n.id()))) return;
+      n.remove();
+      removedNodeCount += 1;
     });
     cy.edges().forEach((e) => {
       if (!nextEdgeIds.has(String(e.id()))) e.remove();
@@ -466,8 +477,157 @@ export function syncElementsIntoCy(cy, elements, { prevSig, prevStructureFp, con
       dataChangedIds,
       incrementalLayoutScope: canIncrementalPlace && nodesToAdd.length > 0,
       needsLocalReorder,
+      // 노드 제거만 있어도 가중치 범위가 바뀔 수 있음 → 레이아웃에서 크기 재정규화
+      nodesRemoved: removedNodeCount > 0,
     },
     nextSig,
     structureFp: structureFp || "",
   };
+}
+
+// ── 레이아웃 마무리 (useGraphLayout에서 호출) ──
+
+/**
+ * 레이아웃 직후 마무리: (증분인데 뷰포트를 벗어나면 refit) → 경계 제약 → 겹침 해소 → (fitViewport면 전체 fit) → junction 동기화.
+ * movableIds가 있으면 그 노드만 경계·겹침 처리 대상으로 삼아 기존 배치를 보존한다.
+ * @returns {boolean} 전체 fit을 적용했으면 true
+ */
+export function finalizeGraphLayout(cy, container, {
+  fitViewport = false,
+  skipOverlap = false,
+  skipEnsureBounds = false,
+  movableIds = null,
+  canFit = () => true,
+} = {}) {
+  if (!cy) return false;
+
+  // 전체 재배치(초기·챕터 전환)가 아닌 증분 갱신(이벤트 확정 등)에서는 기존 배치를
+  // 흔들지 않는 게 원칙이지만, 늘어난 노드·간선(라벨 포함)이 현재 팬·줌 뷰포트를
+  // 벗어나면 좁은 화면 안으로 욱여넣어(cramping) 겹치는 대신 카메라를 재조정한다.
+  if (!fitViewport && isGraphContainerSizeReady(container)) {
+    const visible = cy.elements(':visible');
+    if (
+      visible.length > 0 &&
+      !isElementsFitInViewport(cy, visible, GRAPH_ZOOM.FIT_PADDING)
+    ) {
+      // fitGraphViewportInContainer는 fit 직후 동기적으로 ensureElementsInBounds를
+      // 돌리므로(애니메이션 중 팬·줌 값을 기준으로 하면 어긋남) duration 0(즉시)을 유지한다.
+      const refit = fitGraphViewportInContainer(cy, container, {
+        eles: visible,
+      });
+      if (refit) {
+        syncReciprocalPairJunctionOffsets(cy);
+        return false;
+      }
+    }
+  }
+
+  const runBounds = () => {
+    if (skipEnsureBounds || !isGraphContainerSizeReady(container)) return;
+    if (!movableIds) {
+      ensureElementsInBounds(cy, container);
+      return;
+    }
+    // 전체 fit이 없는 증분 추가: 새로 들어온 노드만 캔버스 안으로 제약하고
+    // 기존 노드는 사용자가 기억한 배치를 그대로 유지한다.
+    const idSet = movableIds instanceof Set ? movableIds : new Set([...movableIds].map(String));
+    if (idSet.size === 0) return;
+    const scopedNodes = cy.nodes().filter((n) => idSet.has(String(n.id())));
+    if (scopedNodes.length > 0) {
+      ensureElementsInBounds(cy, container, { nodes: scopedNodes });
+    }
+  };
+
+  runBounds();
+  if (!skipOverlap) {
+    const profile = fitViewport
+      ? OVERLAP_PROFILES.INITIAL
+      : OVERLAP_PROFILES.INCREMENTAL;
+    detectAndResolveOverlap(cy, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE, {
+      ...(movableIds ? { movableIds } : {}),
+      ...profile,
+    });
+    // 밀어내기 후 화면 밖 노드 재제약 → 경계에서 생긴 겹침 경량 재해결
+    runBounds();
+    if (!skipEnsureBounds && isGraphContainerSizeReady(container)) {
+      detectAndResolveOverlap(cy, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE, {
+        ...(movableIds ? { movableIds } : {}),
+        ...OVERLAP_PROFILES.RESIZE,
+      });
+    }
+    // 최초 로딩: bounds/resize 후에도 본체 겹침이 남으면 제거
+    if (
+      fitViewport &&
+      hasOverlappingNodes(cy, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE, {
+        ...OVERLAP_PROFILES.APPEAR,
+      })
+    ) {
+      detectAndResolveOverlap(cy, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE, {
+        ...OVERLAP_PROFILES.APPEAR,
+      });
+      runBounds();
+    }
+  }
+  // 컨테이너 미준비거나 canFit()이 false면 fit 생략 → 호출부가 pending 유지 후 resize에서 재시도
+  const fitted = fitViewport && canFit() && fitGraphViewportInContainer(cy, container);
+  syncReciprocalPairJunctionOffsets(cy);
+  return Boolean(fitted);
+}
+
+/**
+ * 증분 추가 후 겹침 해소: 신규끼리 본체 분리 → 기존과의 겹침을 신규만 → 1-hop → 2-hop 순으로 범위를 넓혀 해결.
+ * 전체 그래프·cose로는 확대하지 않아 사용자가 기억한 배치를 보존한다.
+ */
+export function resolveIncrementalOverlap(cy, seedIds, forceExpand = false) {
+  const appearOpts = { ...OVERLAP_PROFILES.APPEAR };
+  const incrementalOpts = { ...OVERLAP_PROFILES.INCREMENTAL };
+
+  const stillAppearsOverlapping = (movableIds) =>
+    hasOverlappingNodes(cy, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE, {
+      movableIds,
+      ...appearOpts,
+    });
+
+  const resolveAppear = (movableIds) => {
+    detectAndResolveOverlap(cy, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE, {
+      ...appearOpts,
+      movableIds,
+    });
+    return stillAppearsOverlapping(movableIds);
+  };
+
+  const resolveIncremental = (movableIds) => {
+    detectAndResolveOverlap(cy, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE, {
+      ...incrementalOpts,
+      movableIds,
+    });
+    return hasOverlappingNodes(cy, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE, {
+      movableIds,
+      ...incrementalOpts,
+    });
+  };
+
+  // 1) 신규 등장 노드끼리: tolerance 0으로 본체 겹침 제거
+  if (seedIds.length >= 2) {
+    let remain = resolveAppear(seedIds);
+    for (let i = 0; remain && i < 2; i += 1) {
+      remain = resolveAppear(seedIds);
+    }
+  }
+
+  // 2) 기존과의 겹침: 신규만 → 필요 시 1·2-hop
+  if (!forceExpand && seedIds.length > 0 && !resolveIncremental(seedIds)) return;
+
+  const hop1 = [...collectNeighborhoodNodeIds(cy, seedIds, 1)];
+  if (!resolveIncremental(hop1)) return;
+
+  const hop2 = [...collectNeighborhoodNodeIds(cy, seedIds, 2)];
+  resolveIncremental(hop2);
+
+  // 신규끼리 잔여가 있으면 마지막으로 한 번 더 분리 (이웃 이동 후 재겹침 방지)
+  if (seedIds.length >= 2 && stillAppearsOverlapping(seedIds)) {
+    resolveAppear(seedIds);
+  }
+  // 중간 갱신에서는 사용자가 기억한 전체 배치를 보존한다.
+  // 잔여 경미 겹침 때문에 전체 그래프 또는 cose로 확대하지 않는다.
 }

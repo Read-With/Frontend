@@ -1,5 +1,6 @@
 import js from '@eslint/js'
 import globals from 'globals'
+import react from 'eslint-plugin-react'
 import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
 
@@ -36,6 +37,7 @@ export default [
       },
     },
     plugins: {
+      react,
       'react-hooks': reactHooks,
       'react-refresh': reactRefresh,
     },
@@ -43,10 +45,13 @@ export default [
       ...js.configs.recommended.rules,
       ...reactHooks.configs.recommended.rules,
       'no-empty': ['error', { allowEmptyCatch: true }],
+      // JSX에 쓴 컴포넌트를 사용으로 집계 → 대문자 이름도 미사용·미정의 검사 대상
+      'react/jsx-uses-vars': 'error',
+      'react/jsx-no-undef': 'error',
       'no-unused-vars': [
         'error',
         {
-          varsIgnorePattern: '^[A-Z_]|^_',
+          varsIgnorePattern: '^_',
           argsIgnorePattern: '^_',
           caughtErrorsIgnorePattern: '^_',
         },

@@ -35,7 +35,7 @@ const RG = {
   surfaceGlass: 'rgba(255, 255, 255, 0.96)',
 };
 
-/** 그래프·UI 공유 팔레트 — relation-graph/tokens.css :root 와 동기화 */
+/** 그래프·UI 공유 팔레트 — components/graph/styles/tokens.css :root 와 동기화 */
 export const GRAPH_COLORS = {
   backgroundLighter: RG.surfaceSlate,
   backgroundLight: RG.surfaceIndigo,
@@ -109,9 +109,13 @@ export function estimateNodeSizePx(weight, weightsForRange = []) {
   return calculateNodeSizeFromWeight(weight, range.min, range.max);
 }
 
+/**
+ * 가중치 → 노드 크기. 범위는 항상 전체 노드 기준으로 계산하고,
+ * targetNodes가 있으면 그 노드만 style 갱신 (검색 하이라이트처럼 일부만 바뀔 때 전체 재설정 방지)
+ */
 export function applyNormalizedNodeSizes(
   cy,
-  { scaledNodes = null, scale = 1, containerWidth = null } = {},
+  { scaledNodes = null, scale = 1, containerWidth = null, targetNodes = null } = {},
 ) {
   if (!cy) return;
 
@@ -127,7 +131,7 @@ export function applyNormalizedNodeSizes(
 
   // 노드별 style 갱신을 1회 렌더 갱신으로 묶음 (레이아웃·resize 호출부는 batch 밖)
   cy.batch(() => {
-    allNodes.forEach((node) => {
+    (targetNodes ?? allNodes).forEach((node) => {
       const baseSize = calculateNodeSizeFromWeight(
         node.data('weight'),
         weightRange.min,

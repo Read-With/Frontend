@@ -1,14 +1,14 @@
 import { memo, useState, useEffect, useMemo } from "react";
-import {ResponsiveContainer, LineChart, CartesianGrid, ReferenceLine, Tooltip as RechartsTooltip, Line, XAxis, YAxis,} from "recharts";
 import { useParams } from "react-router-dom";
-import { useFloatingTooltip } from "../../hooks/ui/tooltipHooks";
-import { useRelationData } from "../../hooks/graph/useApiGraphData";
-import { getPositivityDisplay, getRelationColor, GRAPH_COLORS } from "../../utils/styles/graphStyles";
-import { ANIMATION_VALUES, mergeRefs } from "../../utils/styles/styles";
-import { clampPositivity, toNumberOrNull, toPositiveNumberOrNull } from "../../utils/common/valueUtils";
-import { buildRelationTagDisplayItems } from "../../utils/graph/graphCore";
-import { isLongEdgeTimeline, getSparseEdgeTickValues, buildEdgeRechartsLineData } from "../../utils/graph/graphCharts";
+import { useFloatingTooltip } from "../../../hooks/ui/tooltipHooks";
+import { useRelationData } from "../../../hooks/graph/useApiGraphData";
+import { getPositivityDisplay, getRelationColor } from "../../../utils/styles/graphStyles";
+import { ANIMATION_VALUES, mergeRefs } from "../../../utils/styles/styles";
+import { toPositivityOrNull, toNumberOrNull, toPositiveNumberOrNull } from "../../../utils/common/valueUtils";
+import { buildRelationTagDisplayItems } from "../../../utils/graph/graphCore";
+import { buildEdgeRechartsLineData } from "../../../utils/graph/graphCharts";
 import { TooltipCloseButton, NodeTooltipShell } from './GraphTooltipParts';
+import RelationTimelineChart from './RelationTimelineChart';
 
 const NO_RELATION_MESSAGE = '이 위치에서는 표시할 관계가 없습니다.';
 
@@ -44,13 +44,6 @@ function EndpointAvatar({ endpoint }) {
   );
 }
 
-/** positivity: 비어 있거나 숫자가 아니면 null, 아니면 −1~+1 */
-function parseEdgePositivity(value) {
-  if (value == null || value === '') return null;
-  const n = Number(value);
-  return Number.isFinite(n) ? clampPositivity(n) : null;
-}
-
 /** "주요 문장|보충 설명" 형식 */
 function parseExplanation(explanation) {
   if (typeof explanation !== 'string' || !explanation) {
@@ -58,136 +51,6 @@ function parseExplanation(explanation) {
   }
   const [primary, secondary] = explanation.split('|');
   return { hasExplanation: true, primary: primary ?? '', secondary: secondary || null };
-}
-
-function chartXAxisBounds(length) {
-  if (length === 0) return { min: 1, max: 1 };
-  if (length === 1) return { min: 0.5, max: 1.5 };
-  return { min: 1, max: length };
-}
-
-function formatPositivityTooltip(value, item, lineData) {
-  if (value == null || typeof value !== 'number') {
-    return ['관계 없음', '긍정도'];
-  }
-  const pct = `${Math.round(Number(value) * 100)}%`;
-  const idx = item?.payload?.x;
-  const prev = Number.isFinite(idx) && idx > 1 ? lineData[idx - 2]?.y : null;
-  if (typeof prev === 'number') {
-    const d = Math.round((Number(value) - prev) * 100);
-    const sign = d > 0 ? '+' : '';
-    return [`${pct} (${sign}${d}%p)`, '긍정도'];
-  }
-  return [pct, '긍정도'];
-}
-
-function RelationTimelineChart({ lineData, numericPointCount, heightPx, isSidebar, color }) {
-  const xAxisBounds = useMemo(() => chartXAxisBounds(lineData.length), [lineData]);
-  const sparseTicks = useMemo(
-    () => getSparseEdgeTickValues(lineData, { maxTicks: isSidebar ? 7 : 5 }),
-    [lineData, isSidebar],
-  );
-  const visibleXLabelMap = useMemo(() => {
-    const map = {};
-    lineData.forEach((d) => {
-      map[d.x] = d.label;
-    });
-    return map;
-  }, [lineData]);
-  const currentRefX = useMemo(() => lineData.find((d) => d.isCurrent)?.x ?? null, [lineData]);
-
-  if (numericPointCount === 0) return null;
-  if (numericPointCount === 1) {
-    const only = lineData.find((d) => typeof d.y === 'number');
-    return (
-      <div className="edge-chart-empty">
-        <p className="edge-chart-empty-title">아직 누적 변화가 없습니다</p>
-        <p className="edge-chart-empty-value">
-          현재 {Math.round((only?.y ?? 0) * 100)}%
-        </p>
-      </div>
-    );
-  }
-
-  const longTimeline = isLongEdgeTimeline(lineData.length);
-  const showDenseDots = lineData.length <= 6;
-  const xTickFontSize = isSidebar ? (longTimeline ? 12 : 13) : (longTimeline ? 10 : 11);
-
-  const renderDot = ({ cx, cy, payload, index }) => {
-    if (cx == null || cy == null || payload?.y == null) return null;
-    const isCurrent = payload?.isCurrent;
-    const show = showDenseDots || isCurrent || payload?.isSignificant || payload?.isChapter;
-    if (!show) {
-      return (
-        <circle
-          key={`relation-timeline-dot-hidden-${index}`}
-          cx={cx}
-          cy={cy}
-          r={0}
-          fill="transparent"
-        />
-      );
-    }
-    const fill = payload?.isChapter ? '#9ca3af' : color;
-    return (
-      <circle
-        key={`relation-timeline-dot-${index ?? `${cx}-${cy}`}`}
-        cx={cx}
-        cy={cy}
-        r={isCurrent ? 6 : longTimeline ? 2.5 : 3.5}
-        fill={fill}
-        stroke={isCurrent ? GRAPH_COLORS.white : fill}
-        strokeWidth={isCurrent ? 2 : 0}
-      />
-    );
-  };
-
-  return (
-    <div className="edge-chart-plot">
-      <ResponsiveContainer width="100%" height={Math.max(120, heightPx)}>
-        <LineChart data={lineData} margin={{ top: 8, right: 12, left: 0, bottom: 4 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
-          <XAxis
-            type="number"
-            dataKey="x"
-            domain={[xAxisBounds.min, xAxisBounds.max]}
-            ticks={sparseTicks}
-            tickFormatter={(v) => visibleXLabelMap[Math.round(v)] ?? ''}
-            tick={{ fontSize: xTickFontSize, fill: '#6b7280', fontWeight: 700 }}
-            axisLine={{ stroke: GRAPH_COLORS.border }}
-            tickLine={false}
-            interval={0}
-          />
-          <YAxis
-            domain={[-1, 1]}
-            width={isSidebar ? 44 : 40}
-            tick={{ fontSize: isSidebar ? 12 : 11, fill: '#6b7280', fontWeight: 700 }}
-            tickFormatter={(v) => `${Math.round(Number(v) * 100)}%`}
-            axisLine={false}
-            tickLine={false}
-            ticks={[-1, 0, 1]}
-          />
-          <RechartsTooltip
-            formatter={(value, _name, item) => formatPositivityTooltip(value, item, lineData)}
-            labelFormatter={(_l, payload) => payload?.[0]?.payload?.label ?? ''}
-          />
-          {currentRefX != null && (
-            <ReferenceLine x={currentRefX} stroke="#94a3b8" strokeDasharray="4 4" strokeWidth={1} />
-          )}
-          <Line
-            type="monotone"
-            dataKey="y"
-            stroke={color}
-            strokeWidth={longTimeline ? 1.5 : 2}
-            dot={renderDot}
-            activeDot={{ r: 5, fill: color }}
-            connectNulls={false}
-            isAnimationActive={false}
-          />
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
-  );
 }
 
 function EdgeEndpoints({ data, sourceEndpoint, targetEndpoint }) {
@@ -356,37 +219,10 @@ function EdgeChartPanel({ relation, chart, title, missingEvent, heightPx, isSide
   );
 }
 
-function EdgeDetail({
-  data,
-  x,
-  y,
-  onClose,
-  variant = 'graphPage',
-  currentChapter = 1,
-  eventNum = 1,
-  bookId = null,
-  sourceEndpoint = null,
-  targetEndpoint = null,
-  tooltipBoundsRef = null,
-}) {
+/** 툴팁·사이드바 공통 데이터: 관계 타임라인 조회 · 태그 · 긍정도 · 차트 */
+function useEdgeDetailModel({ data, isViewer, currentChapter, eventNum, bookId }) {
   const { filename } = useParams();
-  const isSidebar = variant === 'graphPage';
-  const isViewer = variant === 'viewer';
   const edge = data ?? {};
-
-  const { position, showContent, isDragging, tooltipRef, handleMouseDown, clickOutsideRef } =
-    useFloatingTooltip(x, y, {
-      enabled: !isSidebar,
-      center: edge.edgeCenter,
-      boundsRef: tooltipBoundsRef,
-      onClose,
-    });
-
-  const [viewMode, setViewMode] = useState("info");
-
-  useEffect(() => {
-    setViewMode("info");
-  }, [edge.id, edge.source, edge.target]);
 
   const displayEventNum = toPositiveNumberOrNull(eventNum) ?? 0;
   const numericBookId = useMemo(
@@ -403,7 +239,7 @@ function EdgeDetail({
     numericBookId,
   );
 
-  const edgePositivity = useMemo(() => parseEdgePositivity(edge.positivity), [edge.positivity]);
+  const edgePositivity = useMemo(() => toPositivityOrNull(edge.positivity), [edge.positivity]);
 
   const relationTagItems = useMemo(
     () =>
@@ -481,51 +317,90 @@ function EdgeDetail({
       title={isViewer ? `챕터 ${currentChapter} 관계 변화` : `챕터 ${currentChapter}까지의 누적 관계 변화`}
       missingEvent={isViewer && displayEventNum <= 0}
       heightPx={heightPx}
-      isSidebar={isSidebar}
+      isSidebar={!isViewer}
       color={positivityDisplay.color}
     />
   );
 
-  const tooltipInner = (
+  return { edge, infoView, renderChartPanel, color: positivityDisplay.color, positivityBarWidth };
+}
+
+/** 닫기 버튼 + 긍정도 테마 + 양 끝 인물 헤더. children은 본문 패널 */
+function EdgeDetailFrame({ model, data, sourceEndpoint, targetEndpoint, onClose, closeLabel, contentClassName, children }) {
+  return (
     <>
-      <TooltipCloseButton onClose={onClose} ariaLabel={isSidebar ? '사이드바 닫기' : undefined} />
+      <TooltipCloseButton onClose={onClose} ariaLabel={closeLabel} />
       <div
-        className={`edge-tooltip-content edge-tooltip-themed${isSidebar ? ' edge-tooltip-content--sidebar' : ''}`}
-        style={{ '--rel-color': positivityDisplay.color, '--pos-width': `${positivityBarWidth}%` }}
+        className={contentClassName}
+        style={{ '--rel-color': model.color, '--pos-width': `${model.positivityBarWidth}%` }}
       >
         <div className="edge-tooltip-header">
           <EdgeEndpoints data={data} sourceEndpoint={sourceEndpoint} targetEndpoint={targetEndpoint} />
         </div>
-        {!isSidebar && <EdgeViewTabs viewMode={viewMode} onChange={setViewMode} />}
-        <div className={`edge-tooltip-panel${isSidebar ? ' edge-tooltip-panel--sidebar' : ''}`}>
-          {isSidebar ? (
-            <>
-              {infoView}
-              {renderChartPanel(240)}
-            </>
-          ) : (
-            <div key={viewMode} className="edge-tooltip-panel-swap">
-              {viewMode === 'info' ? infoView : renderChartPanel(280)}
-            </div>
-          )}
-        </div>
+        {children}
       </div>
     </>
   );
+}
 
-  if (isSidebar) {
-    return (
-      <div
-        className="graph-sidebar-panel"
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') onClose();
-        }}
-        tabIndex={0}
+/** 그래프 페이지 사이드바: 요약과 누적 변화 차트를 함께 표시 */
+function EdgeDetailSidebar({ data, onClose, currentChapter = 1, eventNum = 1, bookId = null, sourceEndpoint = null, targetEndpoint = null }) {
+  const model = useEdgeDetailModel({ data, isViewer: false, currentChapter, eventNum, bookId });
+  return (
+    <div
+      className="graph-sidebar-panel"
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') onClose();
+      }}
+      tabIndex={0}
+    >
+      <EdgeDetailFrame
+        model={model}
+        data={data}
+        sourceEndpoint={sourceEndpoint}
+        targetEndpoint={targetEndpoint}
+        onClose={onClose}
+        closeLabel="사이드바 닫기"
+        contentClassName="edge-tooltip-content edge-tooltip-themed edge-tooltip-content--sidebar"
       >
-        {tooltipInner}
-      </div>
-    );
-  }
+        <div className="edge-tooltip-panel edge-tooltip-panel--sidebar">
+          {model.infoView}
+          {model.renderChartPanel(240)}
+        </div>
+      </EdgeDetailFrame>
+    </div>
+  );
+}
+
+/** 뷰어 플로팅 툴팁: 요약/변화 탭 전환, 드래그·바깥 클릭 닫기 */
+function EdgeDetailTooltip({
+  data,
+  x,
+  y,
+  onClose,
+  currentChapter = 1,
+  eventNum = 1,
+  bookId = null,
+  sourceEndpoint = null,
+  targetEndpoint = null,
+  tooltipBoundsRef = null,
+}) {
+  const model = useEdgeDetailModel({ data, isViewer: true, currentChapter, eventNum, bookId });
+  const { edge } = model;
+
+  const { position, showContent, isDragging, tooltipRef, handleMouseDown, clickOutsideRef } =
+    useFloatingTooltip(x, y, {
+      enabled: true,
+      center: edge.edgeCenter,
+      boundsRef: tooltipBoundsRef,
+      onClose,
+    });
+
+  const [viewMode, setViewMode] = useState("info");
+
+  useEffect(() => {
+    setViewMode("info");
+  }, [edge.id, edge.source, edge.target]);
 
   return (
     <NodeTooltipShell
@@ -537,9 +412,28 @@ function EdgeDetail({
       handleMouseDown={handleMouseDown}
       transition={isDragging ? 'none' : `opacity ${ANIMATION_VALUES.DURATION.NORMAL} ease-in-out`}
     >
-      {tooltipInner}
+      <EdgeDetailFrame
+        model={model}
+        data={data}
+        sourceEndpoint={sourceEndpoint}
+        targetEndpoint={targetEndpoint}
+        onClose={onClose}
+        contentClassName="edge-tooltip-content edge-tooltip-themed"
+      >
+        <EdgeViewTabs viewMode={viewMode} onChange={setViewMode} />
+        <div className="edge-tooltip-panel">
+          <div key={viewMode} className="edge-tooltip-panel-swap">
+            {viewMode === 'info' ? model.infoView : model.renderChartPanel(280)}
+          </div>
+        </div>
+      </EdgeDetailFrame>
     </NodeTooltipShell>
   );
+}
+
+/** variant: 'graphPage'(사이드바) | 'viewer'(플로팅 툴팁) */
+function EdgeDetail({ variant = 'graphPage', ...props }) {
+  return variant === 'graphPage' ? <EdgeDetailSidebar {...props} /> : <EdgeDetailTooltip {...props} />;
 }
 
 export default memo(EdgeDetail);

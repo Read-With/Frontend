@@ -8,7 +8,7 @@ import {
   isGraphNodeElement,
   normalizeElementId,
 } from './graphCore';
-import { expandConnectedSubgraph } from './graphModel';
+import { expandConnectedSubgraph } from './graphElements';
 import {
   FLOATING_TOOLTIP_ESTIMATE,
   getCyClientRect,
@@ -507,14 +507,18 @@ function createFilteredElementIds(filteredElements) {
  * @param {Object} cy - Cytoscape 인스턴스
  * @param {Array} filteredElements - 검색 결과 요소들
  */
-export function applySearchFadeEffect(cy, filteredElements) {
+/**
+ * 검색 결과 밖 요소를 흐리게. 기존 하이라이트 클래스를 먼저 지운다.
+ * alreadyCleared: 호출 직전에 clearHighlightClassesOn을 이미 했으면 true (같은 정리를 두 번 하지 않음)
+ */
+export function applySearchFadeEffect(cy, filteredElements, { alreadyCleared = false } = {}) {
   if (!cy || typeof cy.elements !== 'function') {
     errorUtils.logDebug('applySearchFadeEffect', '유효하지 않은 Cytoscape 인스턴스');
     return;
   }
   
   try {
-    clearHighlightClassesOn(cy);
+    if (!alreadyCleared) clearHighlightClassesOn(cy);
 
     // 검색 활성 + 결과 없음 → 전체 페이드 (결과 없음 UI와 맞춤)
     if (!filteredElements || filteredElements.length === 0) {

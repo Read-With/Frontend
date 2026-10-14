@@ -1,16 +1,17 @@
 import { memo, useCallback, useRef } from 'react';
-import GraphCanvasArea from './GraphCanvasArea';
+import GraphCanvasArea from '../canvas/GraphCanvasArea';
 import GraphPageSidebar from './GraphPageSidebar';
-import { GraphFloatingControls, GraphTopBarMeta } from './GraphControls';
-import { formatChapterOrdinalLabel } from '../../utils/viewer/viewerCore';
-import { useGraphTopbarToolsReserve } from '../../hooks/graph/useGraphCy.js';
+import { GraphFloatingControls } from '../controls/GraphFloatingControls';
+import { GraphTopBarMeta } from '../controls/GraphTopBarMeta';
+import { formatChapterOrdinalLabel } from '../../../utils/viewer/viewerCore';
+import { useGraphTopbarToolsReserve } from '../../../hooks/graph/useGraphCy.js';
 import { useGraphPage } from './GraphPageContext';
 
 function GraphLoadingOverlay() {
   return <div className="graph-canvas-loading" role="status">그래프 업데이트 중...</div>;
 }
 
-function GraphCanvas() {
+function GraphPageLayout() {
   const {
     chapterRailWidth,
     cyRef,
@@ -39,7 +40,7 @@ function GraphCanvas() {
     onShowEdgeTooltip,
     onClearTooltip,
   } = useGraphPage();
-  const { isSearchActive, filteredElements, searchTerm, fitNodeIds } = searchState;
+  const { isSearchActive, filteredElements, appliedSearchTerm, fitNodeIds } = searchState;
 
   const topbarRef = useRef(null);
   const toolsRef = useRef(null);
@@ -100,7 +101,7 @@ function GraphCanvas() {
             stylesheet={stylesheet}
             cyRef={cyRef}
             fitNodeIds={fitNodeIds}
-            searchTerm={searchTerm}
+            searchTerm={appliedSearchTerm}
             isSearchActive={isSearchActive}
             filteredElements={filteredElements}
             onShowNodeTooltip={onShowNodeTooltip}
@@ -121,4 +122,4 @@ function GraphCanvas() {
   );
 }
 
-export default memo(GraphCanvas);
+export default memo(GraphPageLayout);

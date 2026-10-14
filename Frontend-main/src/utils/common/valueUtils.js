@@ -106,6 +106,13 @@ export function cycleIndex(index, length, delta = 1) {
   return (((Math.trunc(index) + delta) % length) + length) % length;
 }
 
+/** cycleIndex와 같되 순환하지 않고 [0, length-1]에서 멈춤 (목록 끝 고정) */
+export function stepIndex(index, length, delta = 1) {
+  if (!length || length < 1) return 0;
+  if (!Number.isFinite(index) || index < 0) return delta >= 0 ? 0 : length - 1;
+  return Math.min(length - 1, Math.max(0, Math.trunc(index) + delta));
+}
+
 /** 상대 시간 표기. withTime=false면 달력 날짜 기준 (오늘·어제·N일 전) */
 export function formatRelativeTime(value, { withTime = true } = {}) {
   if (value == null || value === '') return '';
@@ -169,6 +176,13 @@ export const compareKo = new Intl.Collator('ko').compare;
 export function clampPositivity(positivity) {
   const value = Number(positivity);
   return Number.isFinite(value) ? Math.max(-1, Math.min(1, value)) : 0;
+}
+
+/** 비어 있거나 숫자가 아니면 null(정보 없음), 아니면 −1~+1. clampPositivity와 달리 0과 '없음'을 구분 */
+export function toPositivityOrNull(value) {
+  if (value == null || value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? clampPositivity(n) : null;
 }
 
 export const toPositiveNumberOrNull = (value) => {

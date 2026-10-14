@@ -1,9 +1,9 @@
 /** 노드·간선 툴팁과 관계 분석 모달이 공유하는 표시 부품 */
 
-import { GRAPH_LAYOUT_CONSTANTS } from "../../utils/graph/graphCore.js";
-import { GRAPH_COLORS } from "../../utils/styles/graphStyles.js";
-import { joinClasses } from "../../utils/styles/styles.js";
-import "./RelationGraph.css";
+import { GRAPH_LAYOUT_CONSTANTS } from "../../../utils/graph/graphCore.js";
+import { GRAPH_COLORS } from "../../../utils/styles/graphStyles.js";
+import { joinClasses } from "../../../utils/styles/styles.js";
+import "../styles/graph.css";
 
 /** 인물 이미지 없을 때 공통 실루엣 */
 export function PersonSilhouette({

@@ -10,7 +10,8 @@
   background: var(--rg-surface);
   z-index: 99999;
   overflow: hidden;
-  transition: right 520ms cubic-bezier(0.4, 0, 0.2, 1);
+  /* 시간은 GraphPageSidebar가 GRAPH_LAYOUT_CONSTANTS.ANIMATION_MS로 주입 */
+  transition: right var(--graph-sidebar-slide-ms, 520ms) cubic-bezier(0.4, 0, 0.2, 1);
   border-left: 0.0625rem solid var(--rg-border-strong);
   box-shadow: var(--rg-shadow-rail);
 }

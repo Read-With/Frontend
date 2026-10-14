@@ -10,8 +10,9 @@ import {
   collectUndirectedRelations,
   NODE_TOOLTIP_VIEW_STATUS,
 } from './graphCore';
+import { pickCharacterDisplayName } from './graphCharacterNames';
 import { hasGraphPayload } from '../api/graphApi';
-import { getEventDataByIndex } from './graphModel';
+import { getEventDataByIndex } from './graphChapterCache';
 
 export const extractRadarChartData = (nodeId, relations, elements, maxDisplay = 8) => {
   if (!nodeId || !relations || !Array.isArray(relations)) return [];
@@ -38,8 +39,7 @@ export const extractRadarChartData = (nodeId, relations, elements, maxDisplay = 
     if (!existingData || Math.abs(positivity) > Math.abs(existingData.positivity)) {
       const connectedNode = nodeById.get(connectedNodeId);
       if (connectedNode && Number.isFinite(positivity)) {
-        const name =
-          connectedNode.data.label || connectedNode.data.common_name || `인물 ${connectedNodeId}`;
+        const name = pickCharacterDisplayName(connectedNode.data) || `인물 ${connectedNodeId}`;
         radarDataMap.set(connectedNodeId, {
           id: connectedNodeId,
           name,
@@ -420,7 +420,7 @@ export function buildRadarChartData({
     if (hasGraphPayload(apiBookGraphData)) {
       const { relations, characters } = apiBookGraphData;
       const bookElements = characters.map((char) => {
-        const charName = char.common_name || char.name || '';
+        const charName = pickCharacterDisplayName(char);
         return {
           data: {
             id: String(char.id),

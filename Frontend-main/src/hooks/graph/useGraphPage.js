@@ -7,7 +7,8 @@ import {
   convertGraphSourceToElements,
   commitVisibleGraphElements,
 } from '../../utils/viewer/viewerGraph';
-import { extractNodeWeightsFromElements, getGraphEventState } from '../../utils/graph/graphModel';
+import { extractNodeWeightsFromElements } from '../../utils/graph/graphElements';
+import { getGraphEventState } from '../../utils/graph/graphChapterCache';
 import {
   eventUtils,
   formatFallbackChapterLabel,
@@ -224,11 +225,10 @@ export function useChapterSelect({
       if (firstNum > 0) setCurrentEvent(firstNum);
     };
 
-    // 선택(노드/간선·툴팁)이 있으면 먼저 해제한 뒤 챕터 전환
-    const hadTooltip = Boolean(activeTooltip);
-    clearGraphSelection({ fitViewport: false, restoreViewport: false });
-
-    if (hadTooltip) {
+    // 선택 해제는 챕터 변경 effect(GraphPage)가 한다. 툴팁이 열려 있으면 닫힘 애니메이션 동안
+    // 하이라이트가 남지 않도록 미리 한 번 해제 (그 사이 선택이 바뀔 수 있어 effect의 해제도 유지)
+    if (activeTooltip) {
+      clearGraphSelection({ fitViewport: false, restoreViewport: false });
       startClosing();
       pendingChapterChangeRef.current = window.setTimeout(
         applyChapter,

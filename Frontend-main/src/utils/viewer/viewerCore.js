@@ -13,6 +13,9 @@ import {
 export const isGraphEdgeElement = (element) =>
   Boolean(element?.data && element.data.source !== undefined && element.data.target !== undefined);
 
+export const isGraphNodeElement = (element) =>
+  Boolean(element?.data && element.data.id !== undefined && !isGraphEdgeElement(element));
+
 /** elements → relations 변환 시 공통 옵션 (표시용) */
 export const ELEMENTS_TO_RELATIONS_OPTS = {
   includeLabel: true,

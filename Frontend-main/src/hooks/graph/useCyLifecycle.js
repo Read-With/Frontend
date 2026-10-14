@@ -3,12 +3,9 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import {
   detectAndResolveOverlap,
-  hasOverlappingNodes,
-  collectNeighborhoodNodeIds,
   OVERLAP_RESOLVE,
   OVERLAP_PROFILES,
 } from "../../utils/graph/graphLayout.js";
-import { GRAPH_ZOOM } from "../../utils/graph/graphCore.js";
 import { errorUtils } from "../../utils/common/valueUtils";
 import {
   safeCyCall,
@@ -18,13 +15,10 @@ import {
   syncElementsIntoCy,
   runPresetLayout,
   runCoseBilkentLayout,
+  finalizeGraphLayout,
+  resolveIncrementalOverlap,
 } from "../../utils/graph/graphCy.js";
-import {
-  isGraphContainerSizeReady,
-  fitGraphViewportInContainer,
-  ensureElementsInBounds,
-  isElementsFitInViewport,
-} from "../../utils/graph/graphViewport.js";
+import { isGraphContainerSizeReady, fitGraphViewportInContainer } from "../../utils/graph/graphViewport.js";
 import { applySearchFadeEffect, syncReciprocalPairJunctionOffsets, clearHighlightClassesOn } from "../../utils/graph/graphHighlight.js";
 import { getResponsiveNodeSizeRange } from "../../utils/styles/graphStyles.js";
 import { useLatestRef } from "../common/hooksShared.js";
@@ -36,6 +30,7 @@ const EMPTY_ELEMENTS_UPDATE = {
   dataChangedIds: [],
   incrementalLayoutScope: false,
   needsLocalReorder: false,
+  nodesRemoved: false,
 };
 
 const isEmpty = (arr) => !arr || arr.length === 0;
@@ -227,92 +222,18 @@ export function useGraphLayout({
 
   const handleLayoutComplete = useCallback(
     (cyInstance, shouldFitOnInitialLoad, options = {}) => {
-      const {
-        skipOverlap = false,
-        skipEnsureBounds = false,
-        movableIds = null,
-      } = options;
       if (!cyInstance) return;
-
-      // 전체 재배치(초기·챕터 전환)가 아닌 증분 갱신(이벤트 확정 등)에서는 기존 배치를
-      // 흔들지 않는 게 원칙이지만, 늘어난 노드·간선(라벨 포함)이 현재 팬·줌 뷰포트를
-      // 벗어나면 좁은 화면 안으로 욱여넣어(cramping) 겹치는 대신 카메라를 재조정한다.
-      if (!shouldFitOnInitialLoad && isGraphContainerSizeReady(containerRef.current)) {
-        const visible = cyInstance.elements(':visible');
-        if (
-          visible.length > 0 &&
-          !isElementsFitInViewport(cyInstance, visible, GRAPH_ZOOM.FIT_PADDING)
-        ) {
-          // fitGraphViewportInContainer는 fit 직후 동기적으로 ensureElementsInBounds를
-          // 돌리므로(애니메이션 중 팬·줌 값을 기준으로 하면 어긋남) duration 0(즉시)을 유지한다.
-          const refit = fitGraphViewportInContainer(cyInstance, containerRef.current, {
-            eles: visible,
-          });
-          if (refit) {
-            syncReciprocalPairJunctionOffsets(cyInstance);
-            return;
-          }
-        }
+      // 컨테이너 미준비 시 pending 유지 → resize에서 재시도
+      if (shouldFitOnInitialLoad && pendingInitialFitRef) pendingInitialFitRef.current = true;
+      const fitted = finalizeGraphLayout(cyInstance, containerRef.current, {
+        ...options,
+        fitViewport: shouldFitOnInitialLoad,
+        canFit: () => typeof canApplyPendingViewportFit !== 'function' || canApplyPendingViewportFit(),
+      });
+      if (fitted) {
+        if (pendingInitialFitRef) pendingInitialFitRef.current = false;
+        clearPendingViewportFitBlock?.();
       }
-
-      const runBounds = () => {
-        if (skipEnsureBounds || !isGraphContainerSizeReady(containerRef.current)) return;
-        if (!movableIds) {
-          ensureElementsInBounds(cyInstance, containerRef.current);
-          return;
-        }
-        // 전체 fit이 없는 증분 추가: 새로 들어온 노드만 캔버스 안으로 제약하고
-        // 기존 노드는 사용자가 기억한 배치를 그대로 유지한다.
-        const idSet = movableIds instanceof Set ? movableIds : new Set([...movableIds].map(String));
-        if (idSet.size === 0) return;
-        const scopedNodes = cyInstance.nodes().filter((n) => idSet.has(String(n.id())));
-        if (scopedNodes.length > 0) {
-          ensureElementsInBounds(cyInstance, containerRef.current, { nodes: scopedNodes });
-        }
-      };
-
-      runBounds();
-      if (!skipOverlap) {
-        const profile = shouldFitOnInitialLoad
-          ? OVERLAP_PROFILES.INITIAL
-          : OVERLAP_PROFILES.INCREMENTAL;
-        detectAndResolveOverlap(cyInstance, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE, {
-          ...(movableIds ? { movableIds } : {}),
-          ...profile,
-        });
-        // 밀어내기 후 화면 밖 노드 재제약 → 경계에서 생긴 겹침 경량 재해결
-        runBounds();
-        if (!skipEnsureBounds && isGraphContainerSizeReady(containerRef.current)) {
-          detectAndResolveOverlap(cyInstance, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE, {
-            ...(movableIds ? { movableIds } : {}),
-            ...OVERLAP_PROFILES.RESIZE,
-          });
-        }
-        // 최초 로딩: bounds/resize 후에도 본체 겹침이 남으면 제거
-        if (
-          shouldFitOnInitialLoad &&
-          hasOverlappingNodes(cyInstance, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE, {
-            ...OVERLAP_PROFILES.APPEAR,
-          })
-        ) {
-          detectAndResolveOverlap(cyInstance, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE, {
-            ...OVERLAP_PROFILES.APPEAR,
-          });
-          runBounds();
-        }
-      }
-      if (shouldFitOnInitialLoad) {
-        // 컨테이너 미준비 시 pending 유지 → resize에서 재시도
-        if (pendingInitialFitRef) pendingInitialFitRef.current = true;
-        if (
-          (typeof canApplyPendingViewportFit !== 'function' || canApplyPendingViewportFit()) &&
-          fitGraphViewportInContainer(cyInstance, containerRef.current)
-        ) {
-          if (pendingInitialFitRef) pendingInitialFitRef.current = false;
-          clearPendingViewportFitBlock?.();
-        }
-      }
-      syncReciprocalPairJunctionOffsets(cyInstance);
     },
     [containerRef, pendingInitialFitRef, canApplyPendingViewportFit, clearPendingViewportFitBlock],
   );
@@ -327,6 +248,7 @@ export function useGraphLayout({
       dataChangedIds = [],
       incrementalLayoutScope = false,
       needsLocalReorder = false,
+      nodesRemoved = false,
     } = elementsUpdateRef.current || {};
 
     elementsUpdateRef.current = EMPTY_ELEMENTS_UPDATE;
@@ -378,77 +300,22 @@ export function useGraphLayout({
         addedNodeIds.length > 0 &&
         !shouldFitViewport;
 
-      const resolveOverlapCascade = (seedIds, forceExpand = false) => {
-        const appearOpts = { ...OVERLAP_PROFILES.APPEAR };
-        const incrementalOpts = { ...OVERLAP_PROFILES.INCREMENTAL };
-
-        const stillAppearsOverlapping = (movableIds) =>
-          hasOverlappingNodes(cy, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE, {
-            movableIds,
-            ...appearOpts,
-          });
-
-        const resolveAppear = (movableIds) => {
-          detectAndResolveOverlap(cy, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE, {
-            ...appearOpts,
-            movableIds,
-          });
-          return stillAppearsOverlapping(movableIds);
-        };
-
-        const resolveIncremental = (movableIds) => {
-          detectAndResolveOverlap(cy, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE, {
-            ...incrementalOpts,
-            movableIds,
-          });
-          return hasOverlappingNodes(cy, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE, {
-            movableIds,
-            ...incrementalOpts,
-          });
-        };
-
-        // 1) 신규 등장 노드끼리: tolerance 0으로 본체 겹침 제거
-        if (seedIds.length >= 2) {
-          let remain = resolveAppear(seedIds);
-          for (let i = 0; remain && i < 2; i += 1) {
-            remain = resolveAppear(seedIds);
-          }
-        }
-
-        // 2) 기존과의 겹침: 신규만 → 필요 시 1·2-hop
-        if (!forceExpand && seedIds.length > 0 && !resolveIncremental(seedIds)) return;
-
-        const hop1 = [...collectNeighborhoodNodeIds(cy, seedIds, 1)];
-        if (!resolveIncremental(hop1)) return;
-
-        const hop2 = [...collectNeighborhoodNodeIds(cy, seedIds, 2)];
-        resolveIncremental(hop2);
-
-        // 신규끼리 잔여가 있으면 마지막으로 한 번 더 분리 (이웃 이동 후 재겹침 방지)
-        if (seedIds.length >= 2 && stillAppearsOverlapping(seedIds)) {
-          resolveAppear(seedIds);
-        }
-        // 중간 갱신에서는 사용자가 기억한 전체 배치를 보존한다.
-        // 잔여 경미 겹침 때문에 전체 그래프 또는 cose로 확대하지 않는다.
-      };
 
       if (edgesOnlyIncremental) {
         if (stylesheet) applyNodeSizes(cy);
       } else if (useIncrementalPreset) {
         runPresetLayout(cy, collectCyElementsByIds(cy, addedNodeIds));
-        refreshStyles({
-          forceSheet: stylesheetChanged,
-          forceSizes: true,
-          lightUpdate: !stylesheetChanged,
-        });
+        refreshStyles({ forceSizes: true, lightUpdate: !stylesheetChanged });
       } else {
-        refreshStyles({ forceSheet: true, forceSizes: true });
+        // 스타일시트가 그대로면 다시 파싱·적용하지 않음 (추가된 요소는 cy.add 때 이미 스타일 적용).
+        // 첫 로딩은 재사용된 인스턴스일 수 있어 한 번 맞춤
+        refreshStyles({ forceSheet: Boolean(isInitialLoad), forceSizes: true });
         runCoseBilkentLayout(cy);
       }
 
       requestAnimationFrame(() => {
         if (useIncrementalPreset) {
-          resolveOverlapCascade(addedNodeIds, needsLocalReorder);
+          resolveIncrementalOverlap(cy, addedNodeIds, needsLocalReorder);
           // 전체 fit이 없는 경로라도, 새로 추가된 노드는 항상 캔버스 안으로 제약해
           // 이벤트 이동 시 잘려 보이지 않게 한다(기존 노드 배치는 movableIds 범위로 보존).
           handleLayoutComplete(cy, shouldFitViewport, {
@@ -469,7 +336,8 @@ export function useGraphLayout({
       // 이미지 blob resolve 등 data-only 변경: background-image 반영을 위해 style update
       refreshStyles({ forceSizes: true, lightUpdate: true });
       finishInitialLoad();
-    } else if (stylesheetChanged || isInitialLoad) {
+    } else if (stylesheetChanged || isInitialLoad || nodesRemoved) {
+      // nodesRemoved: 가장 크거나 작은 가중치 노드가 빠지면 남은 노드 크기를 새 범위로 다시 맞춤
       refreshStyles({ forceSizes: true });
       if (isInitialLoad) {
         handleLayoutComplete(cy, true);
@@ -554,7 +422,8 @@ export function useCySearchHighlight({
           const prevHl = cy.nodes(".search-highlight");
           if (prevHl.length > 0) prevHl.removeClass("search-highlight");
           nodes.addClass("search-highlight");
-          applyNodeSizes(cy, nodes, 1.2);
+          // 이전·현재 하이라이트 노드만 다시 계산 (나머지는 레이아웃에서 이미 기본 크기)
+          applyNodeSizes(cy, nodes, 1.2, prevHl.union(nodes));
         }
       } else if (!isSearchActive) {
         const hl = cy.nodes(".search-highlight");
@@ -595,7 +464,15 @@ export function useCyResize({
     if (!cy || !containerRef.current) return undefined;
 
     let resizeTimeoutId = 0;
-    let lastNodeSizeRangeKey = "";
+    // 레이아웃이 현재 폭으로 이미 노드 크기를 정함 → 첫 관찰 콜백이 같은 폭이면 다시 계산하지 않도록 현재 범위로 시작
+    const rangeKeyOf = (width) => {
+      const range = getResponsiveNodeSizeRange(width);
+      return `${range.min}:${range.max}`;
+    };
+    let lastNodeSizeRangeKey = isGraphContainerSizeReady(containerRef.current)
+      ? rangeKeyOf(containerRef.current.clientWidth)
+      : "";
+    let hasMeasured = false;
 
     const handleSize = () => {
       if (!cy || cy.destroyed?.()) return;
@@ -608,24 +485,29 @@ export function useCyResize({
           const el = containerRef.current;
           if (!isGraphContainerSizeReady(el)) {
             lastNodeSizeRangeKey = "";
+            hasMeasured = false;
             return;
           }
 
-          const w = el.clientWidth;
-          const nodeSizeRange = getResponsiveNodeSizeRange(w);
-          const nodeSizeRangeKey = `${nodeSizeRange.min}:${nodeSizeRange.max}`;
-          const nodeSizeRangeChanged =
-            lastNodeSizeRangeKey !== "" && lastNodeSizeRangeKey !== nodeSizeRangeKey;
+          const nodeSizeRangeKey = rangeKeyOf(el.clientWidth);
+          // 노드 크기는 (가중치, 크기 범위)로만 정해지므로 범위가 같으면 다시 계산할 필요 없음.
+          // 가중치 변화는 레이아웃 쪽에서 현재 폭 기준으로 이미 반영
+          const nodeSizeRangeDiffers = lastNodeSizeRangeKey !== nodeSizeRangeKey;
+          // 겹침 재해소는 이전처럼 첫 측정 이후의 범위 변화에서만
+          const nodeSizeRangeChanged = hasMeasured && nodeSizeRangeDiffers;
+          hasMeasured = true;
           lastNodeSizeRangeKey = nodeSizeRangeKey;
 
           safeCyCall(cy, () => {
-            const highlightedNodes = cy.nodes(".search-highlight");
-            const hasHighlightedNodes = highlightedNodes.length > 0;
-            applyNodeSizes(
-              cy,
-              hasHighlightedNodes ? highlightedNodes : null,
-              hasHighlightedNodes ? 1.2 : 1,
-            );
+            if (nodeSizeRangeDiffers) {
+              const highlightedNodes = cy.nodes(".search-highlight");
+              const hasHighlightedNodes = highlightedNodes.length > 0;
+              applyNodeSizes(
+                cy,
+                hasHighlightedNodes ? highlightedNodes : null,
+                hasHighlightedNodes ? 1.2 : 1,
+              );
+            }
             if (nodeSizeRangeChanged) {
               detectAndResolveOverlap(cy, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE, {
                 ...OVERLAP_PROFILES.RESIZE,

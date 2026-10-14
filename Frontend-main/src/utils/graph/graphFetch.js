@@ -1,5 +1,5 @@
 /** 매크로 그래프 캐시 로더, relation timeline fetch */
-import { toPositiveInt, toTrimmedStringOrNull, asArray, clampPositivity, errorUtils, compareLocale } from '../common/valueUtils';
+import { toPositiveInt, toTrimmedStringOrNull, asArray, clampPositivity, toPositivityOrNull, errorUtils, compareLocale } from '../common/valueUtils';
 import { isSamePair, isGraphEdgeElement, normalizeElementId } from './graphCore';
 import {
   loadTtlStorage,
@@ -13,7 +13,7 @@ import {
   resolveLastEventIdxForChapter,
 } from '../common/cache/manifestCache';
 
-import { getCachedChapterEvents, createChapterGraphStateCursor } from './graphModel';
+import { getCachedChapterEvents } from './graphChapterCache';
 import {
   ensureBookRelationshipDeltas,
   accumulateDeltasToGraphResult,
@@ -153,6 +153,12 @@ export const loadGraphDataWithCache = async ({
 
 /** 엣지 툴팁 relation timeline 헬퍼·fetch (결과 캐시·중복 요청 방지는 react-query 담당) */
 
+/** manifest 기준 챕터 이벤트의 eventId (없으면 null) */
+function resolveChapterEventId(bookId, chapter, eventIdx) {
+  const structure = findManifestEventInChapter(bookId, chapter, { eventIdx });
+  return toTrimmedStringOrNull(eventUtils.resolveEventId(structure) ?? structure?.eventId);
+}
+
 function buildGraphResponseFromDeltas(
   bookId,
   chapter,
@@ -161,10 +167,7 @@ function buildGraphResponseFromDeltas(
   chapterEventIdOrder,
   previousResult = null
 ) {
-  const structure = findManifestEventInChapter(bookId, chapter, { eventIdx });
-  const eventId = toTrimmedStringOrNull(
-    eventUtils.resolveEventId(structure) ?? structure?.eventId
-  );
+  const eventId = resolveChapterEventId(bookId, chapter, eventIdx);
   const isSuccess = deltasBundle?.isSuccess !== false;
   const makeResponse = (result) => ({ isSuccess, code: 'SUCCESS', result });
 
@@ -231,25 +234,72 @@ function relationEventFromApiResult(fineData, id1, id2, idx) {
   return { idx, positivity };
 }
 
-/** 챕터 캐시에서 idx 시점의 id1–id2 간선 조회 함수 (diff 순회를 조회 간에 이어감) */
+/**
+ * 챕터 캐시에서 idx 시점의 id1–id2 간선 조회 함수 (diff 순회를 조회 간에 이어감).
+ * createChapterGraphStateCursor와 같은 diff 규칙을 따르되 이 쌍의 간선만 추적한다 —
+ * 시점마다 전체 elements 배열을 만들고 훑지 않음 (O(K·N) → O(N + Σdiff)).
+ */
 function createReconstructedEdgeFinder(chapterPayload, id1, id2) {
   const maxIdx = Number(chapterPayload?.maxEventIdx);
-  // 간선 조회만 하므로 시점마다 전체 복제·정렬하지 않음 (O(k·N log N) → O(k·N))
-  const stateAt = createChapterGraphStateCursor(chapterPayload, { readOnly: true, sortElements: false });
+  const baseSnapshot = chapterPayload?.baseSnapshot;
+  if (!baseSnapshot || !Array.isArray(baseSnapshot.elements)) return () => null;
+
+  const isPairEdge = (el) =>
+    isGraphEdgeElement(el) && isSamePair(eventUtils.resolveRelationNodeIds(el.data), id1, id2);
+  const baseIdx = Number(baseSnapshot.eventIdx) || 1;
+  const diffs = eventUtils.sortEventsByIdx(chapterPayload.diffs || []);
+  // diff 적용 전에는 커서가 base 배열을 그대로 쓰므로 (중복 id 포함) 같은 후보를 쓴다
+  const basePairEdges = baseSnapshot.elements.filter(isPairEdge);
+  let pairMap; // 첫 diff 적용 시 생성 (커서의 elementMap에서 이 쌍만)
+  let nextDiff;
+  let lastTarget = -Infinity;
+  const reset = () => {
+    pairMap = null;
+    nextDiff = 0;
+  };
+  reset();
+
+  const putIfPair = (item) => {
+    const id = normalizeElementId(item);
+    if (!id) return;
+    // 같은 id가 다른 쌍으로 바뀌면 이 쌍에서 빠짐
+    if (isPairEdge(item)) pairMap.set(id, item);
+    else pairMap.delete(id);
+  };
+
   return (eventIdx) => {
     // 캐시에 없는 이벤트는 마지막 스냅샷을 반복하지 않음 (잘못된 평탄 차트 방지)
     if (Number.isFinite(maxIdx) && maxIdx >= 1 && Number(eventIdx) > maxIdx) {
       return null;
     }
-    return findRelationInElements(stateAt(eventIdx)?.elements, id1, id2);
+    const target = Number(eventIdx);
+    // partial(through만 적재)은 base 이전 이벤트가 없음
+    if (chapterPayload.partial && target < baseIdx) return null;
+    if (!Number.isFinite(target) || target <= baseIdx) return findRelationInElements(basePairEdges, id1, id2);
+
+    if (target < lastTarget) reset();
+    lastTarget = target;
+    for (; nextDiff < diffs.length; nextDiff += 1) {
+      const diff = diffs[nextDiff];
+      const diffIdx = Number(diff?.eventIdx);
+      if (!Number.isFinite(diffIdx)) continue;
+      if (diffIdx > target) break;
+      if (!pairMap) {
+        // 커서의 toKeyedMap과 같이 base 전체를 뒤에서 덮어쓰는 순서로 반영 (같은 id의 다른 요소가 쌍 간선을 대체할 수 있음)
+        pairMap = new Map();
+        baseSnapshot.elements.forEach(putIfPair);
+      }
+      const elementDiff = diff?.elementDiff;
+      (elementDiff?.removedIds || []).forEach((id) => id && pairMap.delete(String(id)));
+      (elementDiff?.updated || []).forEach(putIfPair);
+      (elementDiff?.added || []).forEach(putIfPair);
+    }
+    return findRelationInElements(pairMap ? [...pairMap.values()] : basePairEdges, id1, id2);
   };
 }
 
 function readEdgePositivityValue(edgeOrRelation) {
-  const raw = edgeOrRelation?.data?.positivity ?? edgeOrRelation?.positivity;
-  if (raw == null || raw === '') return null;
-  const n = Number(raw);
-  return Number.isFinite(n) ? clampPositivity(n) : null;
+  return toPositivityOrNull(edgeOrRelation?.data?.positivity ?? edgeOrRelation?.positivity);
 }
 
 function walkEventIndices(lastEventIdx, lastOnly) {
@@ -304,19 +354,26 @@ function buildRelationTimelineFromChapterCache(bookId, id1, id2, chapterNum, eve
   return buildEventTimeline(eventNum, createReconstructedEdgeFinder(chapterPayload, id1, id2));
 }
 
-async function collectRelationEventsViaApi(fetchEventData, chapter, lastEventIdx, id1, id2, lastOnly) {
+/**
+ * lastOnly: 챕터의 마지막 관계만 필요 — 관계는 누적만 되고(삭제 없음) 긍정도도 이전 값을 이어받으므로
+ * eventId가 있는 마지막 이벤트 한 곳만 보면 된다. 거기 없으면 그 이전 이벤트에도 없다.
+ * (이전: 뒤에서부터 이벤트마다 delta 전체를 다시 정렬·누적 → 챕터당 O(K·D log D). 지금 O(D log D))
+ * eventId 없는 이벤트는 역순 탐색에선 항상 빈 결과라 누적 없이 건너뛴다.
+ */
+async function collectRelationEventsViaApi(fetchEventData, bookId, chapter, lastEventIdx, id1, id2, lastOnly) {
   const relationEvents = [];
   let incomplete = false;
 
   for (const idx of walkEventIndices(lastEventIdx, lastOnly)) {
+    if (lastOnly && !resolveChapterEventId(bookId, chapter, idx)) continue;
     try {
       const event = relationEventFromApiResult(await fetchEventData(chapter, idx), id1, id2, idx);
-      if (!event) continue;
-      relationEvents.push(event);
-      if (lastOnly) break;
+      if (event) relationEvents.push(event);
     } catch {
+      // 챕터 delta 로드 실패는 모든 이벤트에서 같은 캐시된 실패 → 한 번이면 충분
       incomplete = true;
     }
+    if (lastOnly) break;
   }
   return { events: relationEvents, incomplete };
 }
@@ -446,7 +503,7 @@ async function fetchRelationTimelineCumulativeUncached(bookId, id1, id2, selecte
       usedProbe = probed;
       if (lastOnly) {
         ({ events: relationEvents, incomplete } = await collectRelationEventsViaApi(
-          fetchEventData, chapter, lastEventIdx, id1, id2, true
+          fetchEventData, bookId, chapter, lastEventIdx, id1, id2, true
         ));
       } else {
         try {
@@ -468,6 +525,19 @@ async function fetchRelationTimelineCumulativeUncached(bookId, id1, id2, selecte
     chapterRelationCache.set(cacheKey, packed);
     return packed;
   };
+
+  // 챕터 캐시가 없는 챕터가 하나라도 있으면 1..selectedChapter deltas를 한 번에 확보.
+  // (챕터마다 ensureBookRelationshipDeltas를 순서대로 부르면 미캐시 챕터 수만큼 네트워크 왕복이 직렬로 쌓임)
+  // 실패는 무시 — 아래 챕터별 경로가 다시 시도하고 incomplete로 표시한다.
+  const needsDeltas = Array.from({ length: selectedChapter }, (_, i) => i + 1)
+    .some((chapter) => !getCachedChapterEvents(bookId, chapter)?.baseSnapshot);
+  if (needsDeltas) {
+    try {
+      await loadChapterDeltas(selectedChapter);
+    } catch {
+      /* 선택 챕터는 캐시된 실패를 재사용(원래와 같은 1회 시도), 나머지 챕터는 각자 재시도 */
+    }
+  }
 
   const points = [];
   const labelInfo = [];

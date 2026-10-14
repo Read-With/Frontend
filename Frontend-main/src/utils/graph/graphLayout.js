@@ -369,13 +369,67 @@ function discsOverlap(a, b, padding) {
   return dx * dx + dy * dy < minDist * minDist;
 }
 
+// 라벨 원 반경이 최대 72px라 셀이 작으면 조회 상자가 셀 수십 개로 커짐 → 반경 합 정도 크기로
+const PLACEMENT_GRID_CELL = 128;
+
+/**
+ * 원 격자 색인. 후보 원 a와 겹칠 수 있는 원 b는 중심 거리 < a.r + b.r + pad 이므로,
+ * 반경 (a.r + pad + 색인 내 최대 반경) 상자 안의 셀만 보면 빠짐없이 찾는다 (정확한 판정은 discsOverlap).
+ * 배치된 노드 전부와 비교하던 O(P)를 주변 셀의 원 수로 줄임 — 결과는 동일
+ */
+function createDiscGrid() {
+  const columns = new Map(); // gx → (gy → disc[]) 숫자 키 (문자열 키 생성 비용 회피)
+  let maxRadius = 0;
+  const cellOf = (v) => Math.floor(v / PLACEMENT_GRID_CELL);
+  return {
+    add(disc) {
+      if (disc.radius > maxRadius) maxRadius = disc.radius; // NaN이 최대 반경을 오염시키지 않도록
+      const gx = cellOf(disc.x);
+      const gy = cellOf(disc.y);
+      let column = columns.get(gx);
+      if (!column) columns.set(gx, (column = new Map()));
+      const bucket = column.get(gy);
+      if (bucket) bucket.push(disc);
+      else column.set(gy, [disc]);
+    },
+    /** probe와 겹칠 수 있는 원마다 visit(disc). visit이 true를 반환하면 중단하고 true 반환 */
+    some(probe, padding, visit) {
+      const reach = probe.radius + padding + maxRadius;
+      const x1 = cellOf(probe.x + reach);
+      const y0 = cellOf(probe.y - reach);
+      const y1 = cellOf(probe.y + reach);
+      for (let gx = cellOf(probe.x - reach); gx <= x1; gx += 1) {
+        const column = columns.get(gx);
+        if (!column) continue;
+        for (let gy = y0; gy <= y1; gy += 1) {
+          const bucket = column.get(gy);
+          if (!bucket) continue;
+          for (const disc of bucket) {
+            if (visit(disc)) return true;
+          }
+        }
+      }
+      return false;
+    },
+  };
+}
+
+function countOverlaps(grid, probe, padding) {
+  let n = 0;
+  grid.some(probe, padding, (o) => {
+    if (discsOverlap(probe, o, padding)) n += 1;
+    return false;
+  });
+  return n;
+}
+
 function addOccupiedDisc(occupied, p) {
-  occupied.bodies.push(placementBodyDisc(p.x, p.y, p.radius));
-  occupied.labels.push(placementLabelDisc(p.x, p.y, p.radius, p.label));
+  occupied.bodies.add(placementBodyDisc(p.x, p.y, p.radius));
+  occupied.labels.add(placementLabelDisc(p.x, p.y, p.radius, p.label));
 }
 
 function buildOccupiedDiscs(placedList) {
-  const occupied = { bodies: [], labels: [] };
+  const occupied = { bodies: createDiscGrid(), labels: createDiscGrid() };
   for (const p of placedList) addOccupiedDisc(occupied, p);
   return occupied;
 }
@@ -383,10 +437,7 @@ function buildOccupiedDiscs(placedList) {
 /** body-body만 hard collision */
 function candidateBodyCollides(cx, cy, newR, occupied, padding) {
   const body = placementBodyDisc(cx, cy, newR);
-  for (const o of occupied.bodies) {
-    if (discsOverlap(body, o, padding)) return true;
-  }
-  return false;
+  return occupied.bodies.some(body, padding, (o) => discsOverlap(body, o, padding));
 }
 
 /** body↔label / label↔label soft penalty */
@@ -394,16 +445,10 @@ function candidateLabelPenalty(cx, cy, newR, label, occupied, padding) {
   const body = placementBodyDisc(cx, cy, newR);
   const lab = placementLabelDisc(cx, cy, newR, label);
   const softPad = padding * 0.5;
-  let hits = 0;
-  for (const o of occupied.labels) {
-    if (discsOverlap(body, o, softPad)) hits += 1;
-  }
-  for (const o of occupied.bodies) {
-    if (discsOverlap(lab, o, softPad)) hits += 1;
-  }
-  for (const o of occupied.labels) {
-    if (discsOverlap(lab, o, softPad)) hits += 0.5;
-  }
+  const hits =
+    countOverlaps(occupied.labels, body, softPad)
+    + countOverlaps(occupied.bodies, lab, softPad)
+    + countOverlaps(occupied.labels, lab, softPad) * 0.5;
   return hits * PLACEMENT_LABEL_PENALTY;
 }
 

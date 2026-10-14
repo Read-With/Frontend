@@ -1,5 +1,6 @@
-import { useCallback, useId, useRef } from 'react';
-import { useModalFocusTrap, useLatestRef, useBodyScrollLock } from '../../hooks/common/hooksShared';
+import { useCallback, useId } from 'react';
+import { useLatestRef } from '../../hooks/common/hooksShared';
+import ModalFrame from '../common/ModalFrame';
 import '../../pages/BookmarksPage.css';
 
 /** 북마크 삭제 확인 — 뷰어 툴바(ViewerPage)와 북마크 목록(BookmarksPage) 공용 */
@@ -12,7 +13,6 @@ function BookmarkDeleteConfirm({
 }) {
   const titleId = useId();
   const descId = useId();
-  const dialogRef = useRef(null);
   const busyRef = useLatestRef(busy);
   const onCancelRef = useLatestRef(onCancel);
   // busy/onCancel을 ref로 안정화 — useModalFocusTrap의 onClose 참조가 busy 토글마다 바뀌면
@@ -21,27 +21,18 @@ function BookmarkDeleteConfirm({
     if (!busyRef.current) onCancelRef.current?.();
   }, [busyRef, onCancelRef]);
 
-  useModalFocusTrap(open, dialogRef, handleClose);
-  useBodyScrollLock(open);
-
-  if (!open) return null;
-
   return (
-    <div
-      className="bm-confirm-overlay"
-      role="presentation"
-      onClick={busy ? undefined : onCancel}
+    <ModalFrame
+      open={open}
+      onClose={onCancel}
+      closeOnOverlay={!busy}
+      onEscape={handleClose}
+      overlayClassName="bm-confirm-overlay"
+      className="bm-confirm-dialog"
+      labelledBy={titleId}
+      describedBy={descId}
+      lockScroll
     >
-      <div
-        ref={dialogRef}
-        className="bm-confirm-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        aria-describedby={descId}
-        tabIndex={-1}
-        onClick={(e) => e.stopPropagation()}
-      >
         <p id={titleId} className="bm-confirm-title">
           북마크를 삭제할까요?
         </p>
@@ -66,8 +57,7 @@ function BookmarkDeleteConfirm({
             {busy ? '삭제 중…' : '삭제'}
           </button>
         </div>
-      </div>
-    </div>
+    </ModalFrame>
   );
 }
 

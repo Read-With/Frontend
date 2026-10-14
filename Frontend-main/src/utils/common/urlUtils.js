@@ -200,10 +200,8 @@ function routeProtectedPublicAssetForSameOriginProxy(url) {
 }
 
 function resolveAssetFetchUrl(url) {
-  if (url == null) return '';
-  const s = String(url).trim();
-  if (!s) return '';
-  return routeProtectedPublicAssetForSameOriginProxy(preferDevPublicProxyPath(sanitizeAssetUrl(s)));
+  const s = sanitizeAssetUrl(url);
+  return s ? routeProtectedPublicAssetForSameOriginProxy(preferDevPublicProxyPath(s)) : '';
 }
 
 export function resolveApiArtifactUrl(path) {

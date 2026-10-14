@@ -7,9 +7,10 @@ import {
   normalizeGraphSearchTerm,
   resolveGraphSearchFilter,
 } from '../../utils/graph/graphHighlight.js';
-import { filterMainCharacters } from '../../utils/graph/graphModel';
+import { filterMainCharacters } from '../../utils/graph/graphElements';
 import { sortElementsByDataId } from '../../utils/graph/graphCore';
 import { useLatestRef, NARROW_VIEWPORT_MQ } from '../common/hooksShared';
+import { cycleIndex } from '../../utils/common/valueUtils';
 
 const SIDEBAR_OPEN_STORAGE_KEY = 'graph-chapter-sidebar-open';
 
@@ -129,7 +130,10 @@ export function useGraphElementPipeline({
 }
 
 export function useGraphSearch(elements, currentChapterData = null) {
+  // searchTerm: 팔레트 입력값 / appliedSearchTerm: 제출(Enter·제안 선택)된 검색어.
+  // 그래프 필터는 적용된 검색어만 따름 — 입력 중 키마다 필터·Cytoscape 재동기화·재배치가 일어나지 않도록
   const [searchTerm, setSearchTerm] = useState('');
+  const [appliedSearchTerm, setAppliedSearchTerm] = useState('');
   const [filteredElements, setFilteredElements] = useState([]);
   const [isSearchActive, setIsSearchActive] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
@@ -137,7 +141,8 @@ export function useGraphSearch(elements, currentChapterData = null) {
   const [selectedIndex, setSelectedIndex] = useState(-1);
 
   const suppressSuggestionsRef = useRef(false);
-  const skipFilterEffectRef = useRef(false);
+  // 마지막으로 필터한 (elements, 검색어) — 같은 조합이면 effect가 다시 필터하지 않음 (제출 직후 중복 방지)
+  const lastFilterRef = useRef({ elements: null, term: '' });
   const elementsRef = useLatestRef(elements);
   const chapterDataRef = useLatestRef(currentChapterData);
 
@@ -152,6 +157,7 @@ export function useGraphSearch(elements, currentChapterData = null) {
   }, []);
 
   const runSearchFilter = useCallback((sourceElements, term) => {
+    lastFilterRef.current = { elements: sourceElements, term };
     const { applied, filtered } = resolveGraphSearchFilter(
       sourceElements,
       term,
@@ -161,35 +167,34 @@ export function useGraphSearch(elements, currentChapterData = null) {
     return applied;
   }, [chapterDataRef]);
 
+  // 검색 중 elements가 바뀌면(이벤트 전환 등) 적용된 검색어로 다시 필터
   useEffect(() => {
-    if (!isSearchActive) return;
-    const { trimmed } = normalizeGraphSearchTerm(searchTerm);
-    if (!trimmed) return;
-    if (skipFilterEffectRef.current) {
-      skipFilterEffectRef.current = false;
-      return;
-    }
-    runSearchFilter(elements, trimmed);
-  }, [elements, isSearchActive, searchTerm, runSearchFilter]);
+    if (!isSearchActive || !appliedSearchTerm) return;
+    const last = lastFilterRef.current;
+    if (last.elements === elements && last.term === appliedSearchTerm) return;
+    runSearchFilter(elements, appliedSearchTerm);
+  }, [elements, isSearchActive, appliedSearchTerm, runSearchFilter]);
 
   const handleSearchSubmit = useCallback((term) => {
     const { trimmed } = normalizeGraphSearchTerm(term);
     suppressSuggestionsRef.current = true;
-    skipFilterEffectRef.current = true;
     setSearchTerm(term);
     setIsSearchActive(!!trimmed);
     closeSuggestions();
 
     const applied = runSearchFilter(elementsRef.current, trimmed);
-    if (!applied) {
-      skipFilterEffectRef.current = false;
+    if (applied) {
+      setAppliedSearchTerm(trimmed);
+    } else {
       setIsSearchActive(false);
+      setAppliedSearchTerm('');
     }
   }, [runSearchFilter, elementsRef, closeSuggestions]);
 
   const clearSearch = useCallback(() => {
     suppressSuggestionsRef.current = false;
     setSearchTerm('');
+    setAppliedSearchTerm('');
     setFilteredElements([]);
     setIsSearchActive(false);
     setSuggestions([]);
@@ -216,24 +221,13 @@ export function useGraphSearch(elements, currentChapterData = null) {
     setShowSuggestions(true);
   }, [searchTerm, elements, chapterDataRef, closeSuggestions]);
 
+  // Escape는 검색 팔레트가 window 캡처 단계에서 처리(전파 중단)하므로 여기선 화살표만
   const handleKeyDown = useCallback((e) => {
-    if (e.key === 'Escape') {
-      if (showSuggestions) closeSuggestions();
-      return;
-    }
-
-    if ((e.key !== 'ArrowDown' && e.key !== 'ArrowUp') || !showSuggestions || !(suggestions?.length > 0)) {
-      return;
-    }
-
+    const dir = { ArrowDown: 1, ArrowUp: -1 }[e.key];
+    if (!dir || !showSuggestions || !(suggestions?.length > 0)) return;
     e.preventDefault();
-    const len = suggestions.length;
-    const dir = e.key === 'ArrowDown' ? 1 : -1;
-    setSelectedIndex((prev) => {
-      if (prev < 0) return dir > 0 ? 0 : len - 1;
-      return (prev + dir + len) % len;
-    });
-  }, [showSuggestions, suggestions, closeSuggestions]);
+    setSelectedIndex((prev) => cycleIndex(prev, suggestions.length, dir));
+  }, [showSuggestions, suggestions]);
 
   const onGenerateSuggestions = useCallback((term) => {
     suppressSuggestionsRef.current = false;
@@ -261,6 +255,7 @@ export function useGraphSearch(elements, currentChapterData = null) {
   const searchState = useMemo(
     () => ({
       searchTerm,
+      appliedSearchTerm,
       isSearchActive,
       filteredElements,
       fitNodeIds,
@@ -268,7 +263,7 @@ export function useGraphSearch(elements, currentChapterData = null) {
       showSuggestions,
       selectedIndex,
     }),
-    [searchTerm, isSearchActive, filteredElements, fitNodeIds, suggestions, showSuggestions, selectedIndex],
+    [searchTerm, appliedSearchTerm, isSearchActive, filteredElements, fitNodeIds, suggestions, showSuggestions, selectedIndex],
   );
 
   return { searchState, searchActions };

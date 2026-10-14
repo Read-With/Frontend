@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BookOpen, ChevronLeft, ChevronRight } from 'lucide-react';
-import { buildChapterSidebarItems } from '../../utils/graph/graphCore.js';
-import { useIsNarrowViewport } from '../../hooks/common/hooksShared';
-import { joinClasses } from '../../utils/styles/styles.js';
-import './RelationGraph.css';
+import { buildChapterSidebarItems } from '../../../utils/graph/graphCore.js';
+import { useIsNarrowViewport } from '../../../hooks/common/hooksShared';
+import { stepIndex } from '../../../utils/common/valueUtils';
+import { joinClasses } from '../../../utils/styles/styles.js';
+import '../styles/graph.css';
 
 const META_READING = '본문 읽는 중';
 const META_NO_GRAPH = '관계 데이터 없음';
@@ -75,14 +76,10 @@ export default function ChapterSidebar({
       if (!chapterItems.length) return;
       const max = chapterItems.length - 1;
 
-      if (event.key === 'ArrowDown') {
+      const arrow = { ArrowDown: 1, ArrowUp: -1 }[event.key];
+      if (arrow) {
         event.preventDefault();
-        setFocusIndex((i) => (i < 0 ? 0 : Math.min(max, i + 1)));
-        return;
-      }
-      if (event.key === 'ArrowUp') {
-        event.preventDefault();
-        setFocusIndex((i) => (i < 0 ? max : Math.max(0, i - 1)));
+        setFocusIndex((i) => stepIndex(i, chapterItems.length, arrow));
         return;
       }
       if (event.key === 'Home') {

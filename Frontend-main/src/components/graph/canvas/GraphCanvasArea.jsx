@@ -3,7 +3,7 @@
 import { useId, useRef } from 'react';
 import CytoscapeGraph from './CytoscapeGraph';
 import GraphA11yStatus from './GraphA11yStatus';
-import { useGraphCanvasKeyboard } from '../../hooks/graph/useGraphCy.js';
+import { useGraphCanvasKeyboard } from '../../../hooks/graph/useGraphCy.js';
 
 /**
  * 나머지 props(...cyProps)는 CytoscapeGraph로 그대로 전달.

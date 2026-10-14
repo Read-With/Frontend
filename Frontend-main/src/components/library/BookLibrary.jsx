@@ -37,7 +37,7 @@ async function prewarmGraphBookCache(book, options = {}) {
   if (!bookId) return null;
 
   try {
-    const { ensureGraphBookCache } = await import('../../utils/graph/graphModel');
+    const { ensureGraphBookCache } = await import('../../utils/graph/graphChapterDiscovery');
     return await ensureGraphBookCache(bookId, options);
   } catch (error) {
     if (error?.name !== 'AbortError') {

@@ -1,20 +1,13 @@
 /** 뷰어 그래프 파이프라인: API/캐시 조회·변환·타깃 계산 */
 
-import {
-  aggregateCharactersFromEvents,
-  buildElementsFromGraphPayload,
-  getGraphEventState,
-  getCachedChapterMaxEventIdx,
-} from '../graph/graphModel';
+import { aggregateCharactersFromEvents, buildElementsFromGraphPayload } from '../graph/graphElements';
+import { getGraphEventState, getCachedChapterMaxEventIdx } from '../graph/graphChapterCache';
 import {
   resolveGraphElementsProfileImages,
   graphElementsHaveUnresolvedProfileImages,
   GRAPH_IMAGE_DEFERRED_RETRY_MS,
 } from '../graph/graphProfileImages';
-import {
-  enrichGraphCharacters,
-  applyDisplayNamesToElements,
-} from '../graph/graphCore';
+import { enrichGraphCharacters, applyDisplayNamesToElements } from '../graph/graphCharacterNames';
 import { resolveChapterIndex, toPositiveInt, toPositiveNumberOrNull, asArray } from '../common/valueUtils';
 import { cacheKeyUtils, eventUtils, ELEMENTS_TO_RELATIONS_OPTS, formatChapterOrdinalLabel } from './viewerCore';
 import { resolveServerEventMatch } from './viewerSession';

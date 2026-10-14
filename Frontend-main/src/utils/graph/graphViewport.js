@@ -1,6 +1,6 @@
-/** 그래프 뷰포트: 툴팁 좌표·캔버스 경계·fit/zoom·선택 포커스·키보드 탐색 */
+/** 그래프 뷰포트: 툴팁 좌표·캔버스 경계·fit/zoom·선택 포커스 (키보드 탐색은 graphKeyboardNav) */
 
-import { compareKo, cycleIndex, toPositiveNumberOrNull } from '../common/valueUtils';
+import { toPositiveNumberOrNull } from '../common/valueUtils';
 import { GRAPH_ZOOM } from './graphCore';
 import { OVERLAP_RESOLVE, readNodeRadius } from './graphLayout';
 
@@ -51,7 +51,7 @@ function getPrimaryGraphCanvasRect() {
 
 export function getCyClientRect(cy) {
   try {
-    const el = typeof cy?.container === 'function' ? cy.container() : null;
+    const el = cy ? cy.container() : null;
     if (el) {
       const r = el.getBoundingClientRect();
       if (r.width > 0 && r.height > 0) return r;
@@ -179,16 +179,19 @@ export function placeTooltipInCanvasAwayFromFocus({
   );
 }
 
-/** cy 뷰포트 픽셀 크기 (메서드 없으면 0) */
-const readViewportSize = (cy) => ({
-  viewW: typeof cy.width === 'function' ? cy.width() : 0,
-  viewH: typeof cy.height === 'function' ? cy.height() : 0,
-});
+/** cy 뷰포트 픽셀 크기 */
+const readViewportSize = (cy) => ({ viewW: cy.width(), viewH: cy.height() });
+
+/** 가로·세로가 모두 양수인 뷰포트 크기, 아니면 null (fit·포커스 계산 전 가드) */
+const readUsableViewportSize = (cy) => {
+  const size = readViewportSize(cy);
+  return size.viewW > 0 && size.viewH > 0 ? size : null;
+};
 
 /** 지금 보이는 영역의 model 좌표. cy.extent() 우선, 없으면 pan·zoom으로 역산. 크기 0이면 null */
 function resolveVisibleModelExtent(cy, container, zoom) {
   try {
-    const e = typeof cy.extent === 'function' ? cy.extent() : null;
+    const e = cy.extent();
     if (e && [e.x1, e.x2, e.y1, e.y2].every(Number.isFinite)) {
       return { x1: e.x1, x2: e.x2, y1: e.y1, y2: e.y2 };
     }
@@ -200,7 +203,7 @@ function resolveVisibleModelExtent(cy, container, zoom) {
   const viewW = (container?.clientWidth > 0 ? container.clientWidth : cyW) || 0;
   const viewH = (container?.clientHeight > 0 ? container.clientHeight : cyH) || 0;
   if (!(viewW > 0) || !(viewH > 0)) return null;
-  const pan = typeof cy.pan === 'function' ? cy.pan() : { x: 0, y: 0 };
+  const pan = cy.pan();
   const panX = Number.isFinite(pan?.x) ? pan.x : 0;
   const panY = Number.isFinite(pan?.y) ? pan.y : 0;
   // rendered = model * zoom + pan → model = (rendered - pan) / zoom
@@ -222,7 +225,7 @@ function resolveVisibleModelExtent(cy, container, zoom) {
 export const ensureElementsInBounds = (cy, container, options = {}) => {
   if (!cy || cy.destroyed?.()) return false;
 
-  const safeZoom = toPositiveNumberOrNull(typeof cy.zoom === 'function' ? cy.zoom() : 1) ?? 1;
+  const safeZoom = toPositiveNumberOrNull(cy.zoom()) ?? 1;
 
   const extent = resolveVisibleModelExtent(cy, container, safeZoom);
   if (!extent) return false;
@@ -290,7 +293,7 @@ export function isElementsFitInViewport(cy, eles, paddingPx = 0) {
 
   let extent;
   try {
-    extent = typeof cy.extent === 'function' ? cy.extent() : null;
+    extent = cy.extent();
   } catch {
     extent = null;
   }
@@ -298,7 +301,7 @@ export function isElementsFitInViewport(cy, eles, paddingPx = 0) {
     return true;
   }
 
-  const safeZoom = toPositiveNumberOrNull(typeof cy.zoom === 'function' ? cy.zoom() : 1) ?? 1;
+  const safeZoom = toPositiveNumberOrNull(cy.zoom()) ?? 1;
   const pad = Math.max(0, paddingPx) / safeZoom;
 
   return (
@@ -346,10 +349,11 @@ export function fitGraphToNodes(cy, opts = {}) {
     if (fill > 1) applyFitFillZoom(cy, fill);
   };
   try {
-    if (typeof cy.resize === 'function') cy.resize();
+    cy.resize();
 
-    const { viewW, viewH } = readViewportSize(cy);
-    if (!(viewW > 0) || !(viewH > 0)) return false;
+    const viewport = readUsableViewportSize(cy);
+    if (!viewport) return false;
+    const { viewW, viewH } = viewport;
 
     const fitEles = resolveFitElements(cy, options.eles);
     if (!fitEles.length) return false;
@@ -386,7 +390,7 @@ function lowerMinZoomToFit(cy, fitEles, viewW, viewH, padding) {
       Math.max(viewW - pad, 1) / modelW,
       Math.max(viewH - pad, 1) / modelH,
     );
-    const currentMin = typeof cy.minZoom === 'function' ? cy.minZoom() : GRAPH_ZOOM.MIN;
+    const currentMin = cy.minZoom();
     if (Number.isFinite(needZoom) && needZoom > 0 && needZoom < currentMin) {
       cy.minZoom(Math.max(0.05, needZoom * 0.98));
     }
@@ -397,21 +401,7 @@ function lowerMinZoomToFit(cy, fitEles, viewW, viewH, padding) {
 
 /** fit 직후 중심 기준 추가 줌인 (소규모 그래프가 멀리 보이지 않게) */
 function applyFitFillZoom(cy, fill) {
-  if (!cy || cy.destroyed?.() || !(fill > 1)) return;
-  try {
-    const current = cy.zoom();
-    const next = Math.min(cy.maxZoom(), current * fill);
-    if (!(next > current)) return;
-    cy.zoom({
-      level: next,
-      renderedPosition: {
-        x: cy.width() / 2,
-        y: cy.height() / 2,
-      },
-    });
-  } catch {
-    /* ignore */
-  }
+  if (fill > 1) zoomGraphByFactor(cy, fill);
 }
 
 /**
@@ -481,247 +471,16 @@ export function restoreCyViewport(cy, snapshot, opts = {}) {
   }
   const duration = Number.isFinite(opts.duration) ? Math.max(0, opts.duration) : 0;
   try {
-    if (typeof cy.stop === 'function') cy.stop();
-    if (duration > 0 && typeof cy.animate === 'function') {
+    cy.stop();
+    if (duration > 0) {
       cy.animate({ zoom, pan, duration, easing: 'ease-in-out' });
-    } else if (typeof cy.viewport === 'function') {
-      cy.viewport({ zoom, pan });
     } else {
-      cy.zoom(zoom);
-      cy.pan(pan);
+      cy.viewport({ zoom, pan });
     }
     return true;
   } catch {
     return false;
   }
-}
-
-function graphElementLabel(ele) {
-  if (!ele?.length) return '';
-  const data = ele.data?.() || {};
-  if (typeof ele.isNode === 'function' && ele.isNode()) {
-    return data.common_name || data.label || data.name || String(data.id || '이름 없음');
-  }
-  const src = ele.source?.()?.data?.() || {};
-  const tgt = ele.target?.()?.data?.() || {};
-  const sn = src.common_name || src.label || src.name || '인물';
-  const tn = tgt.common_name || tgt.label || tgt.name || '인물';
-  return `${sn}와 ${tn}의 관계`;
-}
-
-function isNavigableGraphElement(ele) {
-  if (!ele?.length) return false;
-  if (typeof ele.visible === 'function' && !ele.visible()) return false;
-  if (typeof ele.hasClass === 'function' && ele.hasClass('faded')) return false;
-  return true;
-}
-
-function compareByGraphLabelKo(a, b) {
-  return compareKo(graphElementLabel(a), graphElementLabel(b));
-}
-
-function listNavigableGraphNodes(cy) {
-  if (!cy || cy.destroyed?.()) return [];
-  try {
-    return cy
-      .nodes()
-      .filter((n) => isNavigableGraphElement(n))
-      .sort(compareByGraphLabelKo)
-      .toArray();
-  } catch {
-    return [];
-  }
-}
-
-function listNavigableGraphEdgesForNode(node) {
-  if (!node?.length) return [];
-  try {
-    return node
-      .connectedEdges()
-      .filter((e) => isNavigableGraphElement(e))
-      .sort(compareByGraphLabelKo)
-      .toArray();
-  } catch {
-    return [];
-  }
-}
-
-function setKeyboardFocusElement(cy, element) {
-  if (!cy || cy.destroyed?.()) return;
-  try {
-    cy.batch(() => {
-      cy.nodes('.kb-focus').removeClass('kb-focus');
-      cy.edges('.kb-focus').removeClass('kb-focus');
-      if (element?.length) element.addClass('kb-focus');
-    });
-  } catch {
-    /* ignore */
-  }
-}
-
-function commitKeyboardFocus(cy, focusRef, kind, ele) {
-  setKeyboardFocusElement(cy, ele);
-  if (!focusRef) return;
-  focusRef.current = ele?.length ? { kind, id: String(ele.id()) } : null;
-}
-
-function announceFocus(kind, ele, index, total) {
-  const pos = `${index + 1}/${total}`;
-  const label = graphElementLabel(ele);
-  return kind === 'edge'
-    ? `${label} 포커스. ${pos}. Enter로 상세.`
-    : `인물 ${label} 포커스. ${pos}. Enter로 상세, 선택 후 좌우로 관계.`;
-}
-
-function moveKeyboardFocus(cy, {
-  list,
-  kind,
-  delta,
-  focusRef,
-  currentId,
-  fallbackId = null,
-  onAnnounce,
-  center = false,
-}) {
-  if (!list.length) {
-    onAnnounce?.(kind === 'edge' ? '연결된 관계가 없습니다.' : '탐색할 인물이 없습니다.');
-    return true;
-  }
-  let idx = list.findIndex((el) => String(el.id()) === String(currentId));
-  if (idx < 0 && fallbackId != null) {
-    idx = list.findIndex((el) => String(el.id()) === String(fallbackId));
-  }
-  idx = cycleIndex(idx, list.length, delta);
-  const ele = list[idx];
-  commitKeyboardFocus(cy, focusRef, kind, ele);
-  if (center) {
-    try {
-      centerSelectionOnElementId(cy, ele.id(), {
-        duration: 220,
-        padding: 48,
-        reserveRight: 24,
-      });
-    } catch {
-      /* ignore */
-    }
-  }
-  onAnnounce?.(announceFocus(kind, ele, idx, list.length));
-  return true;
-}
-
-const ZOOM_KEY_FACTORS = new Map([
-  ['+', GRAPH_ZOOM.STEP],
-  ['=', GRAPH_ZOOM.STEP],
-  ['-', 1 / GRAPH_ZOOM.STEP],
-  ['_', 1 / GRAPH_ZOOM.STEP],
-]);
-
-const ARROW_KEYS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
-
-function isTypingTarget(target) {
-  const tag = target?.tagName;
-  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || Boolean(target?.isContentEditable);
-}
-
-function clearGraphKeyboardFocus(cy, { onClearSelection, keyboardFocusRef, onAnnounce }) {
-  onClearSelection?.();
-  setKeyboardFocusElement(cy, null);
-  if (keyboardFocusRef) keyboardFocusRef.current = null;
-  onAnnounce?.('선택과 포커스를 해제했습니다.');
-  return true;
-}
-
-/** 화살표: 인물 순환. 노드 선택 중 좌우는 그 인물의 연결 관계 순환 */
-function moveFocusByArrow(cy, key, { keyboardFocusRef, onAnnounce, selectedKind, selectedId }) {
-  const focus = keyboardFocusRef?.current;
-  const delta = key === 'ArrowDown' || key === 'ArrowRight' ? 1 : -1;
-  const isHorizontal = key === 'ArrowLeft' || key === 'ArrowRight';
-
-  if (selectedKind === 'node' && selectedId && isHorizontal) {
-    return moveKeyboardFocus(cy, {
-      list: listNavigableGraphEdgesForNode(cy.getElementById(String(selectedId))),
-      kind: 'edge',
-      delta,
-      focusRef: keyboardFocusRef,
-      currentId: focus?.kind === 'edge' ? focus.id : null,
-      onAnnounce,
-    });
-  }
-
-  return moveKeyboardFocus(cy, {
-    list: listNavigableGraphNodes(cy),
-    kind: 'node',
-    delta,
-    focusRef: keyboardFocusRef,
-    currentId: focus?.kind === 'node' ? focus.id : null,
-    fallbackId: selectedId,
-    onAnnounce,
-    center: true,
-  });
-}
-
-/** Enter/Space: 포커스 요소 선택 (포커스가 없으면 첫 인물) */
-function activateKeyboardFocus(cy, { keyboardFocusRef, onSelectById, onAnnounce }) {
-  let kind = keyboardFocusRef?.current?.kind;
-  let id = keyboardFocusRef?.current?.id;
-  if (!id) {
-    const nodes = listNavigableGraphNodes(cy);
-    if (!nodes.length) {
-      onAnnounce?.('선택할 인물이 없습니다.');
-      return true;
-    }
-    kind = 'node';
-    id = String(nodes[0].id());
-    commitKeyboardFocus(cy, keyboardFocusRef, 'node', nodes[0]);
-  }
-
-  if (!onSelectById?.(kind, id)) {
-    onAnnounce?.('선택을 적용하지 못했습니다.');
-    return true;
-  }
-  const label = graphElementLabel(cy.getElementById(String(id)));
-  onAnnounce?.(kind === 'edge' ? `${label} 상세를 열었습니다.` : `인물 ${label} 상세를 열었습니다.`);
-  return true;
-}
-
-/**
- * 그래프 캔버스 region 포커스 단축키.
- * +/= 확대, - 축소, 0 맞춤, Escape 선택·포커스 해제.
- * 화살표: 인물 순환(선택 중 좌우는 연결 관계). Enter/Space: 포커스 선택.
- * @returns {boolean} 처리 여부
- */
-export function handleGraphCanvasHotkeys(event, options = {}) {
-  if (!event || event.defaultPrevented) return false;
-  if (event.metaKey || event.ctrlKey || event.altKey) return false;
-  if (isTypingTarget(event.target)) return false;
-
-  const { cy } = options;
-  const { key } = event;
-
-  if (key === 'Escape') {
-    event.preventDefault();
-    return clearGraphKeyboardFocus(cy, options);
-  }
-
-  if (!cy || cy.destroyed?.()) return false;
-
-  if (ZOOM_KEY_FACTORS.has(key)) {
-    event.preventDefault();
-    return zoomGraphByFactor(cy, ZOOM_KEY_FACTORS.get(key));
-  }
-  if (key === '0') {
-    event.preventDefault();
-    return fitGraphToNodes(cy, { duration: GRAPH_ZOOM.FIT_DURATION_MS });
-  }
-  if (ARROW_KEYS.has(key)) {
-    event.preventDefault();
-    return moveFocusByArrow(cy, key, options);
-  }
-  if (key === 'Enter' || key === ' ') {
-    event.preventDefault();
-    return activateKeyboardFocus(cy, options);
-  }
-  return false;
 }
 
 /**
@@ -753,16 +512,15 @@ export function getSelectionFocusElements(cy, element) {
   return element.union(directEdges).union(directEdges.connectedNodes());
 }
 
+const boundingBoxCenter = (bb) => ({ x: (bb.x1 + bb.x2) / 2, y: (bb.y1 + bb.y2) / 2 });
+
 /** focus 요소들의 모델 좌표 중심점 */
 function getFocusElementsModelCenter(focusEles) {
   if (!focusEles?.length) return null;
   try {
     const bb = focusEles.boundingBox({ includeLabels: false, includeOverlays: false });
     if (!bb || !Number.isFinite(bb.x1) || !Number.isFinite(bb.x2)) return null;
-    return {
-      x: (bb.x1 + bb.x2) / 2,
-      y: (bb.y1 + bb.y2) / 2,
-    };
+    return boundingBoxCenter(bb);
   } catch {
     return null;
   }
@@ -792,8 +550,9 @@ function animateCenterOnFocusElements(cy, focusEles, options = {}) {
     const reserveTop = Math.max(0, Number(options.reserveTop) || 0);
     const reserveBottom = Math.max(0, Number(options.reserveBottom) || 0);
 
-    const { viewW, viewH } = readViewportSize(cy);
-    if (!(viewW > 0) || !(viewH > 0)) return false;
+    const viewport = readUsableViewportSize(cy);
+    if (!viewport) return false;
+    const { viewW, viewH } = viewport;
 
     const usable = {
       x1: padding + reserveLeft,
@@ -829,14 +588,11 @@ function animateCenterOnFocusElements(cy, focusEles, options = {}) {
 
     const modelW = Math.max(bb.w, bb.x2 - bb.x1, 1);
     const modelH = Math.max(bb.h, bb.y2 - bb.y1, 1);
-    const center = {
-      x: (bb.x1 + bb.x2) / 2,
-      y: (bb.y1 + bb.y2) / 2,
-    };
+    const center = boundingBoxCenter(bb);
 
     const currentZoom = cy.zoom();
-    const minZoom = typeof cy.minZoom === 'function' ? cy.minZoom() : GRAPH_ZOOM.MIN;
-    const maxZoom = typeof cy.maxZoom === 'function' ? cy.maxZoom() : GRAPH_ZOOM.MAX;
+    const minZoom = cy.minZoom();
+    const maxZoom = cy.maxZoom();
     const renderedW = modelW * currentZoom;
     const renderedH = modelH * currentZoom;
 

@@ -39,7 +39,7 @@ import {
 } from '../common/cache/progressCache';
 import { setManifestData, getManifestFromCache } from '../common/cache/manifestCache';
 import { withInflight } from '../common/cache/cacheManager';
-import { normalizeBookCore } from '../common/bookNormalize';
+import { normalizeV2Book } from '../common/bookNormalize';
 import { getStoredAccessToken, AUTH_CLEARED_EVENT } from '../security/authTokenStorage';
 import {
   DEFAULT_BOOKMARK_COLOR,
@@ -54,15 +54,10 @@ const withNormalizedResult = (data, normalize) => {
   return data;
 };
 
-/** v2 books 응답 정규화 (목록·상세) */
-const normalizeV2Book = (book) => {
-  if (!book || typeof book !== 'object') return book;
-  return {
-    ...book,
-    ...normalizeBookCore(book),
-    updatedAt: book.updatedAt ?? null,
-    isFavorite: !!book.isFavorite,
-  };
+/** 성공 응답의 목록 result를 항목별 정규화 (data를 그대로 반환) */
+const withNormalizedList = (data, normalize) => {
+  if (data?.isSuccess && Array.isArray(data.result)) data.result = data.result.map(normalize);
+  return data;
 };
 
 const buildBooksQueryString = (params = {}) => {
@@ -102,10 +97,7 @@ export const getBooks = async (params = {}) => {
     });
     return softEmpty;
   }
-  if (data?.isSuccess && Array.isArray(data.result)) {
-    data.result = data.result.map(normalizeV2Book);
-  }
-  return data;
+  return withNormalizedList(data, normalizeV2Book);
 };
 
 /** getBooks 응답에서 책 배열만 추출 (실패 시 빈 배열) */
@@ -256,10 +248,7 @@ const getBookmarks = async (bookId, sort = 'time_desc') => {
       });
       return softEmpty;
     }
-    if (data?.isSuccess && Array.isArray(data.result)) {
-      data.result = data.result.map(normalizeBookmarkDto);
-    }
-    return data;
+    return withNormalizedList(data, normalizeBookmarkDto);
   } catch (error) {
     errorUtils.logError('getBookmarks', error);
     throw error;

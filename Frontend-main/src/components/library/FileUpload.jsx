@@ -11,6 +11,7 @@ import {
 } from '../../utils/library/libraryUtils';
 import { normalizeTitle, normalizeAuthor, errorUtils } from '../../utils/common/valueUtils';
 import { findCanonicalBook } from '../../hooks/books/bookHooks';
+import { onActivationKey } from '../../utils/styles/styles';
 import { useModalFocusTrap, useAsyncRequestGuard, useMountedRef } from '../../hooks/common/hooksShared';
 import './LibraryModalChrome.css';
 import './FileUpload.css';
@@ -187,12 +188,7 @@ const FileUpload = ({ onUploadSuccess, onClose }) => {
     if (!uploadingRef.current && e.target === e.currentTarget) onClose();
   };
 
-  const handleDropzoneKeyDown = (e) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      openFilePicker();
-    }
-  };
+  const handleDropzoneKeyDown = onActivationKey(openFilePicker);
 
   const handleFileInputChange = (e) => {
     if (e.target.files?.length) handleFiles(e.target.files);

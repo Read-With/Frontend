@@ -15,7 +15,7 @@ const AdminPage = lazy(() => import('./pages/AdminPage'));
 const MyPage = lazy(() => import('./pages/MyPage'));
 const ViewerPage = lazy(() => import('./components/viewer/ViewerPage'));
 const BookmarksPage = lazy(() => import('./pages/BookmarksPage'));
-const GraphPage = lazy(() => import('./components/graph/GraphPage'));
+const GraphPage = lazy(() => import('./components/graph/page/GraphPage'));
 
 const PageLoader = ({ fullScreen = false }) => (
   <div

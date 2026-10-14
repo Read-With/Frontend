@@ -19,6 +19,14 @@ export function mergeRefs(...refs) {
   };
 }
 
+/** role="button" 등 비버튼 요소용 keydown: Enter/Space면 기본 동작을 막고 handler(e) 실행 */
+export const onActivationKey = (handler) => (e) => {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+    handler(e);
+  }
+};
+
 /** falsy 값을 걸러내고 남은 클래스명을 공백으로 join */
 export function joinClasses(...parts) {
   return parts.filter(Boolean).join(' ');
@@ -29,8 +37,8 @@ const opacityTransition = `opacity ${ANIMATION_VALUES.DURATION.NORMAL}`;
 const createConditionalTransition = (condition, normalTransition, disabledTransition = 'none') =>
   condition ? disabledTransition : normalTransition;
 
-/** NodeDetail 드래그 중 transition 억제 */
-export const unifiedNodeAnimations = {
+/** NodeDetail 툴팁: 드래그 중 transition 억제 */
+export const nodeDetailAnimations = {
   tooltipSimpleTransition: (isDragging) =>
     createConditionalTransition(isDragging, opacityTransition, 'none'),
 

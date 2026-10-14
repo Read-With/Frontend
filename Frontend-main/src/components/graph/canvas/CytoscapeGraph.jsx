@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { UserSearch } from "lucide-react";
-import { buildElementsGraphFingerprint } from "../../utils/graph/graphModel.js";
-import { safeCyCall } from "../../utils/graph/graphCy.js";
-import { zoomGraphByFactor } from "../../utils/graph/graphViewport.js";
-import { applySearchFadeEffect, shouldShowNoSearchResults, getNoSearchResultsMessage } from "../../utils/graph/graphHighlight.js";
-import { GRAPH_ZOOM } from "../../utils/graph/graphCore.js";
-import { applyNormalizedNodeSizes } from "../../utils/styles/graphStyles.js";
-import { useGraphInteractions, useCyInstance } from '../../hooks/graph/useGraphCy.js';
+import { buildElementsGraphFingerprint } from "../../../utils/graph/graphElements.js";
+import { safeCyCall } from "../../../utils/graph/graphCy.js";
+import { zoomGraphByFactor } from "../../../utils/graph/graphViewport.js";
+import { applySearchFadeEffect, shouldShowNoSearchResults, getNoSearchResultsMessage } from "../../../utils/graph/graphHighlight.js";
+import { GRAPH_ZOOM } from "../../../utils/graph/graphCore.js";
+import { applyNormalizedNodeSizes } from "../../../utils/styles/graphStyles.js";
+import { useGraphInteractions, useCyInstance } from '../../../hooks/graph/useGraphCy.js';
 import {
   useCytoscapeMount,
   useGraphLayout,
@@ -15,8 +15,8 @@ import {
   usePendingViewportFit,
   useCySearchHighlight,
   useCyResize,
-} from '../../hooks/graph/useCyLifecycle.js';
-import { useRefSlot, useLatestRef } from '../../hooks/common/hooksShared.js';
+} from '../../../hooks/graph/useCyLifecycle.js';
+import { useRefSlot, useLatestRef } from '../../../hooks/common/hooksShared.js';
 
 const ZOOM_CONTROL_BUTTONS = [
   { factor: GRAPH_ZOOM.STEP, label: '그래프 확대', title: '확대', text: '+' },
@@ -104,24 +104,26 @@ const CytoscapeGraph = ({
 
   const updateStylesheet = useCallback((cyInst) => {
     if (!cyInst || !stylesheet) return;
+    // cy.style(sheet)는 적용 후 update()까지 수행 (별도 update 호출 시 전체 style 재계산이 2번)
     return safeCyCall(cyInst, () => {
       cyInst.style(stylesheet);
-      cyInst.style().update();
       return true;
     }, 'CytoscapeGraph:style');
   }, [stylesheet]);
 
-  const applyNodeSizes = useCallback((cyInst, nodes, scale = 1) => {
+  const applyNodeSizes = useCallback((cyInst, nodes, scale = 1, targetNodes = null) => {
     applyNormalizedNodeSizes(cyInst, {
       scaledNodes: nodes,
       scale,
+      targetNodes,
       containerWidth: containerRef.current?.clientWidth,
     });
   }, []);
 
   const reapplySearchFade = useCallback(() => {
     if (!cy || !isSearchActive) return;
-    applySearchFadeEffect(cy, filteredElements || []);
+    // onAfterReset은 clearHighlightAndSelection이 하이라이트를 지운 직후에만 호출됨
+    applySearchFadeEffect(cy, filteredElements || [], { alreadyCleared: true });
   }, [cy, isSearchActive, filteredElements]);
 
   const {

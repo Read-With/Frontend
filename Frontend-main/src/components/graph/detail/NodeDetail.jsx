@@ -7,13 +7,13 @@ import {
   resolveRelationConnectionKind,
   clearPovSpoilerSession,
   NODE_TOOLTIP_VIEW_STATUS,
-} from "../../utils/graph/graphCore";
-import { checkNodeAppearance, buildRadarChartData, EMPTY_RADAR_RESULT } from "../../utils/graph/graphCharts.js";
-import { useFloatingTooltip } from "../../hooks/ui/tooltipHooks";
-import { getUnifiedEventInfoForTooltip } from "../../utils/viewer/viewerSession";
-import { extractApiBookId } from "../../utils/common/valueUtils";
-import { mergeRefs, unifiedNodeAnimations } from "../../utils/styles/styles.js";
-import { GRAPH_COLORS } from "../../utils/styles/graphStyles.js";
+} from "../../../utils/graph/graphCore";
+import { checkNodeAppearance, buildRadarChartData } from "../../../utils/graph/graphCharts.js";
+import { useFloatingTooltip } from "../../../hooks/ui/tooltipHooks";
+import { getUnifiedEventInfoForTooltip } from "../../../utils/viewer/viewerSession";
+import { extractApiBookId } from "../../../utils/common/valueUtils";
+import { mergeRefs, nodeDetailAnimations } from "../../../utils/styles/styles.js";
+import { GRAPH_COLORS } from "../../../utils/styles/graphStyles.js";
 import {
   PersonSilhouette,
   TooltipCloseButton,
@@ -101,25 +101,21 @@ function NodeIdentity({ node }) {
   );
 }
 
-function NodeErrorView({ error, isSidebar, onClose, shellRef, position }) {
-  const errorContent = (
-    <div className="tooltip-error-block">
-      <h4 className="tooltip-error-title">오류가 발생했습니다</h4>
-      <p className="tooltip-error-msg">{error}</p>
-      <button type="button" onClick={onClose} className="tooltip-error-close-btn">
-        닫기
-      </button>
-    </div>
-  );
-
-  if (isSidebar) return <CenteredStatus color="#d32f2f">{errorContent}</CenteredStatus>;
+/** 등장 여부 확인 실패 (툴팁 전용 — 사이드바는 등장 검사를 하지 않음) */
+function NodeErrorView({ error, onClose, shellRef, position }) {
   return (
     <NodeTooltipShell
       shellRef={shellRef}
       className="graph-node-tooltip error"
       position={position}
     >
-      {errorContent}
+      <div className="tooltip-error-block">
+        <h4 className="tooltip-error-title">오류가 발생했습니다</h4>
+        <p className="tooltip-error-msg">{error}</p>
+        <button type="button" onClick={onClose} className="tooltip-error-close-btn">
+          닫기
+        </button>
+      </div>
     </NodeTooltipShell>
   );
 }
@@ -269,15 +265,11 @@ function useAnalysisModalState(pendingKeepAnalysisOpenRef, onSelectRelatedNode, 
   return { isOpen, open, close, selectRelatedNode: onSelectRelatedNode ? selectRelatedNode : null };
 }
 
-function NodeDetail({
-  displayMode = 'tooltip',
+/** 툴팁·사이드바 공통: 노드 가공 · 이벤트 정보 · 시점 요약 섹션 */
+function useNodeDetailBase({
   data,
-  x,
-  y,
-  onClose,
   currentChapter,
   eventNum,
-  elements = [],
   filename,
   currentEvent = null,
   prevValidEvent = null,
@@ -287,30 +279,12 @@ function NodeDetail({
   povCached = null,
   onRetryPov = null,
   showPovSummary = true,
-  apiBookGraphData = null,
-  onSelectRelatedNode = null,
-  chapterRailWidth = null,
-  tooltipBoundsRef = null,
-  pendingKeepAnalysisOpenRef = null,
 }) {
   const { filename: urlFilename } = useParams();
-  const isSidebar = displayMode === 'sidebar';
   const serverBookId = extractApiBookId(filename || urlFilename);
   const folderKey = serverBookId ? `api:${serverBookId}` : null;
   const node = useMemo(() => buildProcessedNode(data), [data]);
-
   const summary = usePovSummaryStage(node?.id);
-  const modal = useAnalysisModalState(pendingKeepAnalysisOpenRef, onSelectRelatedNode, node?.id);
-  const analysisBtnRef = useRef(null);
-
-  const { position, showContent, isDragging, tooltipRef, handleMouseDown, clickOutsideRef } =
-    useFloatingTooltip(x, y, {
-      enabled: !isSidebar,
-      center: data?.nodeCenter,
-      boundsRef: tooltipBoundsRef,
-      onClose,
-      dismissBlocked: modal.isOpen,
-    });
 
   const eventInfo = useMemo(
     () => getUnifiedEventInfoForTooltip({
@@ -322,9 +296,62 @@ function NodeDetail({
     [currentEvent, prevValidEvent, eventNum, currentChapter],
   );
 
+  // 뷰어 툴팁(showPovSummary=false)에선 요약을 그리지 않으므로 계산도 생략
+  const povSummary = useMemo(
+    () =>
+      showPovSummary
+        ? resolvePovSummary(node, currentChapter, povSummaries, povError, {
+          isLoading: povIsLoading,
+          povCached,
+        })
+        : null,
+    [showPovSummary, node, currentChapter, povSummaries, povError, povIsLoading, povCached],
+  );
+  const chapterSummaryTitle =
+    currentChapter != null && Number(currentChapter) >= 1
+      ? `챕터 ${currentChapter} 시점 요약`
+      : '해당 인물 시점의 요약';
+
+  const povSummarySection = povSummary && (
+    <PovSummarySection
+      title={chapterSummaryTitle}
+      stage={summary.stage}
+      onToggle={summary.toggle}
+      onCollapse={summary.collapse}
+      onConfirm={summary.confirm}
+      text={povSummary.text}
+      status={povSummary.status}
+      onRetry={typeof onRetryPov === 'function' ? onRetryPov : null}
+    />
+  );
+
+  return { node, folderKey, eventInfo, povSummarySection };
+}
+
+/** 뷰어 플로팅 툴팁: 드래그·바깥 클릭 닫기, 미등장/오류 안내 */
+function NodeDetailTooltip(props) {
+  const {
+    data,
+    x,
+    y,
+    onClose,
+    currentChapter,
+    elements = [],
+    showPovSummary = true,
+    tooltipBoundsRef = null,
+  } = props;
+  const { node, folderKey, eventInfo, povSummarySection } = useNodeDetailBase(props);
+
+  const { position, showContent, isDragging, tooltipRef, handleMouseDown, clickOutsideRef } =
+    useFloatingTooltip(x, y, {
+      enabled: true,
+      center: data?.nodeCenter,
+      boundsRef: tooltipBoundsRef,
+      onClose,
+    });
+
   const { appeared, error } = useMemo(
-    // 사이드바 = 그래프 전용 페이지(GraphCanvas)에서만 사용 → 등장 여부 검사 불필요
-    () => isSidebar ? { appeared: true, error: null } : checkNodeAppearance({
+    () => checkNodeAppearance({
       data,
       node,
       currentChapter,
@@ -332,58 +359,7 @@ function NodeDetail({
       eventNum: eventInfo.eventNum,
       elements,
     }),
-    [data, node, currentChapter, eventInfo, folderKey, elements, isSidebar],
-  );
-
-  const { text: summaryText, status: summaryStatus } = useMemo(
-    () =>
-      resolvePovSummary(node, currentChapter, povSummaries, povError, {
-        isLoading: povIsLoading,
-        povCached,
-      }),
-    [node, currentChapter, povSummaries, povError, povIsLoading, povCached],
-  );
-  const chapterSummaryTitle =
-    currentChapter != null && Number(currentChapter) >= 1
-      ? `챕터 ${currentChapter} 시점 요약`
-      : '해당 인물 시점의 요약';
-
-  const radarResult = useMemo(() => {
-    if (!isSidebar) return EMPTY_RADAR_RESULT;
-    return buildRadarChartData({
-      node,
-      currentChapter,
-      apiBookGraphData,
-      elements,
-      folderKey,
-      eventNum: eventInfo.eventNum,
-    });
-  }, [isSidebar, node, currentChapter, folderKey, elements, apiBookGraphData, eventInfo]);
-
-  const radarChartData = radarResult.items;
-  const radarLoadError =
-    radarResult.status === NODE_TOOLTIP_VIEW_STATUS.ERROR ? radarResult.error : null;
-
-  const connectionKind = useMemo(
-    () =>
-      resolveRelationConnectionKind(radarChartData.length, {
-        enabled: isSidebar,
-        hasError: radarResult.status === NODE_TOOLTIP_VIEW_STATUS.ERROR,
-      }),
-    [isSidebar, radarResult.status, radarChartData.length],
-  );
-
-  const povSummarySection = (
-    <PovSummarySection
-      title={chapterSummaryTitle}
-      stage={summary.stage}
-      onToggle={summary.toggle}
-      onCollapse={summary.collapse}
-      onConfirm={summary.confirm}
-      text={summaryText}
-      status={summaryStatus}
-      onRetry={typeof onRetryPov === 'function' ? onRetryPov : null}
-    />
+    [data, node, currentChapter, eventInfo, folderKey, elements],
   );
 
   const floatingShell = {
@@ -394,34 +370,8 @@ function NodeDetail({
     handleMouseDown,
   };
 
-  const analysisModal = isSidebar && modal.isOpen ? (
-    <Suspense fallback={<div role="status" aria-live="polite">관계 분석을 불러오는 중…</div>}>
-      <RelationAnalysisModal
-        node={node}
-        radarChartData={radarChartData}
-        connectionKind={connectionKind}
-        loadError={radarLoadError}
-        onClose={modal.close}
-        onSelectRelatedNode={modal.selectRelatedNode}
-        returnFocusRef={analysisBtnRef}
-        chapterRailWidth={
-          chapterRailWidth ?? GRAPH_LAYOUT_CONSTANTS.SIDEBAR.OPEN_WIDTH
-        }
-        reserveRight={GRAPH_LAYOUT_CONSTANTS.TOOLTIP_SIDEBAR_WIDTH}
-      />
-    </Suspense>
-  ) : null;
-
   if (error) {
-    return (
-      <NodeErrorView
-        error={error}
-        isSidebar={isSidebar}
-        onClose={onClose}
-        shellRef={tooltipRef}
-        position={position}
-      />
-    );
+    return <NodeErrorView error={error} onClose={onClose} shellRef={tooltipRef} position={position} />;
   }
 
   if (!appeared) {
@@ -429,7 +379,7 @@ function NodeDetail({
       <NodeTooltipShell
         {...floatingShell}
         className="graph-node-tooltip is-not-appeared"
-        transition={unifiedNodeAnimations.tooltipSimpleTransition(isDragging)}
+        transition={nodeDetailAnimations.tooltipSimpleTransition(isDragging)}
         closeButton={(
           <TooltipCloseButton
             onClose={onClose}
@@ -449,20 +399,54 @@ function NodeDetail({
     );
   }
 
-  if (!isSidebar) {
-    return (
-      <NodeTooltipShell
-        {...floatingShell}
-        transition={unifiedNodeAnimations.tooltipComplexTransition(isDragging)}
-      >
-        <div className="tooltip-content business-card">
-          <TooltipCloseButton onClose={onClose} />
-          <NodeIdentity node={node} />
-          {showPovSummary ? povSummarySection : null}
-        </div>
-      </NodeTooltipShell>
-    );
-  }
+  return (
+    <NodeTooltipShell
+      {...floatingShell}
+      transition={nodeDetailAnimations.tooltipComplexTransition(isDragging)}
+    >
+      <div className="tooltip-content business-card">
+        <TooltipCloseButton onClose={onClose} />
+        <NodeIdentity node={node} />
+        {showPovSummary ? povSummarySection : null}
+      </div>
+    </NodeTooltipShell>
+  );
+}
+
+/** 그래프 페이지 사이드바: 시점 요약 + 관계 분석(레이더 모달). 그래프 전용 페이지라 등장 검사 생략 */
+function NodeDetailSidebar(props) {
+  const {
+    onClose,
+    currentChapter,
+    elements = [],
+    showPovSummary = true,
+    apiBookGraphData = null,
+    onSelectRelatedNode = null,
+    chapterRailWidth = null,
+    pendingKeepAnalysisOpenRef = null,
+  } = props;
+  const { node, folderKey, eventInfo, povSummarySection } = useNodeDetailBase(props);
+  const modal = useAnalysisModalState(pendingKeepAnalysisOpenRef, onSelectRelatedNode, node?.id);
+  const analysisBtnRef = useRef(null);
+
+  const radarResult = useMemo(
+    () => buildRadarChartData({
+      node,
+      currentChapter,
+      apiBookGraphData,
+      elements,
+      folderKey,
+      eventNum: eventInfo.eventNum,
+    }),
+    [node, currentChapter, folderKey, elements, apiBookGraphData, eventInfo],
+  );
+
+  const radarChartData = radarResult.items;
+  const hasRadarError = radarResult.status === NODE_TOOLTIP_VIEW_STATUS.ERROR;
+  const connectionKind = useMemo(
+    () => resolveRelationConnectionKind(radarChartData.length, { enabled: true, hasError: hasRadarError }),
+    [hasRadarError, radarChartData.length],
+  );
 
   return (
     <div className="graph-sidebar-panel">
@@ -481,9 +465,28 @@ function NodeDetail({
         />
       </div>
 
-      {analysisModal}
+      {modal.isOpen ? (
+        <Suspense fallback={<div role="status" aria-live="polite">관계 분석을 불러오는 중…</div>}>
+          <RelationAnalysisModal
+            node={node}
+            radarChartData={radarChartData}
+            connectionKind={connectionKind}
+            loadError={hasRadarError ? radarResult.error : null}
+            onClose={modal.close}
+            onSelectRelatedNode={modal.selectRelatedNode}
+            returnFocusRef={analysisBtnRef}
+            chapterRailWidth={chapterRailWidth ?? GRAPH_LAYOUT_CONSTANTS.SIDEBAR.OPEN_WIDTH}
+            reserveRight={GRAPH_LAYOUT_CONSTANTS.TOOLTIP_SIDEBAR_WIDTH}
+          />
+        </Suspense>
+      ) : null}
     </div>
   );
+}
+
+/** displayMode: 'tooltip'(뷰어 플로팅) | 'sidebar'(그래프 페이지 패널) */
+function NodeDetail({ displayMode = 'tooltip', ...props }) {
+  return displayMode === 'sidebar' ? <NodeDetailSidebar {...props} /> : <NodeDetailTooltip {...props} />;
 }
 
 export default memo(NodeDetail);

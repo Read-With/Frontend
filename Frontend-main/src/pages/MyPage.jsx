@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect, useId, useRef } from 'react';
+import { useState, useMemo, useCallback, useEffect, useId } from 'react';
 import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
 import { Book, Plus, Library, Heart, AlertCircle, Grid3X3, List, Upload, LogOut } from 'lucide-react';
@@ -6,7 +6,8 @@ import BookLibrary from '../components/library/BookLibrary';
 import FileUpload from '../components/library/FileUpload';
 import { useBooks } from '../hooks/books/bookHooks';
 import useAuth from '../hooks/auth/useAuth';
-import { useModalFocusTrap, useBodyScrollLock } from '../hooks/common/hooksShared';
+import ModalFrame from '../components/common/ModalFrame';
+import { onActivationKey } from '../utils/styles/styles';
 import { EPUB_FILE_CONSTRAINTS } from '../utils/library/libraryUtils';
 import './MyPage.css';
 
@@ -46,29 +47,18 @@ function HeaderBrand({ userName = null }) {
 function LogoutConfirmDialog({ open, onConfirm, onCancel }) {
   const titleId = useId();
   const descId = useId();
-  const dialogRef = useRef(null);
-
-  useModalFocusTrap(open, dialogRef, onCancel);
-  useBodyScrollLock(open);
-
-  if (!open) return null;
 
   return (
-    <div
-      className="logout-confirm-overlay"
-      onClick={onCancel}
-      role="presentation"
+    <ModalFrame
+      open={open}
+      onClose={onCancel}
+      onEscape={onCancel}
+      overlayClassName="logout-confirm-overlay"
+      className="logout-confirm-dialog"
+      labelledBy={titleId}
+      describedBy={descId}
+      lockScroll
     >
-      <div
-        ref={dialogRef}
-        className="logout-confirm-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        aria-describedby={descId}
-        tabIndex={-1}
-        onClick={(event) => event.stopPropagation()}
-      >
         <h3 id={titleId} className="logout-confirm-title">
           로그아웃
         </h3>
@@ -83,8 +73,7 @@ function LogoutConfirmDialog({ open, onConfirm, onCancel }) {
             로그아웃
           </button>
         </div>
-      </div>
-    </div>
+    </ModalFrame>
   );
 }
 
@@ -367,12 +356,7 @@ export default function MyPage() {
                       onClick={openUpload}
                       role="button"
                       tabIndex={0}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          openUpload();
-                        }
-                      }}
+                      onKeyDown={onActivationKey(openUpload)}
                     >
                       <div className="epub-dropzone-icon" aria-hidden>
                         <Upload size={32} strokeWidth={1.5} />

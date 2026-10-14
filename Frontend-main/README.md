@@ -29,7 +29,7 @@
    - `nodeWeights`: 해당 이벤트에 등장한 인물과 그 비중(가중치)
    - `items`: 두 인물(`fromCharacterId` ↔ `toCharacterId`) 간 관계 라벨, 긍정도(-1 ~ +1, UI에는 -100% ~ +100%로 표시), 근거 횟수(evidenceCount), 관계 변화 이유(reason)
 
-프론트엔드는 이 델타들을 챕터·이벤트 순서대로 **누적(accumulate)**해(`utils/api/graphApi.js`) 특정 시점까지의 인물·관계 스냅샷을 만들고, 이를 Cytoscape 엘리먼트로 변환해(`utils/graph/graphModel.js`) 렌더링합니다.
+프론트엔드는 이 델타들을 챕터·이벤트 순서대로 **누적(accumulate)**해(`utils/api/graphApi.js`) 특정 시점까지의 인물·관계 스냅샷을 만들고, 이를 Cytoscape 엘리먼트로 변환해(`utils/graph/graphElements.js`) 렌더링합니다.
 
 - **노드 크기**: 누적된 `nodeWeights`를 전체 노드 중 상대적으로 정규화한 값 (`estimateNodeSizePx`)
 - **엣지 색상**: 누적 긍정도(positivity) — 부정적일수록 붉은 계열, 긍정적일수록 초록 계열 (굵기는 긍정도와 무관하며 화면 컨텍스트별 고정값)
@@ -54,7 +54,7 @@
 
 ### 대형 도서에서의 그래프 성능
 
-- 겹침(overlap) 해결 알고리즘은 대상 노드가 **2000개(`MAX_NODES`)를 넘으면 전체를 계산하는 대신, 이동 중인 노드·선택된 노드·그 주변·화면에 보이는 노드 중 일부를 샘플링**해 계산량을 줄입니다(`utils/graph/graphModel.js`).
+- 겹침(overlap) 해결은 **spatial hash로 인접 셀의 노드 쌍만 검사**해 반복당 O(N)으로 동작하므로 노드 수 상한 없이 전체를 대상으로 합니다(`utils/graph/graphLayout.js`). 증분 갱신에서는 새 노드와 그 1·2-hop 이웃만 움직여 기존 배치를 보존합니다.
 - 사용자가 필터 단계를 올리면 `filterMainCharacters`가 주요 인물 위주로만 그래프를 표시해 렌더링 대상 노드 수를 직접 줄일 수 있습니다.
 - 엣지 툴팁(`EdgeDetail`)은 지연 로딩(`lazy`)되어 실제로 열기 전까지 번들에 포함되지 않습니다.
 
@@ -90,6 +90,11 @@ src/
 │   ├── library/           # 서재, 파일 업로드, 도서 상세 모달
 │   ├── viewer/             # EPUB 뷰어, 툴바, 설정
 │   └── graph/              # 관계 그래프 (Cytoscape 기반)
+│       ├── canvas/          # CytoscapeGraph·GraphCanvasArea·GraphA11yStatus (페이지·뷰어 공용)
+│       ├── controls/        # 상단바 메타·플로팅 도구·검색 팔레트 (공용)
+│       ├── detail/          # 노드/간선 상세·관계 분석 모달 (공용)
+│       ├── page/            # /user/graph 전용 (GraphPage·레이아웃·사이드바·Context)
+│       └── styles/          # graph.css 진입점 + 섹션별 CSS
 ├── hooks/
 │   ├── auth/              # useAuth (로그인 상태·토큰)
 │   ├── books/              # 도서 목록 조회/프리페치
@@ -105,7 +110,10 @@ src/
     │   ├── cache/            # cacheManager, manifestCache, progressCache (TTL 캐시)
     │   ├── urlUtils.js        # 환경 URL·OAuth·에러 로깅
     │   └── valueUtils.js       # 숫자/문자열/locator 공통 유틸
-    ├── graph/               # graphCore/graphCy/graphFetch/graphModel — 그래프 데이터·렌더링 로직
+    ├── graph/               # 그래프 데이터·렌더링 로직
+    │                        #   graphCore(공통) · graphElements(elements 변환) · graphChapterCache(챕터 캐시)
+    │                        #   graphModel(책 누적 응답) · graphDeltas · graphFetch · graphProfileImages
+    │                        #   graphCy(인스턴스·동기화) · graphLayout(겹침·배치) · graphViewport · graphHighlight · graphCharts
     ├── viewer/               # viewerCore/viewerGraph/viewerLocator/viewerSession
     ├── library/              # 서재/EPUB 업로드 유틸
     ├── bookmarks/             # 북마크 유틸
