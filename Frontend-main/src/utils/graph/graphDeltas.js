@@ -1,13 +1,13 @@
-/** relationship-deltas 누적·책 단위 delta 캐시 (graphModel에서 분리) */
+/** relationship-deltas 누적·책 단위 delta 캐시 */
 
 import {
   directedEdgeElementId,
   uniqueStrings,
   resolveManifestEventId,
   appendRelationLabelHistory,
+  pickCharacterDisplayName,
+  rememberCharacterDisplayName,
 } from './graphCore';
-import { pickCharacterDisplayName, rememberCharacterDisplayName } from './graphCharacterNames';
-import { eventUtils } from '../viewer/viewerCore';
 import {
   asArray,
   toNumberOrNull,
@@ -16,6 +16,7 @@ import {
   toTrimmedStringOrNull,
   clampPositivity,
   stringOrEmpty,
+  resolveEventNum,
 } from '../common/valueUtils';
 import { buildGraphEventMeta, fetchRelationshipDeltasList } from '../api/graphApi';
 import { requireBookId } from '../api/authApi';
@@ -40,11 +41,21 @@ const orderIndexOf = (orderIndex, eventId) => {
   return orderIndex.get(id);
 };
 
+// manifest identity 기준 메모 — 스냅샷(이벤트)마다 인물 전체 Map을 다시 만들지 않음 (O(E·C) → O(C + E))
+const manifestCharacterMetaMemo = new WeakMap();
+const EMPTY_CHARACTER_META = new Map();
+
 const resolveManifestCharacterMeta = (bookId) => {
-  const byId = new Map();
-  for (const character of asArray(getManifestFromCache(bookId)?.characters)) {
-    const id = Number(character?.id);
-    if (Number.isFinite(id)) byId.set(id, character);
+  const manifest = getManifestFromCache(bookId);
+  if (!manifest || typeof manifest !== 'object') return EMPTY_CHARACTER_META;
+  let byId = manifestCharacterMetaMemo.get(manifest);
+  if (!byId) {
+    byId = new Map();
+    for (const character of asArray(manifest.characters)) {
+      const id = Number(character?.id);
+      if (Number.isFinite(id)) byId.set(id, character);
+    }
+    manifestCharacterMetaMemo.set(manifest, byId);
   }
   return byId;
 };
@@ -182,38 +193,32 @@ const finalizeAccumulateStateToGraphResult = (
   };
 };
 
-/** throughEventId까지 포함한 end index (exclusive). 목록에 없으면 order로 근사. */
+/**
+ * throughEventId까지 적용할 deltas의 exclusive end. 목록에 없으면 order로 근사.
+ * firstIndexByEventId·orderIndex는 walker가 한 번만 만든다 (이벤트마다 순서 배열·Set 재생성 방지)
+ */
 const resolveThroughEndExclusive = (
   sortedDeltas,
-  throughEventId,
-  { chapterIndex = null, chapterEventIdOrder = null, firstIndexByEventId = null } = {}
+  through,
+  { chapterIndex, orderIndex, firstIndexByEventId }
 ) => {
-  const list = asArray(sortedDeltas);
-  const through = toTrimmedStringOrNull(throughEventId);
-  if (!through || list.length === 0) return 0;
+  if (sortedDeltas.length === 0) return 0;
 
-  const cut = firstIndexByEventId
-    ? firstIndexByEventId.get(through) ?? -1
-    : list.findIndex((d) => toTrimmedStringOrNull(d.eventId) === through);
-  if (cut >= 0) return cut + 1;
+  const cut = firstIndexByEventId.get(through);
+  if (cut != null) return cut + 1;
 
-  const targetChapter = toNumberOrNull(chapterIndex);
-  const order = normalizeEventIdOrder(chapterEventIdOrder);
-  const throughPos = order.indexOf(through);
-  if (targetChapter == null || throughPos < 0) return list.length;
+  const throughPos = orderIndex.get(through);
+  if (chapterIndex == null || throughPos == null) return sortedDeltas.length;
 
-  const allowedInChapter = new Set(order.slice(0, throughPos + 1));
-  const orderSet = new Set(order);
   let end = 0;
-  for (let i = 0; i < list.length; i += 1) {
-    const d = list[i];
+  for (let i = 0; i < sortedDeltas.length; i += 1) {
+    const d = sortedDeltas[i];
     const ch = Number(d?.chapterIndex);
     const id = toTrimmedStringOrNull(d?.eventId);
-    let include = false;
-    if (Number.isFinite(ch) && ch < targetChapter) include = true;
-    else if (Number.isFinite(ch) && ch > targetChapter) include = false;
-    else if (Number.isFinite(ch) && ch === targetChapter) include = id ? allowedInChapter.has(id) : false;
-    else include = id ? !orderSet.has(id) : false;
+    let include;
+    if (!Number.isFinite(ch)) include = id ? !orderIndex.has(id) : false;
+    else if (ch !== chapterIndex) include = ch < chapterIndex;
+    else include = id ? orderIndex.get(id) <= throughPos : false;
     if (include) end = i + 1;
   }
   return end;
@@ -238,11 +243,12 @@ export const createDeltaAccumulateWalker = (
     const id = toTrimmedStringOrNull(d?.eventId);
     if (id && !firstIndexByEventId.has(id)) firstIndexByEventId.set(id, i);
   });
-  const cutOpts = {
-    chapterIndex,
-    chapterEventIdOrder: normalizeEventIdOrder(chapterEventIdOrder),
-    firstIndexByEventId,
-  };
+  // eventId → 챕터 이벤트 순서상 첫 위치 (같은 챕터 delta가 through 이전인지 O(1) 판정)
+  const orderIndex = new Map();
+  normalizeEventIdOrder(chapterEventIdOrder).forEach((id, pos) => {
+    if (!orderIndex.has(id)) orderIndex.set(id, pos);
+  });
+  const cutOpts = { chapterIndex: toNumberOrNull(chapterIndex), orderIndex, firstIndexByEventId };
 
   const applyUpTo = (endExclusive) => {
     const end = Math.max(0, Math.min(endExclusive, deltas.length));
@@ -334,7 +340,7 @@ export const createChapterRelationPairReader = (bookId, chapterIndex, deltas, id
   );
   const eventIdByIdx = new Map();
   for (const event of asArray(getChapterData(bookId, chapterIndex)?.events)) {
-    const idx = eventUtils.resolveEventNum(event);
+    const idx = resolveEventNum(event);
     const eventId = resolveManifestEventId(event);
     if (idx > 0 && eventId && !eventIdByIdx.has(idx)) eventIdByIdx.set(idx, eventId);
   }

@@ -3,17 +3,47 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
-import { createBookmark, updateBookmark, deleteBookmark, loadBookmarks as loadBookmarksFromApi } from '../../utils/api/booksApi';
+import { createBookmark, updateBookmark, deleteBookmark, loadBookmarks as loadBookmarksFromApi } from '../utils/api/booksApi';
 import {
   createBookmarkData,
   isSameBookmarkPosition,
   waitForBookmarkAxisReady,
-  clientSortToApiSort,
-} from '../../utils/bookmarks/bookmarkUtils';
-import { toPositiveNumberOrNull, errorUtils } from '../../utils/common/valueUtils';
-import { resolveReadingLocators } from '../../utils/viewer/viewerSession';
+} from '../utils/bookmarkUtils';
+import { toPositiveNumberOrNull, errorUtils } from '../utils/common/valueUtils';
+import { resolveReadingLocators } from '../utils/viewer/viewerSession';
 
 const LOG = 'bookmarkHooks';
+/** 서버 정렬은 최신순 고정 — 목록 화면은 클라이언트에서 다시 정렬 */
+const API_SORT = 'time_desc';
+
+const PAGE_UNREADABLE = '페이지 정보를 읽을 수 없습니다. 다시 불러옵니다...';
+
+/** 뷰어에서 북마크 추가 실패 사유. bump: 실패 카운트를 올려 뷰어 재로드 유도 */
+const ADD_FAILURES = {
+  viewer_not_ready: {
+    log: '뷰어 미준비로 북마크 추가 불가',
+    toast: '페이지가 아직 준비되지 않았어요. 다시 불러옵니다...',
+    bump: true,
+  },
+  missing_book_id: {
+    log: 'bookId 없음으로 북마크 추가 불가',
+    toast: '책 정보가 없어 북마크를 추가할 수 없습니다.',
+  },
+  missing_locator: {
+    log: '현재 위치 locator 없음',
+    toast: PAGE_UNREADABLE,
+    bump: true,
+  },
+  axis_not_ready: {
+    log: '북마크 axis 미준비',
+    toast: '책 위치 정보가 아직 준비되지 않았어요. 잠시 후 다시 시도해 주세요.',
+  },
+  create_data_failed: {
+    log: '북마크 데이터 locator 생성 실패',
+    toast: PAGE_UNREADABLE,
+    bump: true,
+  },
+};
 
 const friendlyError = (err, fallback) => {
   if (!err) return fallback;
@@ -24,31 +54,29 @@ const friendlyError = (err, fallback) => {
   if (status === 403) {
     return '북마크에 접근할 권한이 없습니다.';
   }
-  const msg = (err.message || '').toLowerCase();
-  if (msg.includes('failed to fetch') || msg.includes('network')) {
+  if (errorUtils.isNetworkError(err)) {
     return '연결을 확인한 뒤 다시 시도해 주세요.';
   }
   return err.message || fallback;
 };
 
 export const useBookmarks = (bookId, options = {}) => {
-  const { viewerRef = null, setFailCount = null, sortOrder = 'recent' } = options;
+  const { viewerRef = null, setFailCount = null } = options;
   const serverBookId = useMemo(() => toPositiveNumberOrNull(bookId), [bookId]);
-  const apiSort = clientSortToApiSort(sortOrder);
 
   const queryClient = useQueryClient();
-  const queryKey = useMemo(() => ['bookmarks', serverBookId, apiSort], [serverBookId, apiSort]);
+  const queryKey = useMemo(() => ['bookmarks', serverBookId, API_SORT], [serverBookId]);
   const query = useQuery({
     queryKey,
     enabled: serverBookId != null,
     queryFn: async () => {
       try {
-        return await loadBookmarksFromApi(serverBookId, apiSort);
+        return await loadBookmarksFromApi(serverBookId, API_SORT);
       } catch (err) {
         errorUtils.logWarning(LOG, friendlyError(err, '북마크 목록을 불러오지 못했습니다.'), {
           action: 'fetch',
           bookId: serverBookId,
-          sort: apiSort,
+          sort: API_SORT,
           message: err?.message,
           status: err?.status ?? err?.statusCode,
         });
@@ -103,11 +131,6 @@ export const useBookmarks = (bookId, options = {}) => {
       // 진행 중인 재조회가 늦게 도착해 이번 변경을 덮어쓰지 않도록 취소
       await queryClient.cancelQueries({ queryKey });
       const result = onSuccess(response);
-      // 다른 정렬 키 캐시는 이번 변경이 빠져 있으므로 제거 (재진입 시 삭제된 북마크 노출·중복 판정 오류 방지)
-      queryClient.removeQueries({
-        queryKey: ['bookmarks', serverBookId],
-        predicate: (q) => q.queryKey[2] !== apiSort,
-      });
       toast.success(messages.success, {
         autoClose: messages.autoClose ?? 2800,
         className: messages.toastClassName,
@@ -128,16 +151,14 @@ export const useBookmarks = (bookId, options = {}) => {
       mutatingRef.current = false;
       setIsMutating(false);
     }
-  }, [serverBookId, apiSort, queryClient, queryKey]);
+  }, [serverBookId, queryClient, queryKey]);
 
   const addBookmark = useCallback(
     (bookmarkData) =>
       runMutation(
         () => createBookmark(bookmarkData),
         (response) => {
-          setBookmarks((prev) =>
-            apiSort === 'time_asc' ? [...prev, response.result] : [response.result, ...prev]
-          );
+          setBookmarks((prev) => [response.result, ...prev]);
           return { success: true, bookmark: response.result };
         },
         {
@@ -147,7 +168,7 @@ export const useBookmarks = (bookId, options = {}) => {
           error: '북마크 생성 중 오류가 발생했습니다.',
         }
       ),
-    [runMutation, apiSort, setBookmarks]
+    [runMutation, setBookmarks]
   );
 
   const patchBookmark = useCallback(
@@ -198,26 +219,20 @@ export const useBookmarks = (bookId, options = {}) => {
       return { success: false };
     }
 
-    const bumpFail = () => setFailCount?.((cnt) => cnt + 1);
+    const fail = (reason) => {
+      const { log, toast: message, bump } = ADD_FAILURES[reason];
+      errorUtils.logWarning(LOG, log, { action: 'addFromViewer', bookId: serverBookId, reason });
+      toast.error(message);
+      if (bump) setFailCount?.((cnt) => cnt + 1);
+      return { success: false };
+    };
 
     if (!viewerRef?.current) {
-      errorUtils.logWarning(LOG, '뷰어 미준비로 북마크 추가 불가', {
-        action: 'addFromViewer',
-        bookId: serverBookId,
-        reason: 'viewer_not_ready',
-      });
-      toast.error('페이지가 아직 준비되지 않았어요. 다시 불러옵니다...');
-      bumpFail();
-      return { success: false };
+      return fail('viewer_not_ready');
     }
 
     if (serverBookId == null) {
-      errorUtils.logWarning(LOG, 'bookId 없음으로 북마크 추가 불가', {
-        action: 'addFromViewer',
-        reason: 'missing_book_id',
-      });
-      toast.error('책 정보가 없어 북마크를 추가할 수 없습니다.');
-      return { success: false };
+      return fail('missing_book_id');
     }
 
     let rawStart = null;
@@ -238,39 +253,19 @@ export const useBookmarks = (bookId, options = {}) => {
     }
 
     if (!rawStart) {
-      errorUtils.logWarning(LOG, '현재 위치 locator 없음', {
-        action: 'addFromViewer',
-        bookId: serverBookId,
-        reason: 'missing_locator',
-      });
-      toast.error('페이지 정보를 읽을 수 없습니다. 다시 불러옵니다...');
-      bumpFail();
-      return { success: false };
+      return fail('missing_locator');
     }
 
     const axisReady = await waitForBookmarkAxisReady(serverBookId, rawStart);
     if (!axisReady) {
-      errorUtils.logWarning(LOG, '북마크 axis 미준비', {
-        action: 'addFromViewer',
-        bookId: serverBookId,
-        reason: 'axis_not_ready',
-      });
-      toast.error('책 위치 정보가 아직 준비되지 않았어요. 잠시 후 다시 시도해 주세요.');
-      return { success: false };
+      return fail('axis_not_ready');
     }
 
     setFailCount?.(0);
 
     const bookmarkData = createBookmarkData(serverBookId, rawStart, rawEnd);
     if (!bookmarkData.startLocator) {
-      errorUtils.logWarning(LOG, '북마크 데이터 locator 생성 실패', {
-        action: 'addFromViewer',
-        bookId: serverBookId,
-        reason: 'create_data_failed',
-      });
-      toast.error('페이지 정보를 읽을 수 없습니다. 다시 불러옵니다...');
-      bumpFail();
-      return { success: false };
+      return fail('create_data_failed');
     }
 
     // 목록 로딩 전이면 받아온 뒤 중복 확인 (빈 목록 기준 확인으로 중복 생성 방지)
@@ -304,7 +299,6 @@ export const useBookmarks = (bookId, options = {}) => {
     loading: query.isLoading,
     loadError,
     isMutating,
-    serverBookId,
     fetchBookmarks: refetch,
     removeBookmark,
     patchBookmark,

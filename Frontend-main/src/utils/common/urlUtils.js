@@ -1,4 +1,4 @@
-/** 환경 URL·OAuth 리다이렉트/복귀 경로·공개 자산·뷰어/그래프 경로 */
+/** 환경 URL·OAuth 리다이렉트/복귀 경로·공개 자산 URL·뷰어/그래프 라우트 경로 */
 
 import { trimTrailingSlash, toOneBasedChapterIndexOrNull } from './valueUtils';
 import { readRaw, writeRaw, removeKeys } from './cache/cacheManager';
@@ -119,32 +119,31 @@ function stripWrongApiPublicPrefix(url) {
   return String(url).replace(/\/api\/public\//g, '/public/');
 }
 
+/** 절대 URL 파싱 (프로토콜 상대 '//host/...'는 https로 간주). 파싱 불가면 null */
+function parseAbsoluteUrl(s) {
+  try {
+    return new URL(s.startsWith('//') ? `https:${s}` : s);
+  } catch {
+    return null;
+  }
+}
+
 export function isProtectedPublicAsset(url) {
   if (url == null) return false;
   const s = String(url).trim();
   if (!s) return false;
   if (s.startsWith('/public/')) return true;
 
-  try {
-    const parsed = new URL(s.startsWith('//') ? `https:${s}` : s);
-    if (!parsed.pathname.startsWith('/public/')) return false;
-
-    return TRUSTED_PUBLIC_ASSET_ORIGINS.has(parsed.origin);
-  } catch {
-    return false;
-  }
+  const parsed = parseAbsoluteUrl(s);
+  return Boolean(parsed?.pathname.startsWith('/public/') && TRUSTED_PUBLIC_ASSET_ORIGINS.has(parsed.origin));
 }
 
 function rewriteLegacyAssetUrl(url) {
   if (url == null) return '';
   const s = stripWrongApiPublicPrefix(String(url).trim());
   if (!s) return '';
-  try {
-    const parsed = new URL(s.startsWith('//') ? `https:${s}` : s);
-    return s.startsWith('//') ? parsed.href : s;
-  } catch {
-    return s;
-  }
+  // 프로토콜 상대 URL은 https 절대 URL로 정규화
+  return s.startsWith('//') ? parseAbsoluteUrl(s)?.href ?? s : s;
 }
 
 function getPublicAssetOrigin() {
@@ -157,29 +156,17 @@ function getPublicAssetOrigin() {
   return DEFAULT_CDN_BASE_URL;
 }
 
-export function sanitizeAssetUrl(url) {
-  if (url == null) return '';
-  const s = String(url).trim();
-  if (!s) return '';
-  return rewriteLegacyAssetUrl(s);
-}
+export const sanitizeAssetUrl = rewriteLegacyAssetUrl;
 
 function preferDevPublicProxyPath(url) {
   if (!import.meta.env.DEV || url == null) return url;
   const s = String(url).trim();
   if (!s) return s;
   if (s.startsWith('/public/')) return s;
-  try {
-    const parsed = new URL(s.startsWith('//') ? `https:${s}` : s);
-    if (!parsed.pathname.startsWith('/public/')) return s;
-    const assetOrigin = new URL(getPublicAssetOrigin()).origin;
-    if (parsed.origin === assetOrigin) {
-      return `${parsed.pathname}${parsed.search}${parsed.hash}`;
-    }
-  } catch {
-    /* URL 파싱 불가 */
-  }
-  return s;
+  const parsed = parseAbsoluteUrl(s);
+  if (!parsed?.pathname.startsWith('/public/')) return s;
+  const assetOrigin = parseAbsoluteUrl(getPublicAssetOrigin())?.origin;
+  return parsed.origin === assetOrigin ? `${parsed.pathname}${parsed.search}${parsed.hash}` : s;
 }
 
 function routeProtectedPublicAssetForSameOriginProxy(url) {

@@ -5,12 +5,10 @@
   --landing-fg: #fefefe;
   --landing-text: #2a3424;
   --landing-lead: #3d4a3a;
-  --landing-logo: var(--brand-accent-mid);
   --landing-spine: 0.5rem;
   --landing-gutter: 1.25rem;
   --landing-radius: 0.25rem;
   --landing-focus: var(--brand-accent-mid);
-  --landing-panel: rgba(254, 252, 248, 0.88);
 
   position: relative;
   isolation: isolate;

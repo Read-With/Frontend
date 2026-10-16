@@ -2,37 +2,45 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 
-import GraphPageLayout from "./GraphPageLayout";
-import { GraphPageContext, GraphPageSidebarContext } from "./GraphPageContext";
-import ChapterSidebar from "./ChapterSidebar";
-import "../styles/graph.css";
+import GraphPageLayout from "../components/graph/page/GraphPageLayout";
+import { GraphPageContext, GraphPageSidebarContext } from "../components/graph/page/GraphPageContext";
+import ChapterSidebar from "../components/graph/page/ChapterSidebar";
+import "../components/graph/styles/graph.css";
 
-import { createGraphStylesheet, getEdgeStyle } from "../../../utils/styles/graphStyles";
-import { GRAPH_LAYOUT_CONSTANTS, resolveChapterSidebarWidth } from '../../../utils/graph/graphCore';
-import { userViewerPath } from '../../../utils/common/urlUtils';
+import { createGraphStylesheet, getEdgeStyle } from "../utils/graph/graphStyles";
+import { GRAPH_LAYOUT_CONSTANTS } from '../utils/graph/graphCore';
+import { userViewerPath } from '../utils/common/urlUtils';
 import {
   useGraphSearch,
   useGraphState,
   useGraphElementPipeline,
-} from '../../../hooks/graph/useGraphViewState';
-import { useApiGraphData } from '../../../hooks/graph/useApiGraphData';
-import { useChapterPovSummaries } from '../../../hooks/graph/useChapterPovSummaries';
+} from '../hooks/graph/useGraphViewState';
+import { useApiGraphData } from '../hooks/graph/useApiGraphData';
+import { useChapterPovSummaries } from '../hooks/graph/useChapterPovSummaries';
 import {
   useGraphChapterEventState,
   useManifestChapterEventClamp,
   useChapterTitleMeta,
   useGraphPageElements,
   useChapterSelect,
-} from '../../../hooks/graph/useGraphPage';
-import { useIsNarrowViewport, useLatestRef } from '../../../hooks/common/hooksShared';
-import { resolveServerBookId } from '../../../utils/viewer/viewerCore';
-import { toPositiveNumberOrNull } from '../../../utils/common/valueUtils';
+} from '../hooks/graph/useGraphPage';
+import { useIsNarrowViewport, useLatestRef } from '../hooks/common/hooksShared';
+import { resolveServerBookId } from '../utils/common/bookNormalize';
+import { toPositiveNumberOrNull } from '../utils/common/valueUtils';
 import {
   shouldIgnoreGraphOutsideClick,
   useGraphTooltipSelection,
   useGraphViewportFocus,
-} from '../../../hooks/graph/useGraphCy';
-import { getChapterData } from '../../../utils/common/cache/manifestCache.js';
+} from '../hooks/graph/useGraphCy';
+import { getChapterData } from '../utils/common/cache/manifestCache.js';
+
+/** 데스크톱 레이아웃 offset용 챕터 사이드바 폭 */
+function resolveChapterSidebarWidth(isSidebarOpen, { isNarrow = false } = {}) {
+  // 좁은 화면은 오버레이 드로어 — 레이아웃 offset 없음
+  if (isNarrow) return 0;
+  const { OPEN_WIDTH, CLOSED_WIDTH } = GRAPH_LAYOUT_CONSTANTS.SIDEBAR;
+  return isSidebarOpen ? OPEN_WIDTH : CLOSED_WIDTH;
+}
 
 const GRAPH_PAGE_EDGE_STYLE = getEdgeStyle('graph');
 
@@ -92,6 +100,8 @@ function GraphPage() {
     closeSidebar,
     setFilterStage,
   } = useGraphState();
+
+  const closeChapterSidebar = useCallback(() => setSidebarOpen(false), [setSidebarOpen]);
 
   const isNarrow = useIsNarrowViewport();
   const sidebarLayoutWidth = resolveChapterSidebarWidth(isSidebarOpen, { isNarrow });
@@ -207,7 +217,7 @@ function GraphPage() {
 
     if (chapterChanged || eventChanged) {
       if (chapterChanged && searchState.isSearchActive) clearSearch();
-      clearGraphSelection({ fitViewport: false, restoreViewport: false });
+      clearGraphSelection({ restoreViewport: false });
     }
 
     prevChapterNum.current = currentChapter;
@@ -374,7 +384,7 @@ function GraphPage() {
       <ChapterSidebar
         isSidebarOpen={isSidebarOpen}
         onToggleSidebar={toggleSidebar}
-        onCloseSidebar={() => setSidebarOpen(false)}
+        onCloseSidebar={closeChapterSidebar}
         chapterList={chapterList}
         currentChapter={currentChapter}
         onChapterSelect={handleChapterSelect}

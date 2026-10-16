@@ -1,11 +1,15 @@
-import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { useRef, useState, useCallback, useMemo, useEffect } from "react";
 import { UserSearch } from "lucide-react";
-import { buildElementsGraphFingerprint } from "../../../utils/graph/graphElements.js";
-import { safeCyCall } from "../../../utils/graph/graphCy.js";
-import { zoomGraphByFactor } from "../../../utils/graph/graphViewport.js";
-import { applySearchFadeEffect, shouldShowNoSearchResults, getNoSearchResultsMessage } from "../../../utils/graph/graphHighlight.js";
-import { GRAPH_ZOOM } from "../../../utils/graph/graphCore.js";
-import { applyNormalizedNodeSizes } from "../../../utils/styles/graphStyles.js";
+import { buildElementsGraphFingerprint } from '../../../utils/graph/graphElements.js';
+import {
+  safeCyCall,
+  applySearchFadeEffect,
+  shouldShowNoSearchResults,
+  getNoSearchResultsMessage,
+} from '../../../utils/graph/graphCy.js';
+import { zoomGraphByFactor } from '../../../utils/graph/graphLayout.js';
+import { GRAPH_ZOOM } from '../../../utils/graph/graphCore.js';
+import { applyNormalizedNodeSizes } from "../../../utils/graph/graphStyles";
 import { useGraphInteractions, useCyInstance } from '../../../hooks/graph/useGraphCy.js';
 import {
   useCytoscapeMount,
@@ -16,14 +20,25 @@ import {
   useCySearchHighlight,
   useCyResize,
 } from '../../../hooks/graph/useCyLifecycle.js';
-import { useRefSlot, useLatestRef } from '../../../hooks/common/hooksShared.js';
+import { useLatestRef } from '../../../hooks/common/hooksShared.js';
+
+/** imperative handle 슬롯: mount 시 할당, unmount 시 null */
+function useRefSlot(slotRef, value) {
+  useEffect(() => {
+    if (!slotRef) return undefined;
+    slotRef.current = value;
+    return () => {
+      slotRef.current = null;
+    };
+  }, [slotRef, value]);
+}
 
 const ZOOM_CONTROL_BUTTONS = [
   { factor: GRAPH_ZOOM.STEP, label: '그래프 확대', title: '확대', text: '+' },
   { factor: 1 / GRAPH_ZOOM.STEP, label: '그래프 축소', title: '축소', text: '−' },
 ];
 
-function GraphZoomControls({ cy, className = 'graph-zoom-controls' }) {
+function GraphZoomControls({ cy }) {
   const handleZoom = useCallback((e, factor) => {
     e.stopPropagation();
     zoomGraphByFactor(cy, factor);
@@ -33,7 +48,7 @@ function GraphZoomControls({ cy, className = 'graph-zoom-controls' }) {
 
   return (
     <div
-      className={className}
+      className="graph-zoom-controls"
       onClick={(e) => e.stopPropagation()}
       onMouseDown={(e) => e.stopPropagation()}
     >
@@ -55,24 +70,24 @@ function GraphZoomControls({ cy, className = 'graph-zoom-controls' }) {
 
 const CytoscapeGraph = ({
   elements,
-  stylesheet = [],
+  stylesheet,
   fitNodeIds,
   cyRef: externalCyRef,
-  searchTerm = "",
-  isSearchActive = false,
-  filteredElements = [],
+  searchTerm,
+  isSearchActive,
+  filteredElements,
   onShowNodeTooltip,
   onShowEdgeTooltip,
   onClearTooltip,
   selectedElementRef,
-  graphClearRef = null,
-  graphSelectNodeRef = null,
-  graphSelectElementRef = null,
-  isDataRefreshing = false,
-  showZoomControls = true,
-  onCyReady = null,
+  graphClearRef,
+  /** 그래프 페이지만 (관계 분석에서 연결 인물 선택) */
+  graphSelectNodeRef,
+  graphSelectElementRef,
+  /** 그래프 페이지만: 갱신 중엔 빈 elements가 와도 기존 그래프 유지 */
+  isDataRefreshing,
   /** 챕터 전환 등 뷰포트 재맞춤 트리거 (값이 바뀌면 전체 fit) */
-  viewportFitKey = null,
+  viewportFitKey,
 }) => {
   const containerRef = useRef(null);
   const [cyReady, setCyReady] = useState(false);
@@ -91,16 +106,6 @@ const CytoscapeGraph = ({
     canApplyPendingViewportFit,
     clearPendingViewportFitBlock,
   } = usePendingViewportFit(viewportFitKey, elementsGraphFingerprint);
-
-  useEffect(() => {
-    if (!onCyReady) return undefined;
-    if (cyReady && cy) {
-      onCyReady(cy);
-      return () => onCyReady(null);
-    }
-    onCyReady(null);
-    return undefined;
-  }, [cy, cyReady, onCyReady]);
 
   const updateStylesheet = useCallback((cyInst) => {
     if (!cyInst || !stylesheet) return;
@@ -218,7 +223,7 @@ const CytoscapeGraph = ({
           </div>
         </div>
       )}
-      <GraphZoomControls cy={showZoomControls ? cy : null} />
+      <GraphZoomControls cy={cy} />
     </div>
   );
 };

@@ -16,10 +16,6 @@ import {
   getProactiveRefreshBufferSeconds,
   isTokenValid,
   ensureSessionAccessToken,
-} from '../../utils/api/authApi';
-import { getPostLoginHomeUrl, isOAuthCallbackRoute, rememberPostLoginPath } from '../../utils/common/urlUtils';
-import { errorUtils } from '../../utils/common/valueUtils';
-import {
   getStoredAccessToken,
   setStoredAccessToken,
   setStoredRefreshToken,
@@ -29,7 +25,10 @@ import {
   removeStoredGoogleUser,
   clearAuthData,
   AUTH_CLEARED_EVENT,
-} from '../../utils/security/authTokenStorage';
+} from '../utils/api/authApi';
+import { getPostLoginHomeUrl, isOAuthCallbackRoute, rememberPostLoginPath } from '../utils/common/urlUtils';
+import { errorUtils } from '../utils/common/valueUtils';
+import { removeKeys } from '../utils/common/cache/cacheManager';
 
 const AuthContext = createContext(null);
 
@@ -115,12 +114,8 @@ function AuthProvider({ children }) {
         await ensureSessionAccessToken();
         if (cancelled) return;
 
-        // 구버전 snake_case 키 정리 (authTokenStorage는 camelCase만 마이그레이션)
-        try {
-          localStorage.removeItem('access_token');
-        } catch {
-          /* ignore */
-        }
+        // 구버전 snake_case 키 정리 (authApi 토큰 저장소는 camelCase만 마이그레이션)
+        removeKeys('localStorage', 'access_token');
 
         const accessToken = getStoredAccessToken();
         if (accessToken && !isTokenValid(accessToken)) {

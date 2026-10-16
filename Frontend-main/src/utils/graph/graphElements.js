@@ -1,9 +1,17 @@
-/** 캐릭터·relations → Cytoscape elements: 캐릭터 맵 · 노드 가중치 · elements 빌드 · diff/fingerprint · 필터/서브그래프 */
+/** 캐릭터·relations → Cytoscape elements (프로필 이미지 해석 포함) */
 
+import { sanitizeAssetUrl, resolveApiArtifactUrl, isProtectedPublicAsset } from '../common/urlUtils';
 import {
-  isGraphEdgeElement,
-  isGraphNodeElement,
-  normalizeElementId,
+  errorUtils,
+  asArray,
+  isPositiveFiniteNumberLiteral,
+  toPositiveInt,
+  stringOrEmpty,
+  resolveEventChapterIndex,
+  resolveEventNum,
+} from '../common/valueUtils';
+import { fetchAuthenticatedAssetBlobUrl } from '../api/booksApi';
+import {
   undirectedPairKey,
   directedEdgeElementId,
   uniqueStrings,
@@ -14,8 +22,8 @@ import {
   relationEventMetaPassthrough,
   processRelations,
   sortElementsByDataId,
-} from './graphCore';
-import {
+  isGraphEdgeElement,
+  isGraphNodeElement,
   pickCharacterDisplayName,
   lookupRememberedCharacterDisplayName,
   buildManifestCharacterNameLookup,
@@ -23,16 +31,137 @@ import {
   isUsableCharacterDisplayName,
   enrichGraphCharacters,
   extractCharacterId,
-} from './graphCharacterNames';
-import { eventUtils } from '../viewer/viewerCore';
-import {
-  asArray,
-  isPositiveFiniteNumberLiteral,
-  toPositiveInt,
-  errorUtils,
-  stringOrEmpty,
-} from '../common/valueUtils';
-import { validateAndNormalizeProfileImageUrl } from './graphProfileImages';
+  forEachIdentifiedCharacter,
+} from './graphCore';
+
+/* ─── 그래프 프로필 이미지: URL 정규화 · 보호 자산 → blob · 직접 URL 로드 프로브 ─── */
+
+function validateAndNormalizeProfileImageUrl(profileImage) {
+  if (!profileImage || typeof profileImage !== 'string') {
+    return null;
+  }
+
+  const trimmed = sanitizeAssetUrl(profileImage.trim());
+  if (trimmed === '') {
+    return null;
+  }
+
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    try {
+      new URL(trimmed);
+      return trimmed;
+    } catch {
+      if (import.meta.env.DEV) {
+        errorUtils.logDebug('graphElements', '유효하지 않은 절대 URL');
+      }
+      return null;
+    }
+  }
+
+  if (trimmed.startsWith('//')) {
+    try {
+      const resolved = new URL(trimmed, 'https://placeholder.local');
+      return resolved.origin + resolved.pathname + resolved.search + resolved.hash;
+    } catch {
+      if (import.meta.env.DEV) {
+        errorUtils.logDebug('graphElements', '유효하지 않은 프로토콜 상대 URL');
+      }
+      return null;
+    }
+  }
+
+  if (trimmed.startsWith('/')) {
+    return resolveApiArtifactUrl(trimmed) || trimmed;
+  }
+
+  if (import.meta.env.DEV) {
+    errorUtils.logDebug('graphElements', '유효하지 않은 이미지 URL 형식');
+  }
+  return null;
+}
+
+export const GRAPH_IMAGE_DEFERRED_RETRY_MS = 1_500;
+
+const stillNeedsProtectedImageResolve = (image) =>
+  !!image && isProtectedPublicAsset(image) && !String(image).startsWith('blob:');
+
+/**
+ * /public/ 밖의 직접 URL(CDN 등)은 인증 없이 그대로 <img>/캔버스에 쓰인다 — CORS 차단이나
+ * 파일 부재 시 브라우저가 조용히 로드를 실패시켜, 그래프 노드에 이미지도 배경색도 없이
+ * 빈 원만 남는다. 실제 로드 가능 여부를 한 번 프로브해 실패분은 image 필드를 제거,
+ * 스타일시트의 기본 배경색(node 셀렉터)으로 폴백시킨다.
+ */
+const directImageLoadableCache = new Map();
+const DIRECT_IMAGE_PROBE_TIMEOUT_MS = 4_000;
+
+const needsDirectImageVerification = (image) =>
+  !!image && !isProtectedPublicAsset(image) && !String(image).startsWith('blob:');
+
+function probeImageLoadable(url) {
+  if (typeof Image === 'undefined') return Promise.resolve(true);
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (ok) => {
+      if (settled) return;
+      settled = true;
+      resolve(ok);
+    };
+    const img = new Image();
+    // Cytoscape는 background-image를 기본 crossOrigin='anonymous'로 로드한다(캔버스 오염 방지).
+    // 여기서도 동일하게 설정해야, CORS 헤더가 없는 origin의 이미지를 "로드 가능"으로 오판하지 않는다
+    // (crossOrigin 없는 <img> 프로브는 통과하지만 실제 캔버스 렌더링은 CORS로 차단되는 불일치 방지).
+    img.crossOrigin = 'anonymous';
+    img.onload = () => finish(true);
+    img.onerror = () => finish(false);
+    // 응답이 느릴 뿐 실패는 아닐 수 있으므로, 타임아웃은 실패로 단정하지 않고 통과시킨다.
+    setTimeout(() => finish(true), DIRECT_IMAGE_PROBE_TIMEOUT_MS);
+    img.src = url;
+  });
+}
+
+async function isDirectImageLoadable(url) {
+  if (directImageLoadableCache.has(url)) return directImageLoadableCache.get(url);
+  const ok = await probeImageLoadable(url);
+  directImageLoadableCache.set(url, ok);
+  return ok;
+}
+
+async function resolveOneGraphProfileImage(el, { force = false } = {}) {
+  const image = el?.data?.image;
+  if (!image) return el;
+
+  if (stillNeedsProtectedImageResolve(image)) {
+    const blobUrl = await fetchAuthenticatedAssetBlobUrl(image, { force });
+    if (!blobUrl || blobUrl === image) return el;
+    return { ...el, data: { ...el.data, image: blobUrl } };
+  }
+
+  if (needsDirectImageVerification(image)) {
+    const loadable = await isDirectImageLoadable(image);
+    if (loadable) return el;
+    const { image: _unused, ...restData } = el.data;
+    return { ...el, data: restData };
+  }
+
+  return el;
+}
+
+export function graphElementsHaveUnresolvedProfileImages(elements) {
+  if (!Array.isArray(elements) || elements.length === 0) return false;
+  return elements.some((el) => stillNeedsProtectedImageResolve(el?.data?.image));
+}
+
+export async function resolveGraphElementsProfileImages(elements, options = {}) {
+  if (!Array.isArray(elements) || elements.length === 0) return elements;
+  const { force = false } = options;
+  return Promise.all(elements.map((el) => resolveOneGraphProfileImage(el, { force })));
+}
+
+/* ─── 캐릭터·relations → Cytoscape elements: 캐릭터 맵 · 노드 가중치 · elements 빌드 · diff/fingerprint · 필터/서브그래프 ─── */
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * 1. Character maps
+ * ═══════════════════════════════════════════════════════════════════════════ */
 
 const createEmptyCharacterMaps = () => ({
   idToName: {},
@@ -49,13 +178,6 @@ const resolveCharacterArray = (characters) => {
 };
 
 /** id를 뽑을 수 있는 캐릭터만 (char, id)로 순회 */
-function forEachIdentifiedCharacter(characters, visit) {
-  asArray(characters).forEach((char) => {
-    const id = char ? extractCharacterId(char) : null;
-    if (id) visit(char, id);
-  });
-}
-
 /**
  * 캐릭터 배열 → id 기반 lookup 맵.
  * @param {Array|Object|null} characters
@@ -415,10 +537,10 @@ function isRelationVisibleAtEvent(rel, eventData) {
   if (!eventData || typeof eventData !== 'object') return true;
 
   const targetChapter = toPositiveInt(
-    eventUtils.resolveChapterIdx(eventData) ?? eventData.chapterIdx ?? eventData.chapter,
+    resolveEventChapterIndex(eventData) ?? eventData.chapterIdx ?? eventData.chapter,
     NaN
   );
-  const targetEventIdx = toPositiveInt(eventUtils.resolveEventNum(eventData, null), NaN);
+  const targetEventIdx = toPositiveInt(resolveEventNum(eventData, null), NaN);
 
   const meta = relationEventMetaPassthrough(rel);
   const relationChapter = toPositiveInt(meta.chapterIdx, NaN);
@@ -453,8 +575,8 @@ function resolveEdgeDisplayLabel(r) {
 function resolveRelationEventOrdinal(rel, { fallback = 0 } = {}) {
   const meta = relationEventMetaPassthrough(rel);
   const candidates = [
-    eventUtils.resolveEventNum(rel, null),
-    eventUtils.resolveEventNum(meta, null),
+    resolveEventNum(rel, null),
+    resolveEventNum(meta, null),
     rel?.event_id,
     rel?.event?.event_id,
   ];
@@ -587,7 +709,7 @@ function buildVisibleNodes({
 function accumulateDirectedEdges(relations, { visibleNodeIdSet, eventData }) {
   const edgeMap = new Map();
   const positivityByEdge = new Map();
-  const currentEventNum = eventUtils.resolveEventNum(eventData) || NaN;
+  const currentEventNum = resolveEventNum(eventData) || NaN;
 
   relations.forEach((rel) => {
     const r = normalizeRelation(rel);
@@ -608,7 +730,7 @@ function accumulateDirectedEdges(relations, { visibleNodeIdSet, eventData }) {
         info = { lastFinite: null, lastFromCurrent: null, hasFromCurrent: false };
       }
       info.lastFinite = r.positivity;
-      const relEventNum = eventUtils.resolveEventNum(rel) || NaN;
+      const relEventNum = resolveEventNum(rel) || NaN;
       if (Number.isFinite(currentEventNum) && relEventNum === currentEventNum) {
         info.lastFromCurrent = r.positivity;
         info.hasFromCurrent = true;
@@ -737,72 +859,6 @@ function convertRelationsToElements({
 /* ═══════════════════════════════════════════════════════════════════════════
  * 4. Diff / fingerprints
  * ═══════════════════════════════════════════════════════════════════════════ */
-
-const validateElements = (elements) => elements?.filter(e => e && normalizeElementId(e)) || [];
-
-const createElementMap = (elements) => new Map(elements.map(e => [normalizeElementId(e), e]));
-
-export function deepEqual(obj1, obj2, depth = 0) {
-  const MAX_DEPTH = 10;
-  if (depth > MAX_DEPTH) {
-    return obj1 === obj2;
-  }
-
-  if (obj1 === obj2) return true;
-  if (obj1 == null || obj2 == null) return false;
-  if (typeof obj1 !== typeof obj2) return false;
-
-  if (typeof obj1 !== 'object') return obj1 === obj2;
-
-  if (Array.isArray(obj1) && Array.isArray(obj2)) {
-    if (obj1.length !== obj2.length) return false;
-    for (let i = 0; i < obj1.length; i++) {
-      if (!deepEqual(obj1[i], obj2[i], depth + 1)) return false;
-    }
-    return true;
-  }
-
-  if (Array.isArray(obj1) !== Array.isArray(obj2)) return false;
-
-  const keys1 = Object.keys(obj1);
-  const keys2 = Object.keys(obj2);
-
-  if (keys1.length !== keys2.length) return false;
-
-  const keys2Set = new Set(keys2);
-
-  for (const key of keys1) {
-    if (!keys2Set.has(key)) return false;
-    if (!deepEqual(obj1[key], obj2[key], depth + 1)) return false;
-  }
-
-  return true;
-}
-
-/**
- * 그래프 diff 계산 (data 비교)
- */
-export function calcGraphDiff(prevElements, currElements) {
-  if (!prevElements || !currElements) {
-    return { added: [], removed: [], updated: [] };
-  }
-  
-  const validPrevElements = validateElements(prevElements);
-  const validCurrElements = validateElements(currElements);
-  const prevMap = createElementMap(validPrevElements);
-  const currMap = createElementMap(validCurrElements);
-
-  // 추가: 현재엔 있지만 이전엔 없는 id
-  const added = validCurrElements.filter((e) => !prevMap.has(normalizeElementId(e)));
-  // 삭제: 이전엔 있지만 현재엔 없는 id
-  const removed = validPrevElements.filter((e) => !currMap.has(normalizeElementId(e)));
-  // 수정: id는 같지만 data가 다름 (position은 id 시드로 결정적이라 비교 불필요)
-  const updated = validCurrElements.filter((e) => {
-    const prev = prevMap.get(normalizeElementId(e));
-    return Boolean(prev) && !deepEqual(prev.data, e.data);
-  });
-  return { added, removed, updated };
-}
 
 /**
  * Cytoscape 동기화 스킵용: 동일 id의 시각적 data만 문자열화.
@@ -941,7 +997,3 @@ export function filterMainCharacters(elements, filterStage) {
   }
   return elements;
 }
-
-/* ═══════════════════════════════════════════════════════════════════════════
- * 6. Chapter cache payload / reconstruct / book summary
- * ═══════════════════════════════════════════════════════════════════════════ */

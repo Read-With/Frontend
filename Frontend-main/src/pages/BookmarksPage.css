@@ -1,9 +1,8 @@
-/* 북마크 — 독서 노트 / 인용 목록 (+ 뷰어 삭제 확인 모달 공용) */
+/* 북마크 — 독서 노트 / 인용 목록 */
 
 /* —— 토큰 —— */
 
-.bm-page,
-.bm-confirm-overlay {
+.bm-page {
   --bm-ink: #2a3326;
   --bm-ink-soft: #4a5544;
   --bm-ink-faint: #6e7768;
@@ -19,14 +18,11 @@
   --bm-accent-deep: var(--mp-brand, #3e4f2f);
   --bm-danger: #b91c1c;
   --bm-danger-hover: #991b1b;
-  --bm-overlay: rgba(0, 0, 0, 0.5);
 
   --bm-hairline: 0.0625rem;
   --bm-radius-xs: 0.15rem;
-  --bm-radius-sm: 0.35rem;
   --bm-radius-input: 0.4rem;
 
-  --bm-shadow-dialog: 0 0.625rem 2.5rem rgba(0, 0, 0, 0.15);
 
   --bm-focus: rgba(62, 79, 47, 0.4);
   --bm-danger-focus: rgba(185, 28, 28, 0.45);
@@ -50,9 +46,7 @@
 }
 
 .bm-page,
-.bm-page :is(button, input, select),
-.bm-confirm-overlay,
-.bm-confirm-overlay :is(button, input, select) {
+.bm-page :is(button, input, select) {
   font-family: var(--bm-font);
 }
 
@@ -702,8 +696,7 @@
 .bm-btn,
 .bm-btn-text,
 .bm-btn-back,
-.bm-btn-danger,
-.bm-btn-confirm-delete {
+.bm-btn-danger {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -794,25 +787,10 @@
   gap: 0.35rem;
 }
 
-.bm-btn-confirm-delete {
-  min-width: 5.75rem;
-  padding: 0.4rem 1.15rem;
-  border: none;
-  border-radius: 0.2rem;
-  background: var(--bm-danger);
-  color: #fff;
-  text-decoration: none;
-}
-
-.bm-btn-confirm-delete:hover:not(:disabled) {
-  background: var(--bm-danger-hover);
-}
-
 /* —— disabled / focus —— */
 
 .bm-sort-select:disabled,
-.bm-btn:disabled,
-.bm-btn-confirm-delete:disabled {
+.bm-btn:disabled {
   opacity: var(--bm-opacity-disabled);
   cursor: not-allowed;
 }
@@ -840,8 +818,7 @@
 }
 
 .bm-btn-text-danger:focus-visible,
-.bm-btn-danger:focus-visible,
-.bm-btn-confirm-delete:focus-visible {
+.bm-btn-danger:focus-visible {
   outline: var(--bm-danger-ring);
   outline-offset: var(--bm-focus-offset-loose);
 }
@@ -856,76 +833,7 @@
   outline-offset: 0.1rem;
 }
 
-/* —— 삭제 확인 (뷰어 공용) —— */
-
-.bm-confirm-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
-  padding:
-    var(--bm-safe-top)
-    var(--bm-safe-right)
-    var(--bm-safe-bottom)
-    var(--bm-safe-left);
-  background: var(--bm-overlay);
-  animation: bm-overlay-in 0.18s ease;
-}
-
-.bm-confirm-dialog {
-  width: calc(100% - 2.5rem);
-  max-width: 22rem;
-  padding: 1.65rem 1.5rem 1.4rem;
-  border: var(--bm-hairline) solid var(--bm-rule-strong);
-  border-radius: var(--bm-radius-sm);
-  background: var(--bm-surface);
-  text-align: center;
-  box-shadow: var(--bm-shadow-dialog);
-  animation: bm-dialog-in 0.2s ease;
-}
-
-.bm-confirm-title {
-  margin: 0 0 0.55rem;
-  font-size: 1.25rem;
-  font-weight: 600;
-  line-height: 1.45;
-  color: var(--bm-ink);
-}
-
-.bm-confirm-desc {
-  margin: 0 0 1.45rem;
-  font-size: 1rem;
-  line-height: 1.5;
-  color: var(--bm-ink-faint);
-}
-
-.bm-confirm-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 0.65rem;
-}
-
 /* —— 애니메이션 —— */
-
-@keyframes bm-overlay-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes bm-dialog-in {
-  from {
-    opacity: 0;
-    transform: translateY(0.5rem);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
 
 @keyframes bm-chapter-in {
   from {
@@ -1064,9 +972,7 @@
     max-width: 18rem;
   }
 
-  .bm-confirm-dialog {
-    padding: 1.75rem 1.85rem;
-  }
+
 }
 
 /* —— 와이드: 사이드 TOC + 목록 —— */
@@ -1162,8 +1068,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .bm-confirm-overlay,
-  .bm-confirm-dialog,
   .bm-chapter,
   .bm-row-panel {
     animation: none;
@@ -1177,7 +1081,6 @@
   .bm-btn-text,
   .bm-btn-back,
   .bm-btn-danger,
-  .bm-btn-confirm-delete,
   .bm-sort-select,
   .bm-search-input,
   .bm-input {

@@ -161,6 +161,13 @@
   outline-offset: 0.125rem;
 }
 
+.delete-confirm-close:disabled,
+.delete-confirm-cancel:disabled,
+.delete-confirm-delete:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .delete-confirm-modal-overlay,
   .delete-confirm-modal,

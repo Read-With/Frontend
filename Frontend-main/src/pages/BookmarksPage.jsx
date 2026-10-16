@@ -1,7 +1,7 @@
-import { useState, useMemo, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
+import { memo, useState, useMemo, useCallback, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { useBookmarks } from '../hooks/bookmarks/bookmarkHooks';
+import { useBookmarks } from '../hooks/bookmarkHooks';
 import {
   bookmarkBorders,
   colorOptions,
@@ -10,19 +10,19 @@ import {
   formatBookmarkLocatorDetail,
   bookmarkToResumeAnchor,
   groupBookmarksByChapter,
-} from '../utils/bookmarks/bookmarkUtils';
+} from '../utils/bookmarkUtils';
 import { userViewerPath, userViewerBookmarksPath, userViewerReadingPath } from '../utils/common/urlUtils';
-import { resolveChapterIndex, errorUtils, formatRelativeTime } from '../utils/common/valueUtils';
-import { formatFallbackChapterLabel, resolveServerBookId } from '../utils/viewer/viewerCore';
-import BookmarkDeleteConfirm from '../components/viewer/BookmarkDeleteConfirm';
+import { resolveChapterIndex, errorUtils, formatRelativeTime, truncateWithEllipsis } from '../utils/common/valueUtils';
+import { resolveServerBookId } from '../utils/common/bookNormalize';
+import { formatChapterOrdinalLabel } from '../utils/common/chapterLabel';
+import ConfirmDialog from '../components/common/ConfirmDialog';
 import './BookmarksPage.css';
 
 const sameId = (a, b) => String(a) === String(b);
 
 const getHighlightSnippet = (bookmark) => {
   const text = bookmark?.highlightText || bookmark?.textSnippet;
-  if (!text) return '';
-  return text.length > 180 ? `${text.slice(0, 177)}…` : text;
+  return truncateWithEllipsis(text, 180);
 };
 
 const parseMemoEntries = (memo) =>
@@ -33,7 +33,6 @@ const parseMemoEntries = (memo) =>
 const serializeMemoEntries = (entries) =>
   (entries || []).map((e) => e.trim()).filter(Boolean).join('\n');
 
-const EMPTY_EDIT = { bookmarkId: null, entryIndex: null, text: '' };
 
 /** 검색 대상 문자열: 위치·메모·구절·챕터 표기 */
 function buildBookmarkHaystack(bookmark, serverBookId) {
@@ -45,8 +44,7 @@ function buildBookmarkHaystack(bookmark, serverBookId) {
     bookmark.highlightText,
     bookmark.textSnippet,
     bookmark.chapterTitle,
-    chapter != null ? `챕터 ${chapter}` : '',
-    chapter != null ? formatFallbackChapterLabel(chapter) : '',
+    chapter != null ? `${formatChapterOrdinalLabel(chapter)} 챕터 ${chapter} 제${chapter}장` : '',
   ]
     .filter(Boolean)
     .join(' ')
@@ -58,35 +56,33 @@ function resolveStateBookTitle(book) {
   return typeof raw === 'string' && raw.trim() ? raw.trim() : null;
 }
 
-/** 툴바 실제 높이를 --bm-toolbar-height 로 동기화 (sticky 오프셋용) */
-function useToolbarHeightVar(pageRef, toolbarRef, deps) {
-  useLayoutEffect(() => {
-    const page = pageRef.current;
-    const toolbar = toolbarRef.current;
-    if (!page || !toolbar) return undefined;
+/**
+ * 툴바 실제 높이를 --bm-toolbar-height 로 동기화 (sticky 오프셋용).
+ * callback ref라 툴바가 붙는 순간에만 관찰 — 로딩·오류 분기를 deps로 넘길 필요 없음 (React 19 ref cleanup)
+ */
+const syncToolbarHeightRef = (toolbar) => {
+  const page = toolbar?.closest('.bm-page');
+  if (!page) return undefined;
 
-    const syncToolbarHeight = () => {
-      const next = `${Math.ceil(toolbar.getBoundingClientRect().height)}px`;
-      if (page.style.getPropertyValue('--bm-toolbar-height') !== next) {
-        page.style.setProperty('--bm-toolbar-height', next);
-      }
-    };
+  const syncToolbarHeight = () => {
+    const next = `${Math.ceil(toolbar.getBoundingClientRect().height)}px`;
+    if (page.style.getPropertyValue('--bm-toolbar-height') !== next) {
+      page.style.setProperty('--bm-toolbar-height', next);
+    }
+  };
 
-    syncToolbarHeight();
+  syncToolbarHeight();
+  const observer = new ResizeObserver(syncToolbarHeight);
+  observer.observe(toolbar);
+  window.addEventListener('resize', syncToolbarHeight);
+  window.addEventListener('orientationchange', syncToolbarHeight);
 
-    const observer = new ResizeObserver(syncToolbarHeight);
-    observer.observe(toolbar);
-    window.addEventListener('resize', syncToolbarHeight);
-    window.addEventListener('orientationchange', syncToolbarHeight);
-
-    return () => {
-      observer.disconnect();
-      window.removeEventListener('resize', syncToolbarHeight);
-      window.removeEventListener('orientationchange', syncToolbarHeight);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps);
-}
+  return () => {
+    observer.disconnect();
+    window.removeEventListener('resize', syncToolbarHeight);
+    window.removeEventListener('orientationchange', syncToolbarHeight);
+  };
+};
 
 const onEnter = (handler) => (e) => {
   if (e.key === 'Enter') {
@@ -97,9 +93,9 @@ const onEnter = (handler) => (e) => {
 
 const stopRow = (e) => e.stopPropagation();
 
-function PagePanel({ pageRef, title, description, children }) {
+function PagePanel({ title, description, children }) {
   return (
-    <div className="bm-page" ref={pageRef}>
+    <div className="bm-page">
       <div className="bm-shell bm-shell--narrow">
         <div className="bm-panel">
           <p className="bm-panel-title">{title}</p>
@@ -151,10 +147,8 @@ function MemoEntry({ entry, isEditing, editText, disabled, actions }) {
   );
 }
 
-function BookmarkPanel({ bookmark, colorKey, memoEntries, editingMemo, composer, isMutating, actions }) {
-  const editingIndex = editingMemo.bookmarkId != null && sameId(editingMemo.bookmarkId, bookmark.id)
-    ? editingMemo.entryIndex
-    : null;
+/** 펼쳐진 행의 메모·색상 패널. editing·composerText는 이 행에만 속함 (null = 닫힘) */
+function BookmarkPanel({ bookmark, colorKey, memoEntries, editing, composerText, isMutating, actions }) {
 
   return (
     <div className="bm-row-panel" onClick={stopRow}>
@@ -165,14 +159,14 @@ function BookmarkPanel({ bookmark, colorKey, memoEntries, editingMemo, composer,
               <div key={`${bookmark.id}-memo-${entryIndex}`} className="bm-memo-entry">
                 <MemoEntry
                   entry={entry}
-                  isEditing={editingIndex === entryIndex}
-                  editText={editingMemo.text}
+                  isEditing={editing?.entryIndex === entryIndex}
+                  editText={editing?.text ?? ''}
                   disabled={isMutating}
                   actions={{
                     changeEditText: actions.changeEditText,
                     saveEdit: actions.saveEdit,
                     cancelEdit: actions.cancelEdit,
-                    startEdit: () => actions.startEdit(bookmark.id, entryIndex, entry),
+                    startEdit: () => actions.startEdit(entryIndex, entry),
                     deleteEntry: () => actions.deleteEntry(bookmark.id, entryIndex),
                   }}
                 />
@@ -183,11 +177,11 @@ function BookmarkPanel({ bookmark, colorKey, memoEntries, editingMemo, composer,
           )}
         </div>
 
-        {composer.isOpen ? (
+        {composerText != null ? (
           <div className="bm-memo-composer">
             <input
               className="bm-input"
-              value={composer.text}
+              value={composerText}
               onChange={(e) => actions.changeComposerText(e.target.value)}
               onKeyDown={onEnter(() => actions.addMemo(bookmark.id))}
               placeholder="메모를 입력하세요"
@@ -210,7 +204,7 @@ function BookmarkPanel({ bookmark, colorKey, memoEntries, editingMemo, composer,
             type="button"
             className="bm-btn-text bm-btn-memo-add"
             disabled={isMutating}
-            onClick={() => actions.openComposer(bookmark.id)}
+            onClick={actions.openComposer}
           >
             메모 추가
           </button>
@@ -251,7 +245,8 @@ function BookmarkPanel({ bookmark, colorKey, memoEntries, editingMemo, composer,
   );
 }
 
-function BookmarkRow({ bookmark, serverBookId, isExpanded, isMutating, onOpen, onToggle, renderPanel }) {
+/** memo: 메모 입력 중에는 펼쳐진 행만 다시 렌더 (다른 행의 위치 라벨·메모 파싱 반복 방지) */
+const BookmarkRow = memo(function BookmarkRow({ bookmark, serverBookId, isExpanded, isMutating, onOpen, onToggle, renderPanel }) {
   const colorKey = getColorKey(bookmark.color);
   const highlight = getHighlightSnippet(bookmark);
   const memoEntries = parseMemoEntries(bookmark.memo);
@@ -306,7 +301,7 @@ function BookmarkRow({ bookmark, serverBookId, isExpanded, isMutating, onOpen, o
       {isExpanded ? renderPanel({ bookmark, colorKey, memoEntries }) : null}
     </article>
   );
-}
+});
 
 function BookmarksEmpty({ isFiltered, onClearSearch, onBackToViewer }) {
   return (
@@ -378,25 +373,23 @@ const BookmarksPage = () => {
 
   const [sortOrder, setSortOrder] = useState('recent');
   const [searchTerm, setSearchTerm] = useState('');
-  const [composerId, setComposerId] = useState(null);
-  const [composerText, setComposerText] = useState('');
-  const [editingMemo, setEditingMemo] = useState(EMPTY_EDIT);
-  const [deleteConfirmId, setDeleteConfirmId] = useState(null);
+  // 메모 작성(composerText)·수정(editing)은 펼쳐진 행(expandedId)에만 존재 — null이면 닫힘
   const [expandedId, setExpandedId] = useState(null);
-  const pageRef = useRef(null);
-  const toolbarRef = useRef(null);
+  const [composerText, setComposerText] = useState(null);
+  const [editing, setEditing] = useState(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState(null);
 
-  const closeComposer = () => {
-    setComposerId(null);
-    setComposerText('');
-  };
+  const toggleExpanded = useCallback((bookmarkId) => {
+    setExpandedId((prev) => (prev != null && sameId(prev, bookmarkId) ? null : bookmarkId));
+    setEditing(null);
+    setComposerText(null);
+  }, []);
 
   const collapseRow = (bookmarkId) => {
-    if (expandedId != null && sameId(expandedId, bookmarkId)) setExpandedId(null);
-    if (composerId != null && sameId(composerId, bookmarkId)) closeComposer();
-    if (editingMemo.bookmarkId != null && sameId(editingMemo.bookmarkId, bookmarkId)) {
-      setEditingMemo(EMPTY_EDIT);
-    }
+    if (expandedId == null || !sameId(expandedId, bookmarkId)) return;
+    setExpandedId(null);
+    setEditing(null);
+    setComposerText(null);
   };
 
   useEffect(() => {
@@ -496,64 +489,48 @@ const BookmarksPage = () => {
     setDeleteConfirmId(null);
   };
 
-  useToolbarHeightVar(pageRef, toolbarRef, [loading, loadError, serverBookId]);
-
   const handleAddMemo = async (bookmarkId) => {
-    const text = composerText.trim();
+    const text = (composerText ?? '').trim();
     if (!text) return;
     const result = await updateMemoEntries(bookmarkId, (entries) => [...entries, text]);
-    if (result.success) closeComposer();
+    if (result.success) setComposerText(null);
   };
 
   const handleEditMemoSave = async () => {
-    const { bookmarkId, entryIndex, text } = editingMemo;
-    if (bookmarkId == null || entryIndex == null) return;
+    if (expandedId == null || editing == null) return;
+    const { entryIndex, text } = editing;
     const trimmed = text.trim();
-    const result = await updateMemoEntries(bookmarkId, (entries) => {
+    const result = await updateMemoEntries(expandedId, (entries) => {
       if (entryIndex < 0 || entryIndex >= entries.length) return entries;
       if (!trimmed) return entries.filter((_, i) => i !== entryIndex);
       const next = [...entries];
       next[entryIndex] = trimmed;
       return next;
     });
-    if (result.success) setEditingMemo(EMPTY_EDIT);
+    if (result.success) setEditing(null);
   };
 
   const handleDeleteMemoEntry = async (bookmarkId, entryIndex) => {
     const result = await updateMemoEntries(bookmarkId, (entries) =>
       entries.filter((_, i) => i !== entryIndex)
     );
-    if (
-      result.success &&
-      editingMemo.bookmarkId != null &&
-      sameId(editingMemo.bookmarkId, bookmarkId) &&
-      editingMemo.entryIndex === entryIndex
-    ) {
-      setEditingMemo(EMPTY_EDIT);
-    }
-  };
-
-  const toggleExpanded = (bookmarkId) => {
-    setExpandedId((prev) => (prev != null && sameId(prev, bookmarkId) ? null : bookmarkId));
-    setEditingMemo(EMPTY_EDIT);
-    closeComposer();
+    if (result.success && editing?.entryIndex === entryIndex) setEditing(null);
   };
 
   const memoActions = {
-    changeEditText: (text) => setEditingMemo((prev) => ({ ...prev, text })),
+    changeEditText: (text) => setEditing((prev) => (prev ? { ...prev, text } : prev)),
     saveEdit: handleEditMemoSave,
-    cancelEdit: () => setEditingMemo(EMPTY_EDIT),
-    startEdit: (bookmarkId, entryIndex, text) => {
-      closeComposer();
-      setEditingMemo({ bookmarkId, entryIndex, text });
+    cancelEdit: () => setEditing(null),
+    startEdit: (entryIndex, text) => {
+      setComposerText(null);
+      setEditing({ entryIndex, text });
     },
     deleteEntry: handleDeleteMemoEntry,
     changeComposerText: setComposerText,
     addMemo: handleAddMemo,
-    closeComposer,
-    openComposer: (bookmarkId) => {
-      setEditingMemo(EMPTY_EDIT);
-      setComposerId(bookmarkId);
+    closeComposer: () => setComposerText(null),
+    openComposer: () => {
+      setEditing(null);
       setComposerText('');
     },
     setColor: (bookmarkId, color) => {
@@ -562,13 +539,14 @@ const BookmarksPage = () => {
     requestDelete: setDeleteConfirmId,
   };
 
+  // 매 렌더 새 함수 — 펼쳐진 행에만 넘겨 접힌 행의 memo가 깨지지 않게 함
   const renderPanel = ({ bookmark, colorKey, memoEntries }) => (
     <BookmarkPanel
       bookmark={bookmark}
       colorKey={colorKey}
       memoEntries={memoEntries}
-      editingMemo={editingMemo}
-      composer={{ isOpen: composerId != null && sameId(composerId, bookmark.id), text: composerText }}
+      editing={editing}
+      composerText={composerText}
       isMutating={isMutating}
       actions={memoActions}
     />
@@ -577,7 +555,6 @@ const BookmarksPage = () => {
   if (serverBookId == null) {
     return (
       <PagePanel
-        pageRef={pageRef}
         title="유효한 책 정보를 찾을 수 없습니다"
         description="북마크는 숫자 bookId가 필요합니다. 서재에서 책을 다시 열어 주세요."
       >
@@ -590,7 +567,7 @@ const BookmarksPage = () => {
 
   if (loading) {
     return (
-      <div className="bm-page bm-page--center" ref={pageRef}>
+      <div className="bm-page bm-page--center">
         <div className="bm-shell bm-shell--narrow">
           <div className="bm-status" role="status" aria-live="polite">
             북마크를 불러오는 중...
@@ -602,7 +579,7 @@ const BookmarksPage = () => {
 
   if (loadError) {
     return (
-      <PagePanel pageRef={pageRef} title="북마크를 불러오지 못했습니다" description={loadError}>
+      <PagePanel title="북마크를 불러오지 못했습니다" description={loadError}>
         <button type="button" className="bm-btn bm-btn-primary" onClick={() => fetchBookmarks()}>
           다시 시도
         </button>
@@ -614,7 +591,7 @@ const BookmarksPage = () => {
   }
 
   return (
-    <div className="bm-page" ref={pageRef}>
+    <div className="bm-page">
       <div className={`bm-shell${chapterGroups.length > 0 ? '' : ' bm-shell--narrow'}`}>
         <header className="bm-header">
           <div className="bm-header-left">
@@ -626,7 +603,7 @@ const BookmarksPage = () => {
           </div>
         </header>
 
-        <div className="bm-toolbar" ref={toolbarRef}>
+        <div className="bm-toolbar" ref={syncToolbarHeightRef}>
           <input
             className="bm-search-input"
             type="search"
@@ -682,18 +659,22 @@ const BookmarksPage = () => {
                     <span className="bm-chapter-count">{group.items.length}</span>
                   </header>
                   <div className="bm-chapter-list">
-                    {group.items.map((bookmark) => (bookmark ? (
-                      <BookmarkRow
-                        key={bookmark.id}
-                        bookmark={bookmark}
-                        serverBookId={serverBookId}
-                        isExpanded={expandedId != null && sameId(expandedId, bookmark.id)}
-                        isMutating={isMutating}
-                        onOpen={handleOpenBookmark}
-                        onToggle={toggleExpanded}
-                        renderPanel={renderPanel}
-                      />
-                    ) : null))}
+                    {group.items.map((bookmark) => {
+                      if (!bookmark) return null;
+                      const isExpanded = expandedId != null && sameId(expandedId, bookmark.id);
+                      return (
+                        <BookmarkRow
+                          key={bookmark.id}
+                          bookmark={bookmark}
+                          serverBookId={serverBookId}
+                          isExpanded={isExpanded}
+                          isMutating={isMutating}
+                          onOpen={handleOpenBookmark}
+                          onToggle={toggleExpanded}
+                          renderPanel={isExpanded ? renderPanel : null}
+                        />
+                      );
+                    })}
                   </div>
                 </section>
               ))}
@@ -702,12 +683,13 @@ const BookmarksPage = () => {
         )}
       </div>
 
-      <BookmarkDeleteConfirm
-        open={deleteConfirmId != null}
+      <ConfirmDialog
+        isOpen={deleteConfirmId != null}
         busy={isMutating}
-        onCancel={() => setDeleteConfirmId(null)}
+        title="북마크를 삭제할까요?"
+        message="메모가 있다면 함께 삭제되며, 되돌릴 수 없습니다."
+        onClose={() => setDeleteConfirmId(null)}
         onConfirm={() => handleDeleteBookmark(deleteConfirmId)}
-        description="메모가 있다면 함께 삭제되며, 되돌릴 수 없습니다."
       />
     </div>
   );

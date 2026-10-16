@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import useAuth from '../../hooks/auth/useAuth';
+import useAuth from '../../hooks/useAuth';
 import {
   validateUserData,
   verifyGoogleOAuthState,
@@ -10,9 +10,11 @@ import {
   resolveOAuthHttpError,
   normalizeOAuthFetchError,
   getOAuthErrorTip,
-} from '../../utils/security/oauthSecurity';
+} from '../../utils/api/oauthApi';
 import { getApiBaseUrl, getGoogleOAuthRedirectUri, takePostLoginPath } from '../../utils/common/urlUtils';
 import { errorUtils, sleep } from '../../utils/common/valueUtils';
+import { readRaw, writeRaw, removeKeys } from '../../utils/common/cache/cacheManager';
+import { joinClasses } from '../../utils/common/domUtils';
 import './OAuthCallback.css';
 
 export function GoogleIcon({ className, ...props }) {
@@ -40,26 +42,8 @@ const oauthExchangeByCode = new Map();
 
 /** 온점(.) 기준으로 문장 분리 — 문장 중간 줄바꿈 없이 문장 단위로만 나눔 */
 function splitIntoSentences(text) {
-  const normalized = String(text || '')
-    .replace(/\r\n|\r|\n/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  if (!normalized) return [];
-
-  const sentences = [];
-  let buffer = '';
-  for (let i = 0; i < normalized.length; i += 1) {
-    buffer += normalized[i];
-    if (normalized[i] === '.' && (i === normalized.length - 1 || /\s/.test(normalized[i + 1]))) {
-      const sentence = buffer.trim();
-      if (sentence) sentences.push(sentence);
-      buffer = '';
-      while (i + 1 < normalized.length && /\s/.test(normalized[i + 1])) i += 1;
-    }
-  }
-  const rest = buffer.trim();
-  if (rest) sentences.push(rest);
-  return sentences;
+  const normalized = String(text || '').replace(/\s+/g, ' ').trim();
+  return normalized ? normalized.split(/(?<=\.) /) : [];
 }
 
 function SentenceLines({ text, className }) {
@@ -101,11 +85,7 @@ function splitOAuthErrorDisplay(error) {
 }
 
 function clearOAuthAttemptArtifacts() {
-  try {
-    localStorage.removeItem(PROCESSED_CODE_KEY);
-  } catch {
-    /* ignore */
-  }
+  removeKeys('localStorage', PROCESSED_CODE_KEY);
   clearGoogleOAuthStateSession();
 }
 
@@ -128,91 +108,87 @@ function tagOAuthError(error, tags = {}) {
   return err;
 }
 
+const EXCHANGE_TIMEOUT_MS = 30000;
+
+/** 서버 응답(user + 토큰) → AuthProvider.login 형식 */
+function toFrontendUser(result) {
+  const userData = result.user;
+  return {
+    id: userData.id.toString(),
+    name: userData.nickname || userData.name || '사용자',
+    email: userData.email,
+    imageUrl: userData.profileImgUrl || userData.picture || '',
+    provider: userData.provider || 'GOOGLE',
+    accessToken: result.accessToken,
+    refreshToken: result.refreshToken,
+    tokenType: result.tokenType || 'Bearer',
+    expiresIn: result.expiresIn || 3600,
+    refreshExpiresIn: result.refreshExpiresIn || 604800,
+  };
+}
+
+/** 응답 처리 중 분류되지 않은 오류 → phase 태그 (timeout·network·exchange) */
+function classifyExchangeError(err, redirectUri) {
+  if (err?.phase) return err;
+  if (err?.name === 'AbortError') {
+    return tagOAuthError(
+      '백엔드 서버 응답이 지연되고 있습니다. 잠시 후 홈에서 다시 로그인해 주세요.',
+      { phase: 'timeout', redirectUri },
+    );
+  }
+  if (errorUtils.isNetworkError(err)) {
+    return tagOAuthError(
+      '백엔드 서버에 연결할 수 없습니다. 백엔드 서버가 실행 중인지 확인해주세요.',
+      { phase: 'network', redirectUri, cause: err.message },
+    );
+  }
+  return tagOAuthError(err, { phase: 'exchange', redirectUri, status: err?.status ?? null });
+}
+
+async function requestGoogleLogin(code, redirectUri) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), EXCHANGE_TIMEOUT_MS);
+  try {
+    const response = await fetch(`${getApiBaseUrl()}/api/auth/google`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ code, redirectUri }),
+      credentials: 'include',
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      try {
+        await resolveOAuthHttpError(response);
+      } catch (httpErr) {
+        throw tagOAuthError(httpErr, { phase: 'http_error', status: response.status, redirectUri });
+      }
+    }
+
+    const data = await response.json();
+    resolveOAuthApiBodyError(data);
+
+    if (!data.result?.user) {
+      throw tagOAuthError('사용자 데이터를 받지 못했습니다.', { phase: 'invalid_payload', redirectUri });
+    }
+    const userValidation = validateUserData(data.result.user);
+    if (!userValidation.isValid) {
+      throw tagOAuthError(userValidation.error, { phase: 'invalid_user', redirectUri });
+    }
+    return toFrontendUser(data.result);
+  } catch (err) {
+    throw classifyExchangeError(err, redirectUri);
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+/** 같은 code의 교환은 진행 중인 요청을 공유 (StrictMode 리마운트) */
 async function exchangeGoogleAuthCode(code) {
   const existing = oauthExchangeByCode.get(code);
   if (existing) return existing;
 
-  const run = (async () => {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000);
-    const redirectUri = getGoogleOAuthRedirectUri();
-
-    try {
-      const response = await fetch(`${getApiBaseUrl()}/api/auth/google`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify({ code, redirectUri }),
-        credentials: 'include',
-        signal: controller.signal,
-      });
-
-      if (!response.ok) {
-        const status = response.status;
-        try {
-          await resolveOAuthHttpError(response);
-        } catch (httpErr) {
-          throw tagOAuthError(httpErr, { phase: 'http_error', status, redirectUri });
-        }
-      }
-
-      const data = await response.json();
-      resolveOAuthApiBodyError(data);
-
-      if (!data.result?.user) {
-        throw tagOAuthError('사용자 데이터를 받지 못했습니다.', {
-          phase: 'invalid_payload',
-          redirectUri,
-        });
-      }
-
-      const userData = data.result.user;
-      const userValidation = validateUserData(userData);
-      if (!userValidation.isValid) {
-        throw tagOAuthError(userValidation.error, {
-          phase: 'invalid_user',
-          redirectUri,
-        });
-      }
-
-      return {
-        id: userData.id.toString(),
-        name: userData.nickname || userData.name || '사용자',
-        email: userData.email,
-        imageUrl: userData.profileImgUrl || userData.picture || '',
-        provider: userData.provider || 'GOOGLE',
-        accessToken: data.result.accessToken,
-        refreshToken: data.result.refreshToken,
-        tokenType: data.result.tokenType || 'Bearer',
-        expiresIn: data.result.expiresIn || 3600,
-        refreshExpiresIn: data.result.refreshExpiresIn || 604800,
-      };
-    } catch (err) {
-      if (err?.phase) throw err;
-      if (err?.name === 'AbortError') {
-        throw tagOAuthError(
-          '백엔드 서버 응답이 지연되고 있습니다. 잠시 후 홈에서 다시 로그인해 주세요.',
-          { phase: 'timeout', redirectUri },
-        );
-      }
-      if (typeof err?.message === 'string' && err.message.includes('Failed to fetch')) {
-        throw tagOAuthError(
-          '백엔드 서버에 연결할 수 없습니다. 백엔드 서버가 실행 중인지 확인해주세요.',
-          { phase: 'network', redirectUri, cause: err.message },
-        );
-      }
-      throw tagOAuthError(err, {
-        phase: err?.phase || 'exchange',
-        redirectUri,
-        status: err?.status ?? null,
-      });
-    } finally {
-      clearTimeout(timeoutId);
-    }
-  })();
-
+  const run = requestGoogleLogin(code, getGoogleOAuthRedirectUri());
   oauthExchangeByCode.set(code, run);
   try {
     return await run;
@@ -224,6 +200,19 @@ async function exchangeGoogleAuthCode(code) {
 const isServerNotReady = (err) =>
   err?.phase === 'network' || err?.phase === 'timeout' || [502, 503, 504].includes(err?.status);
 
+/** 서버가 깨어날 때까지 무한 재시도 (code를 서버가 아직 소비하지 않은 실패만). 취소되면 null */
+async function exchangeWithRetry(code, isCancelled) {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await exchangeGoogleAuthCode(code);
+    } catch (err) {
+      if (isCancelled() || !isServerNotReady(err)) throw err;
+      await sleep(Math.min(1000 * attempt, 5000));
+      if (isCancelled()) return null;
+    }
+  }
+}
+
 function stripOAuthCallbackParams() {
   if (!window.history?.replaceState) return;
   const cleanUrl = new URL(window.location.href);
@@ -233,40 +222,143 @@ function stripOAuthCallbackParams() {
   window.history.replaceState({}, document.title, cleanUrl.toString());
 }
 
+/**
+ * 콜백 URL 검사. 진행할 수 없으면 { failure: { message, level, reason } }, 아니면 { code }
+ */
+function checkCallbackParams(searchParams) {
+  const code = searchParams.get('code');
+  const oauthErrorParam = searchParams.get('error');
+
+  if (!code) {
+    return oauthErrorParam
+      ? { failure: { message: resolveOAuthUrlError(oauthErrorParam), level: 'warn', reason: `provider_error:${oauthErrorParam}` } }
+      : { failure: { message: '유효한 로그인 정보가 없습니다.', level: 'warn', reason: 'missing_code' } };
+  }
+
+  const stateCheck = verifyGoogleOAuthState(searchParams.get('state'));
+  if (!stateCheck.isValid) {
+    return {
+      failure: {
+        message: stateCheck.error || 'OAuth state 검증에 실패했습니다. 다시 로그인해주세요.',
+        reason: 'invalid_state',
+      },
+    };
+  }
+
+  // 진행 중인 교환에 합류하는 경우가 아니면, 이미 처리한 code는 거부하고 이번 code를 기록
+  if (!oauthExchangeByCode.has(code)) {
+    if (readRaw(PROCESSED_CODE_KEY) === code) {
+      return { failure: { message: '이미 처리된 로그인 요청입니다.', level: 'warn', reason: 'duplicate_code' } };
+    }
+    if (!writeRaw(PROCESSED_CODE_KEY, code)) {
+      errorUtils.logWarning('OAuthCallback', 'processed code 저장 실패', { reason: 'storage_write_failed' });
+    }
+  }
+  return { code };
+}
+
+function logOAuthFailure(message, { error = null, level = 'error', reason = null } = {}) {
+  const detail = error || new Error(message);
+  const meta = {
+    reason,
+    phase: detail.phase ?? null,
+    status: detail.status ?? null,
+    redirectUri: detail.redirectUri ?? null,
+    uiMessage: message,
+  };
+  if (level === 'warn') errorUtils.logWarning('OAuthCallback', message, meta);
+  else errorUtils.logError('OAuthCallback', detail, meta);
+}
+
+/** 로딩 단계 문구를 4.5초마다 다음 단계로 */
+function useLoadingPhase(active) {
+  const [phase, setPhase] = useState(0);
+  useEffect(() => {
+    if (!active) return undefined;
+    const intervalId = window.setInterval(() => {
+      setPhase((prev) => Math.min(prev + 1, LOADING_PHASES.length - 1));
+    }, 4500);
+    return () => window.clearInterval(intervalId);
+  }, [active]);
+  return phase;
+}
+
+function LoadingView({ phase }) {
+  const { title, detail } = LOADING_PHASES[phase];
+  return (
+    <OAuthCallbackShell role="status" ariaLive="polite" ariaBusy="true">
+      <div className="oauth-callback-icon-wrap" aria-hidden="true">
+        <div className="oauth-callback-icon-ring" />
+        <div className="oauth-callback-google-badge">
+          <GoogleIcon className="oauth-callback-google-icon" />
+        </div>
+      </div>
+
+      <h1 className="oauth-callback-title">{title}</h1>
+      <SentenceLines className="oauth-callback-detail" text={detail} />
+
+      <ol className="oauth-callback-steps" aria-hidden="true">
+        {LOADING_PHASES.map((_, index) => (
+          <li
+            key={index}
+            className={joinClasses(
+              'oauth-callback-step',
+              index === phase && 'is-active',
+              index < phase && 'is-done',
+            )}
+          />
+        ))}
+      </ol>
+
+      {phase >= LOADING_PHASES.length - 1 ? (
+        <SentenceLines
+          className="oauth-callback-hint"
+          text="첫 로그인이거나 서버가 깨어나는 중이면 10~20초 정도 걸릴 수 있어요."
+        />
+      ) : null}
+    </OAuthCallbackShell>
+  );
+}
+
+function ErrorView({ error, onHome }) {
+  const errorTip = getOAuthErrorTip(error);
+  const { summary, detail } = splitOAuthErrorDisplay(error);
+  return (
+    <OAuthCallbackShell variant="oauth-callback-content--error">
+      <div className="oauth-callback-error-icon" aria-hidden="true">
+        <span className="oauth-callback-error-icon-mark">!</span>
+      </div>
+      <h1 className="oauth-callback-error-title">로그인에 실패했어요</h1>
+      <SentenceLines className="oauth-callback-error-message" text={summary} />
+      {errorTip ? <SentenceLines className="oauth-callback-error-tip" text={errorTip} /> : null}
+      {detail ? (
+        <details className="oauth-callback-error-details">
+          <summary>자세한 내용 보기</summary>
+          <pre className="oauth-callback-error-detail-body">{detail}</pre>
+        </details>
+      ) : null}
+      <button type="button" className="oauth-callback-home-btn" onClick={onHome}>
+        홈으로 돌아가기
+      </button>
+    </OAuthCallbackShell>
+  );
+}
+
 const OAuthCallback = () => {
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [loadingPhase, setLoadingPhase] = useState(0);
+  const loadingPhase = useLoadingPhase(isLoading);
 
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { login } = useAuth();
 
   useEffect(() => {
-    if (!isLoading) return undefined;
-
-    const intervalId = window.setInterval(() => {
-      setLoadingPhase((prev) => Math.min(prev + 1, LOADING_PHASES.length - 1));
-    }, 4500);
-
-    return () => window.clearInterval(intervalId);
-  }, [isLoading]);
-
-  useEffect(() => {
     let cancelled = false;
+    const isCancelled = () => cancelled;
 
-    const finishError = (message, { error = null, level = 'error', reason = null } = {}) => {
-      const detail = error || new Error(message);
-      const meta = {
-        reason,
-        phase: detail.phase ?? null,
-        status: detail.status ?? null,
-        redirectUri: detail.redirectUri ?? null,
-        uiMessage: message,
-      };
-      if (level === 'warn') errorUtils.logWarning('OAuthCallback', message, meta);
-      else errorUtils.logError('OAuthCallback', detail, meta);
-
+    const finishError = (message, options) => {
+      logOAuthFailure(message, options);
       clearOAuthAttemptArtifacts();
       if (!cancelled) {
         setError(message);
@@ -275,74 +367,21 @@ const OAuthCallback = () => {
     };
 
     const handleOAuthCallback = async () => {
-      const code = searchParams.get('code');
-      const oauthErrorParam = searchParams.get('error');
-      const oauthState = searchParams.get('state');
-
-      if (!code && !oauthErrorParam) {
-        finishError('유효한 로그인 정보가 없습니다.', { level: 'warn', reason: 'missing_code' });
+      const { code, failure } = checkCallbackParams(searchParams);
+      if (failure) {
+        finishError(failure.message, failure);
         return;
-      }
-
-      if (oauthErrorParam && !code) {
-        finishError(resolveOAuthUrlError(oauthErrorParam), {
-          level: 'warn',
-          reason: `provider_error:${oauthErrorParam}`,
-        });
-        return;
-      }
-
-      const stateCheck = verifyGoogleOAuthState(oauthState);
-      if (!stateCheck.isValid) {
-        finishError(
-          stateCheck.error || 'OAuth state 검증에 실패했습니다. 다시 로그인해주세요.',
-          { reason: 'invalid_state' },
-        );
-        return;
-      }
-
-      const joiningExisting = oauthExchangeByCode.has(code);
-      if (!joiningExisting) {
-        try {
-          if (localStorage.getItem(PROCESSED_CODE_KEY) === code) {
-            finishError('이미 처리된 로그인 요청입니다.', {
-              level: 'warn',
-              reason: 'duplicate_code',
-            });
-            return;
-          }
-          localStorage.setItem(PROCESSED_CODE_KEY, code);
-        } catch (storageError) {
-          errorUtils.logWarning('OAuthCallback', 'processed code 저장 실패', {
-            reason: 'storage_write_failed',
-            message: storageError?.message,
-          });
-        }
       }
 
       try {
         stripOAuthCallbackParams();
-        let frontendUserData;
-        // 서버가 깨어날 때까지 무한 재시도 (code를 서버가 아직 소비하지 않은 실패만)
-        for (let attempt = 1; ; attempt += 1) {
-          try {
-            frontendUserData = await exchangeGoogleAuthCode(code);
-            break;
-          } catch (err) {
-            if (cancelled || !isServerNotReady(err)) throw err;
-            await sleep(Math.min(1000 * attempt, 5000));
-            if (cancelled) return;
-          }
-        }
-        if (cancelled) return;
+        const frontendUserData = await exchangeWithRetry(code, isCancelled);
+        if (cancelled || !frontendUserData) return;
         login(frontendUserData);
         clearOAuthAttemptArtifacts();
         navigate(takePostLoginPath() || '/mypage', { replace: true });
       } catch (err) {
-        finishError(normalizeOAuthFetchError(err), {
-          error: err,
-          reason: 'code_exchange_failed',
-        });
+        finishError(normalizeOAuthFetchError(err), { error: err, reason: 'code_exchange_failed' });
       }
     };
 
@@ -355,71 +394,8 @@ const OAuthCallback = () => {
     };
   }, [searchParams, login, navigate]);
 
-  if (isLoading) {
-    const { title, detail } = LOADING_PHASES[loadingPhase];
-
-    return (
-      <OAuthCallbackShell role="status" ariaLive="polite" ariaBusy="true">
-        <div className="oauth-callback-icon-wrap" aria-hidden="true">
-          <div className="oauth-callback-icon-ring" />
-          <div className="oauth-callback-google-badge">
-            <GoogleIcon className="oauth-callback-google-icon" />
-          </div>
-        </div>
-
-        <h1 className="oauth-callback-title">{title}</h1>
-        <SentenceLines className="oauth-callback-detail" text={detail} />
-
-        <ol className="oauth-callback-steps" aria-hidden="true">
-          {LOADING_PHASES.map((_, index) => (
-            <li
-              key={index}
-              className={[
-                'oauth-callback-step',
-                index === loadingPhase ? 'is-active' : '',
-                index < loadingPhase ? 'is-done' : '',
-              ]
-                .filter(Boolean)
-                .join(' ')}
-            />
-          ))}
-        </ol>
-
-        {loadingPhase >= LOADING_PHASES.length - 1 ? (
-          <SentenceLines
-            className="oauth-callback-hint"
-            text="첫 로그인이거나 서버가 깨어나는 중이면 10~20초 정도 걸릴 수 있어요."
-          />
-        ) : null}
-      </OAuthCallbackShell>
-    );
-  }
-
-  if (error) {
-    const errorTip = getOAuthErrorTip(error);
-    const { summary, detail } = splitOAuthErrorDisplay(error);
-
-    return (
-      <OAuthCallbackShell variant="oauth-callback-content--error">
-        <div className="oauth-callback-error-icon" aria-hidden="true">
-          <span className="oauth-callback-error-icon-mark">!</span>
-        </div>
-        <h1 className="oauth-callback-error-title">로그인에 실패했어요</h1>
-        <SentenceLines className="oauth-callback-error-message" text={summary} />
-        {errorTip ? <SentenceLines className="oauth-callback-error-tip" text={errorTip} /> : null}
-        {detail ? (
-          <details className="oauth-callback-error-details">
-            <summary>자세한 내용 보기</summary>
-            <pre className="oauth-callback-error-detail-body">{detail}</pre>
-          </details>
-        ) : null}
-        <button type="button" className="oauth-callback-home-btn" onClick={() => navigate('/')}>
-          홈으로 돌아가기
-        </button>
-      </OAuthCallbackShell>
-    );
-  }
-
+  if (isLoading) return <LoadingView phase={loadingPhase} />;
+  if (error) return <ErrorView error={error} onHome={() => navigate('/')} />;
   return null;
 };
 

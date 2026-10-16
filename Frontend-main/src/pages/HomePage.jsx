@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import useAuth from '../hooks/auth/useAuth';
+import useAuth from '../hooks/useAuth';
 import { GoogleIcon } from '../components/auth/OAuthCallback';
-import { startGoogleOAuthLogin } from '../utils/security/oauthSecurity';
+import { startGoogleOAuthLogin } from '../utils/api/oauthApi';
 import { errorUtils } from '../utils/common/valueUtils';
 import landingHero from '../assets/landing-hero-book.jpg';
 import './HomePage.css';

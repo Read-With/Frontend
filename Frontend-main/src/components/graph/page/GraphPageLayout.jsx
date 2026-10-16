@@ -3,7 +3,7 @@ import GraphCanvasArea from '../canvas/GraphCanvasArea';
 import GraphPageSidebar from './GraphPageSidebar';
 import { GraphFloatingControls } from '../controls/GraphFloatingControls';
 import { GraphTopBarMeta } from '../controls/GraphTopBarMeta';
-import { formatChapterOrdinalLabel } from '../../../utils/viewer/viewerCore';
+import { formatChapterOrdinalLabel } from '../../../utils/common/chapterLabel';
 import { useGraphTopbarToolsReserve } from '../../../hooks/graph/useGraphCy.js';
 import { useGraphPage } from './GraphPageContext';
 
@@ -111,7 +111,6 @@ function GraphPageLayout() {
             graphClearRef={graphClearRef}
             graphSelectNodeRef={graphSelectNodeRef}
             isDataRefreshing={isLoading}
-            showZoomControls
             viewportFitKey={currentChapter}
           >
             {isLoading && hasShownGraphOnce && <GraphLoadingOverlay />}

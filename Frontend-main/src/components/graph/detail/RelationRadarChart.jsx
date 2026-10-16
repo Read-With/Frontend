@@ -2,9 +2,9 @@
 
 import { memo, useMemo } from 'react';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
-import { getPositivityDisplay, GRAPH_COLORS, brandAlpha } from '../../../utils/styles/graphStyles.js';
+import { getPositivityDisplay, GRAPH_COLORS, brandAlpha } from '../../../utils/graph/graphStyles';
 import { truncateWithEllipsis } from '../../../utils/common/valueUtils.js';
-import { joinClasses, onActivationKey } from '../../../utils/styles/styles.js';
+import { joinClasses, onActivationKey } from '../../../utils/common/domUtils';
 
 const NAME_LABEL_MAX = 19; // truncate 시 18자 + …
 const RADAR_GRID = brandAlpha(0.22);
@@ -26,8 +26,8 @@ const RadarDot = memo(function RadarDot({
   activeName,
   onActivate,
 }) {
-  const fullData = payload?.name != null ? (dataMap.get(payload.name) || payload) : null;
-  if (!payload || cx == null || cy == null || !fullData) return null;
+  if (cx == null || cy == null || payload?.name == null) return null;
+  const fullData = dataMap.get(payload.name) || payload;
 
   const { color } = getPositivityDisplay(fullData.positivity);
   const isActive = activeName === payload.name;
@@ -35,7 +35,7 @@ const RadarDot = memo(function RadarDot({
 
   const activate = (e) => {
     e.stopPropagation();
-    onActivate?.(fullData, e);
+    onActivate(fullData, e);
   };
 
   return (
@@ -78,11 +78,7 @@ const RadarDot = memo(function RadarDot({
 });
 
 export default function RelationRadarChart({ nodeName, data, activeName, onActivate }) {
-  const dataMap = useMemo(() => {
-    const map = new Map();
-    data.forEach((item) => map.set(item.name, item));
-    return map;
-  }, [data]);
+  const dataMap = useMemo(() => new Map(data.map((item) => [item.name, item])), [data]);
 
   const renderPolarAngleAxis = ({ payload, x: tickX, y: tickY, cx, cy }) => {
     const point = dataMap.get(payload.value);
@@ -92,7 +88,7 @@ export default function RelationRadarChart({ nodeName, data, activeName, onActiv
     const active = activeName === payload.value;
     const dx = tickX - cx;
     const dy = tickY - cy;
-    const distance = Math.sqrt(dx * dx + dy * dy) || 1;
+    const distance = Math.hypot(dx, dy) || 1;
     const raw = payload.value || '';
     const label = truncateWithEllipsis(raw, NAME_LABEL_MAX);
     const scale = (distance + Math.max(38, 26 + (label.length * 2.2))) / distance;

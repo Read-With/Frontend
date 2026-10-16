@@ -1,12 +1,13 @@
 import { memo, useState, useEffect, useMemo } from "react";
 import { useParams } from "react-router-dom";
-import { useFloatingTooltip } from "../../../hooks/ui/tooltipHooks";
+import { useFloatingTooltip } from "../../../hooks/tooltipHooks";
 import { useRelationData } from "../../../hooks/graph/useApiGraphData";
-import { getPositivityDisplay, getRelationColor } from "../../../utils/styles/graphStyles";
-import { ANIMATION_VALUES, mergeRefs } from "../../../utils/styles/styles";
+import { getPositivityDisplay, getRelationColor, tooltipTransition } from "../../../utils/graph/graphStyles";
+import { mergeRefs } from "../../../utils/common/domUtils";
 import { toPositivityOrNull, toNumberOrNull, toPositiveNumberOrNull } from "../../../utils/common/valueUtils";
-import { buildRelationTagDisplayItems } from "../../../utils/graph/graphCore";
+import { buildRelationTagDisplayItems } from '../../../utils/graph/graphCore';
 import { buildEdgeRechartsLineData } from "../../../utils/graph/graphCharts";
+import { formatChapterOrdinalLabel } from "../../../utils/common/chapterLabel";
 import { TooltipCloseButton, NodeTooltipShell } from './GraphTooltipParts';
 import RelationTimelineChart from './RelationTimelineChart';
 
@@ -219,6 +220,38 @@ function EdgeChartPanel({ relation, chart, title, missingEvent, heightPx, isSide
   );
 }
 
+/** 간선 데이터의 관계 태그 (이번 위치에서 추가·갱신·이전 구분) */
+function useRelationTagItems(edge, fallbackPositivity) {
+  const { relation, label, labelHistory, latestLabels, snapshotEventId, latestEventId } = edge;
+  return useMemo(
+    () => buildRelationTagDisplayItems({
+      relation,
+      label,
+      labelHistory,
+      latestLabels,
+      currentEventId: snapshotEventId ?? latestEventId ?? null,
+      fallbackPositivity,
+    }),
+    [relation, label, labelHistory, latestLabels, snapshotEventId, latestEventId, fallbackPositivity],
+  );
+}
+
+/** 긍정도 라벨·색 · 퍼센트(없으면 null) · 막대 너비(0~100) */
+function resolvePositivityView(positivity) {
+  const display = getPositivityDisplay(positivity);
+  const percentage = positivity != null ? display.percent : null;
+  return {
+    display,
+    percentage,
+    barWidth: percentage != null ? Math.min(100, Math.abs(percentage)) : 0,
+  };
+}
+
+/** 이 간선 자체에 보여줄 관계 정보(태그·긍정도·설명)가 있는지 */
+function hasOwnRelationData(tagItems, positivity, explanation) {
+  return tagItems.length > 0 || positivity != null || Boolean(explanation?.trim?.());
+}
+
 /** 툴팁·사이드바 공통 데이터: 관계 타임라인 조회 · 태그 · 긍정도 · 차트 */
 function useEdgeDetailModel({ data, isViewer, currentChapter, eventNum, bookId }) {
   const { filename } = useParams();
@@ -241,26 +274,7 @@ function useEdgeDetailModel({ data, isViewer, currentChapter, eventNum, bookId }
 
   const edgePositivity = useMemo(() => toPositivityOrNull(edge.positivity), [edge.positivity]);
 
-  const relationTagItems = useMemo(
-    () =>
-      buildRelationTagDisplayItems({
-        relation: edge.relation,
-        label: edge.label,
-        labelHistory: edge.labelHistory,
-        latestLabels: edge.latestLabels,
-        currentEventId: edge.snapshotEventId ?? edge.latestEventId ?? null,
-        fallbackPositivity: edgePositivity,
-      }),
-    [
-      edge.relation,
-      edge.label,
-      edge.labelHistory,
-      edge.latestLabels,
-      edge.snapshotEventId,
-      edge.latestEventId,
-      edgePositivity,
-    ]
-  );
+  const relationTagItems = useRelationTagItems(edge, edgePositivity);
 
   const explanation = useMemo(() => parseExplanation(edge.explanation), [edge.explanation]);
 
@@ -289,24 +303,20 @@ function useEdgeDetailModel({ data, isViewer, currentChapter, eventNum, bookId }
     ],
   );
 
-  const hasCurrentEdgeRelationData =
-    relationTagItems.length > 0 ||
-    edgePositivity != null ||
-    (typeof edge.explanation === 'string' && edge.explanation.trim().length > 0);
+  // 타임라인 API가 "관계 없음"이어도 간선 자체 데이터나 차트·오류가 있으면 안내하지 않음
   const effectiveNoRelation =
-    relation.noRelation && !hasCurrentEdgeRelationData && !chart.hasChartData && !relation.error;
-
-  const positivityDisplay = getPositivityDisplay(edgePositivity);
-  const positivityPercentage = edgePositivity != null ? positivityDisplay.percent : null;
-  const positivityBarWidth =
-    positivityPercentage != null ? Math.min(100, Math.abs(positivityPercentage)) : 0;
+    relation.noRelation &&
+    !hasOwnRelationData(relationTagItems, edgePositivity, edge.explanation) &&
+    !chart.hasChartData &&
+    !relation.error;
+  const positivity = resolvePositivityView(edgePositivity);
 
   const infoView = (
     <EdgeInfoView
       showNoRelation={isViewer && effectiveNoRelation}
       tagItems={relationTagItems}
-      positivityDisplay={positivityDisplay}
-      positivityPercentage={positivityPercentage}
+      positivityDisplay={positivity.display}
+      positivityPercentage={positivity.percentage}
       explanation={explanation}
     />
   );
@@ -314,15 +324,15 @@ function useEdgeDetailModel({ data, isViewer, currentChapter, eventNum, bookId }
     <EdgeChartPanel
       relation={relation}
       chart={chart}
-      title={isViewer ? `챕터 ${currentChapter} 관계 변화` : `챕터 ${currentChapter}까지의 누적 관계 변화`}
+      title={isViewer ? `${formatChapterOrdinalLabel(currentChapter)} 관계 변화` : `${formatChapterOrdinalLabel(currentChapter)}까지의 누적 관계 변화`}
       missingEvent={isViewer && displayEventNum <= 0}
       heightPx={heightPx}
       isSidebar={!isViewer}
-      color={positivityDisplay.color}
+      color={positivity.display.color}
     />
   );
 
-  return { edge, infoView, renderChartPanel, color: positivityDisplay.color, positivityBarWidth };
+  return { edge, infoView, renderChartPanel, color: positivity.display.color, positivityBarWidth: positivity.barWidth };
 }
 
 /** 닫기 버튼 + 긍정도 테마 + 양 끝 인물 헤더. children은 본문 패널 */
@@ -390,7 +400,6 @@ function EdgeDetailTooltip({
 
   const { position, showContent, isDragging, tooltipRef, handleMouseDown, clickOutsideRef } =
     useFloatingTooltip(x, y, {
-      enabled: true,
       center: edge.edgeCenter,
       boundsRef: tooltipBoundsRef,
       onClose,
@@ -410,7 +419,7 @@ function EdgeDetailTooltip({
       showContent={showContent}
       isDragging={isDragging}
       handleMouseDown={handleMouseDown}
-      transition={isDragging ? 'none' : `opacity ${ANIMATION_VALUES.DURATION.NORMAL} ease-in-out`}
+      transition={tooltipTransition(isDragging)}
     >
       <EdgeDetailFrame
         model={model}

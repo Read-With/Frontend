@@ -1,8 +1,8 @@
 /** 그래프 캔버스 스크린리더 요약 (aria-live) */
 
-import { useId, useMemo } from 'react';
-import { getCharacterFilterStageLabel, isGraphEdgeElement } from '../../../utils/graph/graphCore.js';
-import { pickCharacterDisplayName } from '../../../utils/graph/graphCharacterNames.js';
+import { useMemo } from 'react';
+import { getCharacterFilterStageLabel, pickCharacterDisplayName } from '../../../utils/graph/graphCore.js';
+import { isGraphEdgeElement } from '../../../utils/graph/graphCore';
 
 function countGraphElements(elements) {
   if (!Array.isArray(elements)) return { nodeCount: 0, edgeCount: 0 };
@@ -30,51 +30,39 @@ function describeGraphSelection(activeTooltip) {
   return '';
 }
 
+function describeLocation(chapterLabel, eventNum) {
+  const num = Number(eventNum);
+  const eventLabel = num > 0 ? `이벤트 ${num}` : '이벤트 미확정';
+  return `${chapterLabel || '챕터'}, ${eventLabel}.`;
+}
+
+/** 검색 중이 아니면 빈 문자열 */
+function describeSearch(isSearchActive, searchTerm, nodeCount) {
+  const term = typeof searchTerm === 'string' ? searchTerm.trim() : '';
+  if (!isSearchActive || !term) return '';
+  return nodeCount === 0 ? `"${term}" 검색 결과가 없습니다.` : `"${term}" 검색이 적용되었습니다.`;
+}
+
+/** 로딩 · 위치 · 개수 · 필터 · 검색 · 선택(없으면 조작 안내) 순으로 한 문단 */
 function buildGraphA11ySummary({
   chapterLabel,
   eventNum,
-  nodeCount = 0,
-  edgeCount = 0,
+  nodeCount,
+  edgeCount,
   filterLabel,
-  isSearchActive = false,
-  searchTerm = '',
-  selectionText = '',
-  isLoading = false,
+  isSearchActive,
+  searchTerm,
+  selectionText,
+  isLoading,
 }) {
-  const parts = [];
-
-  if (isLoading) {
-    parts.push('그래프를 불러오는 중입니다.');
-  }
-
-  const chapter = chapterLabel || '챕터';
-  const eventLabel =
-    Number.isFinite(Number(eventNum)) && Number(eventNum) > 0
-      ? `이벤트 ${Number(eventNum)}`
-      : '이벤트 미확정';
-  parts.push(`${chapter}, ${eventLabel}.`);
-  parts.push(`인물 ${nodeCount}명, 관계 ${edgeCount}개.`);
-
-  if (filterLabel) {
-    parts.push(`표시 범위 ${filterLabel}.`);
-  }
-
-  const term = typeof searchTerm === 'string' ? searchTerm.trim() : '';
-  if (isSearchActive && term) {
-    parts.push(
-      nodeCount === 0
-        ? `"${term}" 검색 결과가 없습니다.`
-        : `"${term}" 검색이 적용되었습니다.`,
-    );
-  }
-
-  if (selectionText) {
-    parts.push(selectionText);
-  } else {
-    parts.push('화살표·Enter로 탐색. Escape로 해제.');
-  }
-
-  return parts.join(' ');
+  return [
+    isLoading ? '그래프를 불러오는 중입니다.' : '',
+    describeLocation(chapterLabel, eventNum),
+    `인물 ${nodeCount}명, 관계 ${edgeCount}개.`,
+    filterLabel ? `표시 범위 ${filterLabel}.` : '',
+    describeSearch(isSearchActive, searchTerm, nodeCount),
+    selectionText || '화살표·Enter로 탐색. Escape로 해제.',
+  ].filter(Boolean).join(' ');
 }
 
 /**
@@ -82,7 +70,7 @@ function buildGraphA11ySummary({
  * 부모 region에 aria-describedby={statusId} 연결
  */
 export default function GraphA11yStatus({
-  id: idProp = null,
+  id,
   chapterLabel,
   eventNum,
   elements = [],
@@ -93,9 +81,6 @@ export default function GraphA11yStatus({
   isLoading = false,
   liveAnnouncement = '',
 }) {
-  const generatedId = useId();
-  const statusId = idProp || generatedId;
-
   const summary = useMemo(() => {
     const { nodeCount, edgeCount } = countGraphElements(elements);
     return buildGraphA11ySummary({
@@ -122,7 +107,7 @@ export default function GraphA11yStatus({
 
   return (
     <>
-      <p id={statusId} className="sr-only" aria-live="polite" aria-atomic="true">
+      <p id={id} className="sr-only" aria-live="polite" aria-atomic="true">
         {summary}
       </p>
       <p className="sr-only" aria-live="polite" aria-atomic="true">

@@ -11,7 +11,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { GRAPH_COLORS } from "../../../utils/styles/graphStyles";
+import { GRAPH_COLORS } from "../../../utils/graph/graphStyles";
 import { isLongEdgeTimeline, getSparseEdgeTickValues } from "../../../utils/graph/graphCharts";
 
 function chartXAxisBounds(length) {
@@ -35,19 +35,37 @@ function formatPositivityTooltip(value, item, lineData) {
   return [pct, '긍정도'];
 }
 
+const CHAPTER_DOT_COLOR = '#9ca3af';
+
+/** 점 모양: 현재 위치는 크게 + 흰 테두리, 챕터 경계는 회색, 긴 타임라인은 작게 */
+function timelineDotStyle({ isCurrent, isChapter }, { longTimeline, color }) {
+  const fill = isChapter ? CHAPTER_DOT_COLOR : color;
+  if (isCurrent) return { r: 6, fill, stroke: GRAPH_COLORS.white, strokeWidth: 2 };
+  return { r: longTimeline ? 2.5 : 3.5, fill, stroke: fill, strokeWidth: 0 };
+}
+
+/** 긴 타임라인은 현재·유의미·챕터 경계 점만 표시 (나머지는 r=0 자리표시) */
+function renderTimelineDot({ cx, cy, payload, index }, options) {
+  if (cx == null || cy == null || payload?.y == null) return null;
+  const visible = options.showDenseDots || payload.isCurrent || payload.isSignificant || payload.isChapter;
+  if (!visible) {
+    return <circle key={`relation-timeline-dot-hidden-${index}`} cx={cx} cy={cy} r={0} fill="transparent" />;
+  }
+  return (
+    <circle key={`relation-timeline-dot-${index ?? `${cx}-${cy}`}`} cx={cx} cy={cy} {...timelineDotStyle(payload, options)} />
+  );
+}
+
 export default function RelationTimelineChart({ lineData, numericPointCount, heightPx, isSidebar, color }) {
   const xAxisBounds = useMemo(() => chartXAxisBounds(lineData.length), [lineData]);
   const sparseTicks = useMemo(
     () => getSparseEdgeTickValues(lineData, { maxTicks: isSidebar ? 7 : 5 }),
     [lineData, isSidebar],
   );
-  const visibleXLabelMap = useMemo(() => {
-    const map = {};
-    lineData.forEach((d) => {
-      map[d.x] = d.label;
-    });
-    return map;
-  }, [lineData]);
+  const visibleXLabelMap = useMemo(
+    () => Object.fromEntries(lineData.map((d) => [d.x, d.label])),
+    [lineData],
+  );
   const currentRefX = useMemo(() => lineData.find((d) => d.isCurrent)?.x ?? null, [lineData]);
 
   if (numericPointCount === 0) return null;
@@ -67,34 +85,8 @@ export default function RelationTimelineChart({ lineData, numericPointCount, hei
   const showDenseDots = lineData.length <= 6;
   const xTickFontSize = isSidebar ? (longTimeline ? 12 : 13) : (longTimeline ? 10 : 11);
 
-  const renderDot = ({ cx, cy, payload, index }) => {
-    if (cx == null || cy == null || payload?.y == null) return null;
-    const isCurrent = payload?.isCurrent;
-    const show = showDenseDots || isCurrent || payload?.isSignificant || payload?.isChapter;
-    if (!show) {
-      return (
-        <circle
-          key={`relation-timeline-dot-hidden-${index}`}
-          cx={cx}
-          cy={cy}
-          r={0}
-          fill="transparent"
-        />
-      );
-    }
-    const fill = payload?.isChapter ? '#9ca3af' : color;
-    return (
-      <circle
-        key={`relation-timeline-dot-${index ?? `${cx}-${cy}`}`}
-        cx={cx}
-        cy={cy}
-        r={isCurrent ? 6 : longTimeline ? 2.5 : 3.5}
-        fill={fill}
-        stroke={isCurrent ? GRAPH_COLORS.white : fill}
-        strokeWidth={isCurrent ? 2 : 0}
-      />
-    );
-  };
+  const dotStyle = { showDenseDots, longTimeline, color };
+  const renderDot = (dotProps) => renderTimelineDot(dotProps, dotStyle);
 
   return (
     <div className="edge-chart-plot">

@@ -1,7 +1,7 @@
-/** 도서 응답 정규화 — API·캐시 계층 공용 (순환 import 방지용 순수 모듈) */
+/** 도서 응답 정규화·서버 bookId 해석 — API·캐시 계층 공용 (순환 import 방지용 순수 모듈) */
 
 import { sanitizeAssetUrl } from './urlUtils';
-import { stringOrEmpty } from './valueUtils';
+import { stringOrEmpty, toPositiveNumberOrNull } from './valueUtils';
 
 const normalizeBookCore = (book) => {
   const coverImgUrl =
@@ -44,3 +44,36 @@ export const normalizeV2Book = (book) =>
     updatedAt: b.updatedAt ?? null,
     isFavorite: !!b.isFavorite,
   }));
+
+/** 책 제목 비교용 정규화 (대소문자·공백·특수문자 제거) */
+export const normalizeTitle = (title) => {
+  if (!title) return '';
+  return String(title)
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, ' ')
+    .replace(/[^\w\s가-힣]/g, '')
+    .replace(/\s/g, '');
+};
+
+/** 저자 비교용 정규화 */
+export const normalizeAuthor = (author) =>
+  (author || '').toLowerCase().trim().replace(/\s+/g, ' ');
+
+/** book의 서버 bookId, 없으면 fallback(라우트 id 등)을 양의 정수로 */
+export function resolveServerBookId(book, fallback = null) {
+  return (
+    toPositiveNumberOrNull(book?._bookId) ??
+    toPositiveNumberOrNull(book?.id) ??
+    toPositiveNumberOrNull(fallback)
+  );
+}
+
+/** 서버 bookId 우선, 없으면 route·book 필드로 캐시/로더 키 문자열 */
+export function resolveViewerBookKey(book, routeBookId = null, { trimRoute = true } = {}) {
+  const serverId = resolveServerBookId(book);
+  if (serverId) return String(serverId);
+  const raw = routeBookId ?? book?.id ?? book?.filename ?? '';
+  const str = String(raw);
+  return trimRoute ? str.trim() : str;
+}

@@ -2,26 +2,56 @@ import { lazy, memo, Suspense, useState, useEffect, useCallback, useMemo, useRef
 import { useParams } from "react-router-dom";
 import {
   GRAPH_LAYOUT_CONSTANTS,
-  buildProcessedNode,
-  resolvePovSummary,
-  resolveRelationConnectionKind,
-  clearPovSpoilerSession,
   NODE_TOOLTIP_VIEW_STATUS,
-} from "../../../utils/graph/graphCore";
+  RELATION_CONNECTION_KIND,
+  normalizeRelationArray,
+  pickCharacterDisplayName,
+} from '../../../utils/graph/graphCore';
+import { resolvePovSummary, clearPovSpoilerSession } from '../../../hooks/graph/useChapterPovSummaries';
 import { checkNodeAppearance, buildRadarChartData } from "../../../utils/graph/graphCharts.js";
-import { useFloatingTooltip } from "../../../hooks/ui/tooltipHooks";
+import { useFloatingTooltip } from "../../../hooks/tooltipHooks";
 import { getUnifiedEventInfoForTooltip } from "../../../utils/viewer/viewerSession";
-import { extractApiBookId } from "../../../utils/common/valueUtils";
-import { mergeRefs, nodeDetailAnimations } from "../../../utils/styles/styles.js";
-import { GRAPH_COLORS } from "../../../utils/styles/graphStyles.js";
+import { toPositiveNumberOrNull } from "../../../utils/common/valueUtils";
+import { formatChapterOrdinalLabel } from "../../../utils/common/chapterLabel";
+import { joinClasses, mergeRefs } from "../../../utils/common/domUtils";
+import { GRAPH_COLORS, tooltipTransition } from "../../../utils/graph/graphStyles";
 import {
   PersonSilhouette,
   TooltipCloseButton,
   ActionButton,
   NodeTooltipShell,
-  CenteredStatus,
   NodeProfileAvatar,
 } from './GraphTooltipParts';
+
+/** 툴팁용 노드 표시 모델 */
+function buildProcessedNode(data) {
+  const raw = (data && (data.id || data.label))
+    ? data
+    : (data?.data || { id: data?.id, label: data?.label });
+  if (!raw) return null;
+
+  // personalityText만 표시 (profileText/프롬프트 폴백 금지)
+  const description = String(raw.personalityText || raw.description || '').trim();
+  return {
+    ...raw,
+    names: normalizeRelationArray(raw.names || [], raw.common_name),
+    displayName: pickCharacterDisplayName(raw) || 'Unknown',
+    hasImage: !!raw.image,
+    isMainCharacter: !!raw.isMainCharacter,
+    description,
+  };
+}
+
+/** 레이더 연결 수 → 모달 connectionKind */
+function resolveRelationConnectionKind(connectionCount, { hasError = false, enabled = true } = {}) {
+  if (!enabled) return RELATION_CONNECTION_KIND.NONE;
+  if (hasError) return RELATION_CONNECTION_KIND.ERROR;
+  const n = Number(connectionCount) || 0;
+  if (n === 0) return RELATION_CONNECTION_KIND.NONE;
+  if (n === 1) return RELATION_CONNECTION_KIND.SINGLE;
+  if (n === 2) return RELATION_CONNECTION_KIND.PAIR;
+  return RELATION_CONNECTION_KIND.SUFFICIENT;
+}
 
 const RelationAnalysisModal = lazy(() => import('./RelationAnalysisModal'));
 
@@ -62,9 +92,9 @@ function RelationAnalysisCta({
 
 /** 미등장 안내 문구 (이벤트 이름 → 번호 → 챕터 순) */
 function formatNotAppearedHint(eventInfo, currentChapter) {
-  if (eventInfo.name) return `챕터 ${currentChapter} 이벤트 "${eventInfo.name}"에서는 등장하지 않습니다`;
-  if (eventInfo.eventNum) return `챕터 ${currentChapter} 이벤트 ${eventInfo.eventNum}에서는 등장하지 않습니다`;
-  return `챕터 ${currentChapter}에서는 등장하지 않습니다`;
+  if (eventInfo.name) return `${formatChapterOrdinalLabel(currentChapter)} 이벤트 "${eventInfo.name}"에서는 등장하지 않습니다`;
+  if (eventInfo.eventNum) return `${formatChapterOrdinalLabel(currentChapter)} 이벤트 ${eventInfo.eventNum}에서는 등장하지 않습니다`;
+  return `${formatChapterOrdinalLabel(currentChapter)}에서는 등장하지 않습니다`;
 }
 
 function NodeIdentity({ node }) {
@@ -128,29 +158,29 @@ function PovSummarySection({ title, stage, onToggle, onCollapse, onConfirm, text
   const isLoading = status === NODE_TOOLTIP_VIEW_STATUS.LOADING;
   const isPending = status === NODE_TOOLTIP_VIEW_STATUS.PENDING;
   const fading = isWarning ? ' is-fading' : '';
-  const stageClass = isWarning ? 'warning' : isContent ? 'content' : 'collapsed';
-  const textClass = `tooltip-summary-text${isContent ? ' is-animated' : ''}${
-    isError ? ' tooltip-summary-text--error' : ''
-  }${isPending ? ' tooltip-summary-text--pending' : ''}`;
+  const textClass = joinClasses(
+    'tooltip-summary-text',
+    isContent && 'is-animated',
+    isError && 'tooltip-summary-text--error',
+    isPending && 'tooltip-summary-text--pending',
+  );
 
   return (
     <div
-      className={`sidebar-section tooltip-summary-section tooltip-summary-section--${stageClass}`}
+      className={`sidebar-section tooltip-summary-section tooltip-summary-section--${stage}`}
       role="region"
       aria-label="인물 시점 요약"
     >
       <button type="button" onClick={onToggle} className="summary-toggle-btn">
         <h4 className="tooltip-section-title">{title}</h4>
         <span
-          className={`tooltip-summary-chevron${
-            stage !== SUMMARY.COLLAPSED ? ' tooltip-summary-chevron--open' : ''
-          }`}
+          className={joinClasses('tooltip-summary-chevron', stage !== SUMMARY.COLLAPSED && 'tooltip-summary-chevron--open')}
         >
           ▼
         </span>
       </button>
 
-      <div className={`tooltip-collapsible tooltip-collapsible--warning${isWarning ? ' is-open' : ''}`}>
+      <div className={joinClasses('tooltip-collapsible tooltip-collapsible--warning', isWarning && 'is-open')}>
         <div className="tooltip-spoiler-body">
           <h3 className={`tooltip-spoiler-title${fading}`}>스포일러 포함</h3>
           <p className={`tooltip-spoiler-text${fading}`}>
@@ -170,7 +200,7 @@ function PovSummarySection({ title, stage, onToggle, onCollapse, onConfirm, text
       </div>
 
       <div
-        className={`tooltip-collapsible tooltip-collapsible--content${isContent ? ' is-open' : ''}`}
+        className={joinClasses('tooltip-collapsible tooltip-collapsible--content', isContent && 'is-open')}
         aria-hidden={!isContent}
       >
         <div className="tooltip-summary-content">
@@ -265,24 +295,34 @@ function useAnalysisModalState(pendingKeepAnalysisOpenRef, onSelectRelatedNode, 
   return { isOpen, open, close, selectRelatedNode: onSelectRelatedNode ? selectRelatedNode : null };
 }
 
-/** 툴팁·사이드바 공통: 노드 가공 · 이벤트 정보 · 시점 요약 섹션 */
+function povSummaryTitle(currentChapter) {
+  return Number(currentChapter) >= 1 ? `${formatChapterOrdinalLabel(currentChapter)} 시점 요약` : '해당 인물 시점의 요약';
+}
+
+/** 등장 검사·레이더 데이터용 서버 bookId (props filename 우선, 없으면 URL) */
+function useServerBookId(filename) {
+  const { filename: urlFilename } = useParams();
+  return toPositiveNumberOrNull(filename || urlFilename);
+}
+
+/**
+ * 툴팁·사이드바 공통: 노드 가공 · 이벤트 정보 · 시점 요약 섹션.
+ * 툴팁은 current/prevValidEvent, 사이드바는 pov* 값을 넘긴다
+ */
 function useNodeDetailBase({
   data,
   currentChapter,
   eventNum,
   filename,
-  currentEvent = null,
-  prevValidEvent = null,
-  povSummaries = null,
-  povError = null,
-  povIsLoading = false,
-  povCached = null,
-  onRetryPov = null,
-  showPovSummary = true,
-}) {
-  const { filename: urlFilename } = useParams();
-  const serverBookId = extractApiBookId(filename || urlFilename);
-  const folderKey = serverBookId ? `api:${serverBookId}` : null;
+  currentEvent,
+  prevValidEvent,
+  povSummaries,
+  povError,
+  povIsLoading,
+  povCached,
+  onRetryPov,
+}, showPovSummary) {
+  const bookId = useServerBookId(filename);
   const node = useMemo(() => buildProcessedNode(data), [data]);
   const summary = usePovSummaryStage(node?.id);
 
@@ -296,7 +336,7 @@ function useNodeDetailBase({
     [currentEvent, prevValidEvent, eventNum, currentChapter],
   );
 
-  // 뷰어 툴팁(showPovSummary=false)에선 요약을 그리지 않으므로 계산도 생략
+  // 뷰어 툴팁은 요약을 그리지 않으므로 계산도 생략
   const povSummary = useMemo(
     () =>
       showPovSummary
@@ -307,25 +347,20 @@ function useNodeDetailBase({
         : null,
     [showPovSummary, node, currentChapter, povSummaries, povError, povIsLoading, povCached],
   );
-  const chapterSummaryTitle =
-    currentChapter != null && Number(currentChapter) >= 1
-      ? `챕터 ${currentChapter} 시점 요약`
-      : '해당 인물 시점의 요약';
-
   const povSummarySection = povSummary && (
     <PovSummarySection
-      title={chapterSummaryTitle}
+      title={povSummaryTitle(currentChapter)}
       stage={summary.stage}
       onToggle={summary.toggle}
       onCollapse={summary.collapse}
       onConfirm={summary.confirm}
       text={povSummary.text}
       status={povSummary.status}
-      onRetry={typeof onRetryPov === 'function' ? onRetryPov : null}
+      onRetry={onRetryPov}
     />
   );
 
-  return { node, folderKey, eventInfo, povSummarySection };
+  return { node, bookId, eventInfo, povSummarySection };
 }
 
 /** 뷰어 플로팅 툴팁: 드래그·바깥 클릭 닫기, 미등장/오류 안내 */
@@ -337,14 +372,12 @@ function NodeDetailTooltip(props) {
     onClose,
     currentChapter,
     elements = [],
-    showPovSummary = true,
     tooltipBoundsRef = null,
   } = props;
-  const { node, folderKey, eventInfo, povSummarySection } = useNodeDetailBase(props);
+  const { node, bookId, eventInfo } = useNodeDetailBase(props, false);
 
   const { position, showContent, isDragging, tooltipRef, handleMouseDown, clickOutsideRef } =
     useFloatingTooltip(x, y, {
-      enabled: true,
       center: data?.nodeCenter,
       boundsRef: tooltipBoundsRef,
       onClose,
@@ -355,11 +388,11 @@ function NodeDetailTooltip(props) {
       data,
       node,
       currentChapter,
-      folderKey,
+      bookId,
       eventNum: eventInfo.eventNum,
       elements,
     }),
-    [data, node, currentChapter, eventInfo, folderKey, elements],
+    [data, node, currentChapter, eventInfo, bookId, elements],
   );
 
   const floatingShell = {
@@ -379,22 +412,20 @@ function NodeDetailTooltip(props) {
       <NodeTooltipShell
         {...floatingShell}
         className="graph-node-tooltip is-not-appeared"
-        transition={nodeDetailAnimations.tooltipSimpleTransition(isDragging)}
-        closeButton={(
-          <TooltipCloseButton
-            onClose={onClose}
-            className="tooltip-close-btn--offset"
-          />
-        )}
+        transition={tooltipTransition(isDragging)}
       >
-        <CenteredStatus fullHeight={false}>
+        <TooltipCloseButton onClose={onClose} className="tooltip-close-btn--offset" />
+        <div
+          className="tooltip-centered-status tooltip-centered-status--compact"
+          style={{ '--status-color': GRAPH_COLORS.textSecondary }}
+        >
           <div className="tooltip-not-appeared-avatar">
             <PersonSilhouette size={40} bodyFill={GRAPH_COLORS.textSecondary} />
           </div>
           <h3 className="tooltip-not-appeared-title">{node?.displayName}</h3>
           <p className="tooltip-not-appeared-msg">아직 등장하지 않은 인물입니다</p>
           <p className="tooltip-not-appeared-hint">{formatNotAppearedHint(eventInfo, currentChapter)}</p>
-        </CenteredStatus>
+        </div>
       </NodeTooltipShell>
     );
   }
@@ -402,12 +433,11 @@ function NodeDetailTooltip(props) {
   return (
     <NodeTooltipShell
       {...floatingShell}
-      transition={nodeDetailAnimations.tooltipComplexTransition(isDragging)}
+      transition={tooltipTransition(isDragging, { withTransform: true })}
     >
       <div className="tooltip-content business-card">
         <TooltipCloseButton onClose={onClose} />
         <NodeIdentity node={node} />
-        {showPovSummary ? povSummarySection : null}
       </div>
     </NodeTooltipShell>
   );
@@ -419,13 +449,12 @@ function NodeDetailSidebar(props) {
     onClose,
     currentChapter,
     elements = [],
-    showPovSummary = true,
     apiBookGraphData = null,
     onSelectRelatedNode = null,
     chapterRailWidth = null,
     pendingKeepAnalysisOpenRef = null,
   } = props;
-  const { node, folderKey, eventInfo, povSummarySection } = useNodeDetailBase(props);
+  const { node, bookId, eventInfo, povSummarySection } = useNodeDetailBase(props, true);
   const modal = useAnalysisModalState(pendingKeepAnalysisOpenRef, onSelectRelatedNode, node?.id);
   const analysisBtnRef = useRef(null);
 
@@ -435,10 +464,10 @@ function NodeDetailSidebar(props) {
       currentChapter,
       apiBookGraphData,
       elements,
-      folderKey,
+      bookId,
       eventNum: eventInfo.eventNum,
     }),
-    [node, currentChapter, folderKey, elements, apiBookGraphData, eventInfo],
+    [node, currentChapter, bookId, elements, apiBookGraphData, eventInfo],
   );
 
   const radarChartData = radarResult.items;
@@ -455,7 +484,7 @@ function NodeDetailSidebar(props) {
       <div className="graph-sidebar-body">
         <NodeIdentity node={node} />
 
-        {showPovSummary ? povSummarySection : null}
+        {povSummarySection}
 
         <RelationAnalysisCta
           node={node}

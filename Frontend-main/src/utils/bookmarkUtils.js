@@ -1,19 +1,12 @@
 /** 북마크 표시·locator·색상 팔레트 (API 호출 없음) */
 
-import { toLocator, locatorsEqual, toViewerResumeAnchor, toPositiveNumberOrNull, sleep } from '../common/valueUtils';
-import {
-  getChapterData,
-  locatorToBookAbsoluteOffset,
-  resolveProgressMetricsFromLocator,
-} from '../common/cache/manifestCache';
-import { normalizeStartEndLocatorsForServer } from '../common/cache/progressCache';
-import { GRAPH_COLORS } from '../styles/graphStyles.js';
-
-export const clientSortToApiSort = (sortOrder) =>
-  sortOrder === 'oldest' ? 'time_asc' : 'time_desc';
-
-/** PATCH /v2/bookmarks/:id 허용 필드 (위치 변경은 API 미지원) */
-export const BOOKMARK_UPDATABLE_FIELDS = Object.freeze(['color', 'memo']);
+import { toPositiveNumberOrNull, sleep, compareLocale } from './common/valueUtils';
+import { toLocator, locatorsEqual, toViewerResumeAnchor } from './common/locator';
+import { getChapterData } from './common/cache/manifestCache';
+import { locatorToBookAbsoluteOffset, resolveProgressMetricsFromLocator } from './common/readingProgress';
+import { normalizeStartEndLocatorsForServer } from './common/cache/progressCache';
+import { GRAPH_COLORS } from './graph/graphStyles';
+import { formatChapterOrdinalLabel } from './common/chapterLabel';
 
 /** 북마크 → 뷰어 resumeAnchor (진도 preferred resume와 동일 헬퍼) */
 export const bookmarkToResumeAnchor = (bookmark) =>
@@ -84,19 +77,24 @@ export const formatBookmarkLocatorDetail = (bookmark, bookId = null) => {
   if (metrics?.readingProgressPercent != null && metrics?.chapterProgress != null) {
     return `전체 ${metrics.readingProgressPercent}% · 챕터 ${metrics.chapterProgress}%`;
   }
-  return `챕터 ${loc.chapterIndex} · 블록 ${loc.blockIndex} · 오프셋 ${loc.offset}`;
+  return `${formatChapterOrdinalLabel(loc.chapterIndex)} · 블록 ${loc.blockIndex} · 오프셋 ${loc.offset}`;
+};
+
+const locatorKey = (loc) => `${loc.chapterIndex}:${loc.blockIndex}:${loc.offset}`;
+
+/**
+ * 위치 동일성 비교용 키 (start·end locator, end가 없으면 start). 위치를 해석할 수 없으면 null.
+ * 목록 전체와 비교할 때 키 Set을 만들어 두면 위치마다 O(1)
+ */
+export const bookmarkPositionKey = (bookmark) => {
+  const start = toLocator(bookmark?.startLocator);
+  if (!start) return null;
+  return `${locatorKey(start)}|${locatorKey(toLocator(bookmark.endLocator) ?? start)}`;
 };
 
 export const isSameBookmarkPosition = (bookmark, ref) => {
-  if (!bookmark || !ref) return false;
-
-  const aStart = toLocator(bookmark.startLocator);
-  const bStart = toLocator(ref.startLocator);
-  if (!aStart || !bStart || !locatorsEqual(aStart, bStart)) return false;
-  return locatorsEqual(
-    toLocator(bookmark.endLocator) ?? aStart,
-    toLocator(ref.endLocator) ?? bStart
-  );
+  const key = bookmarkPositionKey(bookmark);
+  return key != null && key === bookmarkPositionKey(ref);
 };
 
 /** 진도 absolute offset 기준으로 정렬 키 */
@@ -120,19 +118,20 @@ const getCreatedTs = (bookmark) => {
   return Number.isFinite(t) ? t : 0;
 };
 
+/** 정렬 키를 북마크마다 한 번만 계산 (비교마다 locator·날짜 재해석 → O(N log N)회 → O(N)회) */
+const sortByKey = (items, getKey, compare) =>
+  items
+    .map((item) => ({ item, key: getKey(item) }))
+    .sort((a, b) => compare(a.key, b.key))
+    .map(({ item }) => item);
+
 const sortBookmarks = (bookmarks, sortOrder, bookId = null) => {
   if (!bookmarks?.length) return [];
   if (sortOrder === 'position') {
-    return [...bookmarks].sort((a, b) =>
-      getBookmarkPositionSortKey(a, bookId).localeCompare(getBookmarkPositionSortKey(b, bookId))
-    );
+    return sortByKey(bookmarks, (b) => getBookmarkPositionSortKey(b, bookId), compareLocale);
   }
-  if (sortOrder === 'oldest') {
-    return [...bookmarks].sort((a, b) => getCreatedTs(a) - getCreatedTs(b));
-  }
-  if (sortOrder === 'recent') {
-    return [...bookmarks].sort((a, b) => getCreatedTs(b) - getCreatedTs(a));
-  }
+  if (sortOrder === 'oldest') return sortByKey(bookmarks, getCreatedTs, (a, b) => a - b);
+  if (sortOrder === 'recent') return sortByKey(bookmarks, getCreatedTs, (a, b) => b - a);
   return bookmarks;
 };
 
@@ -160,7 +159,7 @@ export const groupBookmarksByChapter = (bookmarks, sortOrder = 'recent', bookId 
         key,
         chapterIndex,
         title: bookmark.chapterTitle || null,
-        label: chapterIndex == null ? '위치 미상' : `${chapterIndex}챕터`,
+        label: chapterIndex == null ? '위치 미상' : formatChapterOrdinalLabel(chapterIndex),
         items: [],
       };
       map.set(key, group);
@@ -179,15 +178,12 @@ export const groupBookmarksByChapter = (bookmarks, sortOrder = 'recent', bookId 
       return a.chapterIndex - b.chapterIndex;
     });
   } else {
-    const groupTs = (group) => {
-      const times = group.items.map(getCreatedTs);
-      return sortOrder === 'oldest' ? Math.min(...times) : Math.max(...times);
-    };
-    groups.sort((a, b) => {
-      const ta = groupTs(a);
-      const tb = groupTs(b);
-      return sortOrder === 'oldest' ? ta - tb : tb - ta;
-    });
+    // 그룹 대표 시각(최오래된/최신)은 그룹당 한 번만 계산 (비교마다 items 전체를 다시 훑지 않음)
+    const pickTs = sortOrder === 'oldest' ? Math.min : Math.max;
+    const groupTs = new Map(groups.map((group) => [group, pickTs(...group.items.map(getCreatedTs))]));
+    groups.sort((a, b) =>
+      sortOrder === 'oldest' ? groupTs.get(a) - groupTs.get(b) : groupTs.get(b) - groupTs.get(a)
+    );
   }
 
   return groups;
@@ -205,7 +201,7 @@ export const bookmarkBorders = {
   highlight: GRAPH_COLORS.primary,
 };
 
-export const DEFAULT_BOOKMARK_COLOR = bookmarkColors.normal;
+const DEFAULT_BOOKMARK_COLOR = bookmarkColors.normal;
 
 export const colorOptions = [
   { key: 'normal', label: '기본', color: bookmarkColors.normal, border: bookmarkBorders.normal },

@@ -2,27 +2,66 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { GRAPH_LAYOUT_CONSTANTS } from '../../utils/graph/graphCore';
-import { useLocalStorageNumber } from '../common/hooksShared';
+import { readRaw, writeRaw } from '../../utils/common/cache/cacheManager';
 import {
   convertGraphSourceToElements,
   commitVisibleGraphElements,
 } from '../../utils/viewer/viewerGraph';
 import { extractNodeWeightsFromElements } from '../../utils/graph/graphElements';
-import { getGraphEventState } from '../../utils/graph/graphChapterCache';
-import {
-  eventUtils,
-  formatFallbackChapterLabel,
-  stripRedundantBookTitlePrefix,
-  resolveChapterTitleMeta,
-} from '../../utils/viewer/viewerCore';
+import { getGraphEventState } from '../../utils/graph/graphChapters';
+import { formatChapterOrdinalLabel, stripRedundantBookTitlePrefix, resolveChapterTitleMeta } from '../../utils/common/chapterLabel';
 import { hasGraphPayload } from '../../utils/api/graphApi';
-import { errorUtils } from '../../utils/common/valueUtils';
+import { errorUtils, resolveEventNum } from '../../utils/common/valueUtils';
 import {
   getChapterData,
   findManifestEventInChapter,
   getFirstManifestEventInChapter,
   resolveLastEventIdxForChapter,
 } from '../../utils/common/cache/manifestCache.js';
+
+/** 숫자 하나를 localStorage와 동기화하는 state (다른 탭 변경도 반영) */
+function useLocalStorageNumber(key, initialValue, options = {}) {
+  const { forceInitialValue = false } = options;
+
+  const [storedValue, setStoredValue] = useState(() => {
+    const numericInitial = Number(initialValue);
+    const sanitizedInitial = isNaN(numericInitial) ? initialValue : numericInitial;
+
+    if (forceInitialValue) {
+      if (!writeRaw(key, sanitizedInitial.toString())) {
+        errorUtils.logWarning('useLocalStorageNumber', '초기값 강제 저장 실패', { key });
+      }
+      return sanitizedInitial;
+    }
+
+    const item = readRaw(key);
+    const parsedValue = item ? Number(item) : sanitizedInitial;
+    return isNaN(parsedValue) ? sanitizedInitial : parsedValue;
+  });
+
+  const setValue = useCallback((value) => {
+    setStoredValue((prev) => {
+      const next = Number(value instanceof Function ? value(prev) : value);
+      if (isNaN(next)) return prev;
+      if (writeRaw(key, next.toString())) return next;
+      errorUtils.logWarning('useLocalStorageNumber', '저장 실패', { key });
+      return prev;
+    });
+  }, [key]);
+
+  // 다른 탭의 변경 반영
+  useEffect(() => {
+    const handleStorageChange = (e) => {
+      if (e.key !== key || e.newValue === null) return;
+      const parsedValue = Number(e.newValue);
+      if (!isNaN(parsedValue)) setStoredValue(parsedValue);
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, [key]);
+
+  return [storedValue, setValue];
+}
 
 /** URL 챕터(뷰어에서 전달) 우선, 없으면 마지막으로 본 챕터(localStorage). 이벤트는 1부터 */
 export function useGraphChapterEventState(filename, requestedChapter) {
@@ -76,7 +115,7 @@ export function useManifestChapterEventClamp({
     if (!Number.isFinite(ch) || ch < 1) return;
     if (findManifestEventInChapter(serverBookId, ch, { eventIdx: currentEvent }, manifestData)) return;
 
-    const next = eventUtils.resolveEventNum(
+    const next = resolveEventNum(
       getFirstManifestEventInChapter(serverBookId, ch, manifestData),
     );
     if (!(next > 0) || next === currentEvent) return;
@@ -97,7 +136,7 @@ export function useChapterTitleMeta(serverBookId, currentChapter, manifestData) 
     const ch =
       serverBookId != null ? getChapterData(serverBookId, currentChapter) : null;
     if (!Number.isFinite(Number(currentChapter)) || Number(currentChapter) < 1) {
-      return { chapterDisplayLabel: '챕터 ?', chapterTitleTooltip: undefined };
+      return { chapterDisplayLabel: formatChapterOrdinalLabel(null), chapterTitleTooltip: undefined };
     }
     const meta = resolveChapterTitleMeta(ch, bookTitle, currentChapter);
     const displayName =
@@ -107,7 +146,7 @@ export function useChapterTitleMeta(serverBookId, currentChapter, manifestData) 
           ? meta.display
           : '';
     return {
-      chapterDisplayLabel: displayName || formatFallbackChapterLabel(currentChapter),
+      chapterDisplayLabel: displayName || formatChapterOrdinalLabel(currentChapter),
       chapterTitleTooltip: meta.raw || meta.tooltip || undefined,
     };
   }, [serverBookId, currentChapter, bookTitle]);
@@ -219,7 +258,7 @@ export function useChapterSelect({
         return;
       }
       // 빈 챕터: 가짜 lastEvent=1로 속이지 않음. 첫 실제 이벤트만 사용.
-      const firstNum = eventUtils.resolveEventNum(
+      const firstNum = resolveEventNum(
         getFirstManifestEventInChapter(serverBookId, chapter, manifestData),
       );
       if (firstNum > 0) setCurrentEvent(firstNum);
@@ -228,7 +267,7 @@ export function useChapterSelect({
     // 선택 해제는 챕터 변경 effect(GraphPage)가 한다. 툴팁이 열려 있으면 닫힘 애니메이션 동안
     // 하이라이트가 남지 않도록 미리 한 번 해제 (그 사이 선택이 바뀔 수 있어 effect의 해제도 유지)
     if (activeTooltip) {
-      clearGraphSelection({ fitViewport: false, restoreViewport: false });
+      clearGraphSelection({ restoreViewport: false });
       startClosing();
       pendingChapterChangeRef.current = window.setTimeout(
         applyChapter,

@@ -1,15 +1,96 @@
-/** 인증·토큰 갱신·authenticatedFetch */
+/** 인증: 토큰 저장소·토큰 갱신·authenticatedRequest/Fetch·로그아웃 */
 
 import { getApiBaseUrl } from '../common/urlUtils';
 import { errorUtils, sleep } from '../common/valueUtils';
-import {
-  getStoredAccessToken,
-  setStoredAccessToken,
-  getStoredRefreshToken,
-  setStoredRefreshToken,
-  setStoredGoogleUserJson,
-  clearAuthData,
-} from '../security/authTokenStorage';
+import { clearBooksCache, readRaw, writeRaw, removeKeys } from '../common/cache/cacheManager';
+
+/* ─── 토큰 저장소 ─── */
+
+/**
+ * 액세스 토큰: 메모리 + sessionStorage (같은 탭에서 새로고침 시 복원). localStorage에는 두지 않음.
+ * 리프레시 토큰: localStorage (멀티 탭·재방문). 완전한 XSS 방어는 httpOnly·Secure 쿠키 세션이 필요하다.
+ */
+
+export const AUTH_CLEARED_EVENT = 'readwith:auth-cleared';
+
+const KEY_ACCESS = 'accessToken';
+const KEY_SESSION_ACCESS = 'readwith_session_access';
+const KEY_REFRESH = 'refreshToken';
+const KEY_GOOGLE_USER = 'google_user';
+
+let memoryAccessToken = null;
+let legacyAccessMigrated = false;
+
+function migrateLegacyAccessFromLocalStorage() {
+  if (legacyAccessMigrated) return;
+  legacyAccessMigrated = true;
+  const fromLs = readRaw(KEY_ACCESS);
+  if (fromLs) {
+    memoryAccessToken = fromLs;
+    removeKeys('localStorage', KEY_ACCESS);
+  }
+}
+
+export function getStoredAccessToken() {
+  migrateLegacyAccessFromLocalStorage();
+  if (memoryAccessToken) return memoryAccessToken;
+  const fromSs = readRaw(KEY_SESSION_ACCESS, 'sessionStorage');
+  if (fromSs) {
+    memoryAccessToken = fromSs;
+    return fromSs;
+  }
+  return null;
+}
+
+export function setStoredAccessToken(token) {
+  migrateLegacyAccessFromLocalStorage();
+  if (token == null || token === '') {
+    memoryAccessToken = null;
+    removeKeys('localStorage', KEY_ACCESS);
+    removeKeys('sessionStorage', KEY_SESSION_ACCESS);
+    return;
+  }
+  memoryAccessToken = token;
+  removeKeys('localStorage', KEY_ACCESS);
+  writeRaw(KEY_SESSION_ACCESS, token, 'sessionStorage');
+}
+
+export function getStoredRefreshToken() {
+  return readRaw(KEY_REFRESH);
+}
+
+export function setStoredRefreshToken(token) {
+  writeRaw(KEY_REFRESH, token);
+}
+
+export function getStoredGoogleUserJson() {
+  return readRaw(KEY_GOOGLE_USER);
+}
+
+export function setStoredGoogleUserJson(jsonString) {
+  writeRaw(KEY_GOOGLE_USER, jsonString);
+}
+
+export function removeStoredGoogleUser() {
+  removeKeys('localStorage', KEY_GOOGLE_USER);
+}
+
+/** 로그아웃/세션 초기화: 토큰·사용자·도서 캐시 삭제 후 AUTH_CLEARED_EVENT 발행 */
+export function clearAuthData() {
+  memoryAccessToken = null;
+  legacyAccessMigrated = false;
+  clearBooksCache();
+  const lsCleared = removeKeys('localStorage', KEY_ACCESS, KEY_REFRESH, KEY_GOOGLE_USER);
+  const ssCleared = removeKeys('sessionStorage', KEY_SESSION_ACCESS);
+  if (!lsCleared || !ssCleared) {
+    errorUtils.logWarning('authApi', '스토리지 접근 실패 — 토큰 삭제 불완전', { lsCleared, ssCleared });
+  }
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(AUTH_CLEARED_EVENT));
+  }
+}
+
+/* ─── API 응답·요청 ─── */
 
 export const makeSilentError = (code, message) => ({
   isSuccess: false,
@@ -226,14 +307,6 @@ const API_REQUEST_MAX_ATTEMPTS = 3;
 const API_REQUEST_RETRY_BASE_MS = 400;
 
 
-const isNetworkFetchError = (error) => {
-  if (!error || error.status === 401) return false;
-  if (error.name === 'TypeError') return true;
-  return /failed to fetch|networkerror|load failed|network request failed/i.test(
-    String(error.message || '')
-  );
-};
-
 /** 일시적 API 실패 — 403/404는 softFail, 401은 토큰 갱신 경로로 둔다 */
 const isRetryableApiStatus = (status, method = 'GET') => {
   if (status === 408 || status === 429) return true;
@@ -305,7 +378,7 @@ export const authenticatedRequest = async (endpoint, options = {}) => {
       });
     } catch (error) {
       if (error?.status === 401) throw error;
-      if (!isNetworkFetchError(error) || attempt >= attempts) {
+      if (!errorUtils.isNetworkError(error) || attempt >= attempts) {
         logHardFail(error, { attempt, kind: 'network' });
         throw error;
       }

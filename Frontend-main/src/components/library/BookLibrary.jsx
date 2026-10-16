@@ -3,17 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { Heart, BookOpen, Network, MoreVertical, Info, Clock, EyeOff } from 'lucide-react';
 import BookDetailModal, { AuthenticatedImage } from './BookDetailModal';
-import ConfirmDialog from './ConfirmDialog';
+import ConfirmDialog from '../common/ConfirmDialog';
 import './BookLibrary.css';
 import { USER_VIEWER_PREFIX, USER_GRAPH_PREFIX } from '../../utils/common/urlUtils';
 import { errorUtils, formatRelativeTime } from '../../utils/common/valueUtils';
-import { resolveServerBookId } from '../../utils/viewer/viewerCore';
-import {
-  makeOpeningTargetKey,
-  getOpeningMode,
-  HIDE_BOOK_COPY,
-} from '../../utils/library/libraryUtils';
-import { useMountedRef, useLatestRef } from '../../hooks/common/hooksShared';
+import { resolveServerBookId } from '../../utils/common/bookNormalize';
+import { HIDE_BOOK_COPY } from '../../utils/libraryUtils';
 
 const COVER_PLACEHOLDER_SVG = (
   <svg width="100%" height="100%" viewBox="0 0 120 180" fill="none">
@@ -37,7 +32,7 @@ async function prewarmGraphBookCache(book, options = {}) {
   if (!bookId) return null;
 
   try {
-    const { ensureGraphBookCache } = await import('../../utils/graph/graphChapterDiscovery');
+    const { ensureGraphBookCache } = await import('../../utils/graph/graphChapters');
     return await ensureGraphBookCache(bookId, options);
   } catch (error) {
     if (error?.name !== 'AbortError') {
@@ -50,7 +45,9 @@ async function prewarmGraphBookCache(book, options = {}) {
   }
 }
 
-function navigateFromLibrary(navigate, book, graphMode) {
+function openBookFromLibrary(navigate, book, graphMode) {
+  // 책 전체 그래프 빌드를 기다리면 첫 진입이 막힘 — 뷰어는 필요한 챕터를 직접 discover
+  void prewarmGraphBookCache(book);
   const base = graphMode === 'graph' ? USER_GRAPH_PREFIX : USER_VIEWER_PREFIX;
   navigate(`${base}/${book.id}`, {
     state: { book, fromLibrary: true, from: { pathname: '/mypage' } },
@@ -58,75 +55,41 @@ function navigateFromLibrary(navigate, book, graphMode) {
   });
 }
 
-async function openBookFromLibrary(navigate, book, graphMode) {
-  // 책 전체 그래프 빌드를 기다리면 첫 진입이 막힘 — 뷰어는 필요한 챕터를 직접 discover
-  void prewarmGraphBookCache(book);
-  navigateFromLibrary(navigate, book, graphMode);
-}
-
-const BookCard = memo(({ book, onToggleFavorite, onOpenBook, onBookDetailClick, onShowDeleteModal, viewMode = 'grid', openingMode = null }) => {
-  const [imageError, setImageError] = useState(false);
-  const [showContextMenu, setShowContextMenu] = useState(false);
-  const [optimisticFavorite, setOptimisticFavorite] = useState(null);
-  const displayFavorite = optimisticFavorite !== null ? optimisticFavorite : !!book.isFavorite;
-  const isOpeningReader = openingMode === 'viewer';
-  const isOpeningGraph = openingMode === 'graph';
-  const isOpening = Boolean(openingMode);
-
-  const handleReadClick = (e) => {
-    e.stopPropagation();
-    onOpenBook?.(book, 'viewer');
-  };
-
-  const handleGraphClick = (e) => {
-    e.stopPropagation();
-    onOpenBook?.(book, 'graph');
-  };
+/** 즐겨찾기 낙관적 갱신: 실패하면 서버 값으로 되돌림 */
+function useOptimisticFavorite(book, onToggleFavorite) {
+  const [optimistic, setOptimistic] = useState(null);
+  const isFavorite = optimistic ?? !!book.isFavorite;
 
   useEffect(() => {
-    setOptimisticFavorite(null);
+    setOptimistic(null);
   }, [book.isFavorite]);
 
-  useEffect(() => {
-    setImageError(false);
-  }, [book.coverImgUrl]);
-
-  const handleFavoriteClick = async (e) => {
-    e.stopPropagation();
+  const toggle = async () => {
     if (!onToggleFavorite) return;
-    const next = !displayFavorite;
-    setOptimisticFavorite(next);
+    const next = !isFavorite;
+    setOptimistic(next);
     try {
       await onToggleFavorite(book.id, next);
     } catch (error) {
-      setOptimisticFavorite(null);
+      setOptimistic(null);
       errorUtils.logError('BookLibrary', error, { action: 'toggleFavorite', bookId: book.id });
       toast.error('즐겨찾기 변경에 실패했습니다');
     }
   };
 
-  const handleCardClick = () => {
-    onOpenBook?.(book, 'viewer');
-  };
+  return [isFavorite, toggle];
+}
 
-  const handleDetailClick = (e) => {
-    e.stopPropagation();
-    if (onBookDetailClick) {
-      onBookDetailClick(book);
-    }
-  };
-
-  const contextMenuRef = useRef(null);
-
+/** 메뉴 바깥 pointerdown·Escape로 닫기 */
+function useDismissableMenu(open, close) {
+  const ref = useRef(null);
   useEffect(() => {
-    if (!showContextMenu) return undefined;
+    if (!open) return undefined;
     const handlePointerDown = (e) => {
-      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target)) {
-        setShowContextMenu(false);
-      }
+      if (ref.current && !ref.current.contains(e.target)) close();
     };
     const handleKeyDown = (e) => {
-      if (e.key === 'Escape') setShowContextMenu(false);
+      if (e.key === 'Escape') close();
     };
     document.addEventListener('pointerdown', handlePointerDown);
     document.addEventListener('keydown', handleKeyDown);
@@ -134,86 +97,113 @@ const BookCard = memo(({ book, onToggleFavorite, onOpenBook, onBookDetailClick, 
       document.removeEventListener('pointerdown', handlePointerDown);
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [showContextMenu]);
+  }, [open, close]);
+  return ref;
+}
 
-  const handleContextMenu = (e) => {
-    e.stopPropagation();
-    setShowContextMenu(!showContextMenu);
-  };
+/** 클릭이 카드 전체 열기 버튼으로 번지지 않게 */
+const stop = (handler) => (e) => {
+  e.stopPropagation();
+  handler();
+};
 
-  const handleDeleteClick = (e) => {
-    e.stopPropagation();
-    setShowContextMenu(false);
-    if (onShowDeleteModal) {
-      onShowDeleteModal(book);
-    }
-  };
+function FavoriteButton({ active, onToggle }) {
+  const label = active ? '즐겨찾기 해제' : '즐겨찾기 추가';
+  return (
+    <button
+      type="button"
+      className={`book-favorite-btn ${active ? 'favorited' : ''}`}
+      onClick={stop(onToggle)}
+      title={label}
+      aria-label={label}
+      aria-pressed={active}
+    >
+      <Heart
+        size={20}
+        fill={active ? 'var(--bl-favorite)' : 'none'}
+        stroke={active ? 'var(--bl-favorite)' : 'var(--bl-text-faint)'}
+        strokeWidth={2}
+        aria-hidden
+      />
+    </button>
+  );
+}
 
-  const renderBookImage = () => {
-    if (book.coverImgUrl && !imageError) {
-      return (
-        <AuthenticatedImage
-          src={book.coverImgUrl}
-          alt={book.title}
-          className="book-image"
-          onError={() => setImageError(true)}
-          onLoad={() => setImageError(false)}
-        />
-      );
-    }
-    
-    return (
-      <div className="book-image-placeholder">
-        {COVER_PLACEHOLDER_SVG}
-      </div>
-    );
-  };
+function BookCover({ src, title }) {
+  // 실패한 src만 기억 → src가 바뀌면 자동으로 다시 시도
+  const [failedSrc, setFailedSrc] = useState(null);
+  if (src && failedSrc !== src) {
+    return <AuthenticatedImage src={src} alt={title} className="book-image" onError={() => setFailedSrc(src)} />;
+  }
+  return <div className="book-image-placeholder">{COVER_PLACEHOLDER_SVG}</div>;
+}
+
+function BookContextMenu({ book, open, onToggle, onClose, onDetail, onHide }) {
+  const ref = useDismissableMenu(open, onClose);
+  return (
+    <div className="book-context-menu" ref={ref}>
+      <button
+        type="button"
+        className="book-context-trigger"
+        onClick={stop(onToggle)}
+        title="더보기"
+        aria-label={`${book.title} 더보기`}
+        aria-expanded={open}
+        aria-haspopup="menu"
+      >
+        <MoreVertical size={20} aria-hidden />
+      </button>
+
+      {open && (
+        <div className="book-context-dropdown" role="menu">
+          <button type="button" className="book-context-item" role="menuitem" onClick={stop(onDetail)}>
+            <Info size={18} className="book-context-icon" aria-hidden />
+            상세 정보
+          </button>
+          <button
+            type="button"
+            className="book-context-item book-context-item-danger"
+            role="menuitem"
+            onClick={stop(() => {
+              onClose();
+              onHide();
+            })}
+          >
+            <EyeOff size={18} className="book-context-icon" aria-hidden />
+            서재에서 숨기기
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const BookCard = memo(({ book, onToggleFavorite, onOpenBook, onBookDetailClick, onShowDeleteModal, viewMode = 'grid' }) => {
+  const [isFavorite, toggleFavorite] = useOptimisticFavorite(book, onToggleFavorite);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const closeMenu = useCallback(() => setMenuOpen(false), []);
+  const isList = viewMode === 'list';
+  const hasProgress = book.progress > 0;
+  const openReader = () => onOpenBook(book, 'viewer');
 
   return (
-    <div 
-      className={`book-card${viewMode === 'list' ? ' list-view' : ''}`}
-      onMouseLeave={() => setShowContextMenu(false)}
-    >
-      <button
-        type="button"
-        className="book-card-open"
-        onClick={handleCardClick}
-        aria-label={`${book.title} 읽기`}
-        disabled={isOpening}
-      />
-      <button
-        type="button"
-        className={`book-favorite-btn ${displayFavorite ? 'favorited' : ''}`}
-        onClick={handleFavoriteClick}
-        title={displayFavorite ? '즐겨찾기 해제' : '즐겨찾기 추가'}
-        aria-label={displayFavorite ? '즐겨찾기 해제' : '즐겨찾기 추가'}
-        aria-pressed={displayFavorite}
-      >
-        <Heart
-          size={20}
-          fill={displayFavorite ? 'var(--bl-favorite)' : 'none'}
-          stroke={displayFavorite ? 'var(--bl-favorite)' : 'var(--bl-text-faint)'}
-          strokeWidth={2}
-          aria-hidden
-        />
-      </button>
+    <div className={`book-card${isList ? ' list-view' : ''}`} onMouseLeave={closeMenu}>
+      <button type="button" className="book-card-open" onClick={openReader} aria-label={`${book.title} 읽기`} />
+      <FavoriteButton active={isFavorite} onToggle={toggleFavorite} />
 
       <div className="book-card-header">
         <div className="book-image-container">
-          {renderBookImage()}
+          <BookCover src={book.coverImgUrl} title={book.title} />
         </div>
 
-        {viewMode !== 'list' && book.progress > 0 && (
+        {!isList && hasProgress && (
           <div className="book-progress-container">
             <div className="progress-label">
               <span>독서 진행률</span>
               <span>{book.progress}%</span>
             </div>
             <div className="progress-bar-bg">
-              <div 
-                className="progress-bar-fill" 
-                style={{ width: `${book.progress}%` }}
-              />
+              <div className="progress-bar-fill" style={{ width: `${book.progress}%` }} />
             </div>
           </div>
         )}
@@ -226,14 +216,13 @@ const BookCard = memo(({ book, onToggleFavorite, onOpenBook, onBookDetailClick, 
         <p className="book-author" title={book.author}>
           {book.author}
         </p>
-        
+
         <div className="book-meta">
-          {viewMode === 'list' && book.progress > 0 && (
+          {isList && hasProgress && (
             <span className="book-meta-item book-progress-meta" title={`독서 진행률 ${book.progress}%`}>
               {book.progress}% 읽음
             </span>
           )}
-
           {book.updatedAt && (
             <span className="book-meta-item">
               <Clock size={14} aria-hidden />
@@ -247,171 +236,75 @@ const BookCard = memo(({ book, onToggleFavorite, onOpenBook, onBookDetailClick, 
         <button
           type="button"
           className="book-action-btn book-action-primary"
-          onClick={handleReadClick}
+          onClick={stop(openReader)}
           title="책 읽기"
           aria-label={`${book.title} 읽기`}
-          disabled={isOpening}
         >
           <BookOpen size={16} className="book-action-icon" aria-hidden />
-          {isOpeningReader ? '준비중' : '읽기'}
+          읽기
         </button>
         <button
           type="button"
           className="book-action-btn book-action-secondary"
-          onClick={handleGraphClick}
+          onClick={stop(() => onOpenBook(book, 'graph'))}
           title="인물 관계도 보기"
           aria-label={`${book.title} 인물 관계도 보기`}
-          disabled={isOpening}
         >
           <Network size={16} className="book-action-icon" aria-hidden />
-          {isOpeningGraph ? '준비중' : '관계도'}
+          관계도
         </button>
       </div>
 
-      <div className="book-context-menu" ref={contextMenuRef}>
-        <button
-          type="button"
-          className="book-context-trigger"
-          onClick={handleContextMenu}
-          title="더보기"
-          aria-label={`${book.title} 더보기`}
-          aria-expanded={showContextMenu}
-          aria-haspopup="menu"
-        >
-          <MoreVertical size={20} aria-hidden />
-        </button>
-        
-        {showContextMenu && (
-          <div className="book-context-dropdown" role="menu">
-            <button
-              type="button"
-              className="book-context-item"
-              role="menuitem"
-              onClick={handleDetailClick}
-            >
-              <Info size={18} className="book-context-icon" aria-hidden />
-              상세 정보
-            </button>
-            <button
-              type="button"
-              className="book-context-item book-context-item-danger"
-              role="menuitem"
-              onClick={handleDeleteClick}
-            >
-              <EyeOff size={18} className="book-context-icon" aria-hidden />
-              서재에서 숨기기
-            </button>
-          </div>
-        )}
-      </div>
+      <BookContextMenu
+        book={book}
+        open={menuOpen}
+        onToggle={() => setMenuOpen((v) => !v)}
+        onClose={closeMenu}
+        onDetail={() => onBookDetailClick(book)}
+        onHide={() => onShowDeleteModal(book)}
+      />
     </div>
   );
 });
 
 BookCard.displayName = 'BookCard';
 
-const BookLibrary = memo(({ books, onToggleFavorite, onBookDelete, onBookRestore, viewMode = 'grid' }) => {
-  const navigate = useNavigate();
-  const [selectedBook, setSelectedBook] = useState(null);
-  const [showDetailModal, setShowDetailModal] = useState(false);
-  const [deleteTargetBook, setDeleteTargetBook] = useState(null);
-  const [openingTarget, setOpeningTarget] = useState(null);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const mountedRef = useMountedRef();
-  const openingTargetRef = useLatestRef(openingTarget);
+const PREWARM_CONCURRENCY = 3;
 
-  useEffect(() => {
-    if (!selectedBook?.id) return;
-    const next = books.find((b) => String(b.id) === String(selectedBook.id));
-    if (next && !isSameBookContent(next, selectedBook)) {
-      setSelectedBook(next);
-    }
-  }, [books, selectedBook]);
-
-  const numericBookIdsKey = useMemo(() => {
-    if (!Array.isArray(books)) return '';
-    return books
+/** 서재 책들의 그래프 캐시를 동시 3개씩 미리 준비. 책 목록(id)이 바뀌면 이전 작업 중단 */
+function useGraphCachePrewarm(books) {
+  const numericBookIdsKey = useMemo(
+    () => (Array.isArray(books) ? books : [])
       .map((book) => resolveServerBookId(book))
       .filter((id) => Number.isFinite(id))
-      .join(',');
-  }, [books]);
-
-  useEffect(() => {
-    if (!Array.isArray(books) || books.length === 0) {
-      return undefined;
-    }
-
-    const numericBooks = books.filter((book) => Number.isFinite(resolveServerBookId(book)));
-    if (numericBooks.length === 0) {
-      return undefined;
-    }
-
-    const abortController = new AbortController();
-    const PREWARM_CONCURRENCY = 3;
-
-    const initializeWithLimitedConcurrency = async () => {
-      let cursor = 0;
-      const runNext = async () => {
-        while (cursor < numericBooks.length) {
-          if (abortController.signal.aborted) return;
-          const book = numericBooks[cursor];
-          cursor += 1;
-          await prewarmGraphBookCache(book, { signal: abortController.signal });
-        }
-      };
-      await Promise.all(
-        Array.from({ length: Math.min(PREWARM_CONCURRENCY, numericBooks.length) }, runNext)
-      );
-    };
-
-    initializeWithLimitedConcurrency();
-
-    return () => {
-      abortController.abort();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [numericBookIdsKey]);
-
-  const handleOpenBook = useCallback(
-    async (book, graphMode) => {
-      const bookId = resolveServerBookId(book);
-      const targetKey = makeOpeningTargetKey(bookId, graphMode);
-      if (targetKey && openingTargetRef.current === targetKey) return;
-
-      setOpeningTarget(targetKey);
-      try {
-        await openBookFromLibrary(navigate, book, graphMode);
-      } finally {
-        if (mountedRef.current) {
-          setOpeningTarget((current) => (current === targetKey ? null : current));
-        }
-      }
-    },
-    [navigate, openingTargetRef, mountedRef]
+      .join(','),
+    [books],
   );
 
-  const handleBookDetailClick = useCallback((book) => {
-    setSelectedBook(book);
-    setShowDetailModal(true);
-  }, []);
+  useEffect(() => {
+    const numericBooks = (Array.isArray(books) ? books : [])
+      .filter((book) => Number.isFinite(resolveServerBookId(book)));
+    if (numericBooks.length === 0) return undefined;
 
-  const handleCloseDetailModal = useCallback(() => {
-    setShowDetailModal(false);
-    setSelectedBook(null);
-  }, []);
+    const abortController = new AbortController();
+    let cursor = 0;
+    const runNext = async () => {
+      while (cursor < numericBooks.length && !abortController.signal.aborted) {
+        const book = numericBooks[cursor];
+        cursor += 1;
+        await prewarmGraphBookCache(book, { signal: abortController.signal });
+      }
+    };
+    void Promise.all(Array.from({ length: Math.min(PREWARM_CONCURRENCY, numericBooks.length) }, runNext));
 
-  const handleShowDeleteModal = useCallback((book) => {
-    setDeleteTargetBook(book);
-    setShowDeleteModal(true);
-  }, []);
+    return () => abortController.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- numericBookIdsKey가 books의 안정적인 식별자
+  }, [numericBookIdsKey]);
+}
 
-  const handleCloseDeleteModal = useCallback(() => {
-    setShowDeleteModal(false);
-    setDeleteTargetBook(null);
-  }, []);
-
-  // 서버 삭제 API가 없어 이 기기의 목록에서만 숨긴다 — 되돌리기 토스트로 실수 복구
-  const hideBook = useCallback(
+/** 서버 삭제 API가 없어 이 기기의 목록에서만 숨긴다 — 되돌리기 토스트로 실수 복구 */
+function useHideBook(onBookDelete, onBookRestore) {
+  return useCallback(
     async (bookId) => {
       if (!onBookDelete) return;
       await onBookDelete(bookId);
@@ -436,30 +329,40 @@ const BookLibrary = memo(({ books, onToggleFavorite, onBookDelete, onBookRestore
     },
     [onBookDelete, onBookRestore]
   );
+}
+
+const BookLibrary = memo(({ books, onToggleFavorite, onBookDelete, onBookRestore, viewMode = 'grid' }) => {
+  const navigate = useNavigate();
+  const [selectedBook, setSelectedBook] = useState(null);
+  const [deleteTargetBook, setDeleteTargetBook] = useState(null);
+  const hideBook = useHideBook(onBookDelete, onBookRestore);
+  useGraphCachePrewarm(books);
+
+  // 목록이 갱신되면 열린 상세 모달의 책도 최신 값으로
+  useEffect(() => {
+    if (!selectedBook?.id) return;
+    const next = books.find((b) => String(b.id) === String(selectedBook.id));
+    if (next && !isSameBookContent(next, selectedBook)) setSelectedBook(next);
+  }, [books, selectedBook]);
+
+  const handleOpenBook = useCallback(
+    (book, graphMode) => openBookFromLibrary(navigate, book, graphMode),
+    [navigate]
+  );
+  const closeDetail = useCallback(() => setSelectedBook(null), []);
+  const closeDeleteConfirm = useCallback(() => setDeleteTargetBook(null), []);
 
   const handleDeleteConfirm = useCallback(async () => {
-    if (!deleteTargetBook?.id) return;
-
-    setShowDeleteModal(false);
-
+    const bookId = deleteTargetBook?.id;
+    if (!bookId) return;
+    setDeleteTargetBook(null);
     try {
-      await hideBook(deleteTargetBook.id);
+      await hideBook(bookId);
     } catch (err) {
       errorUtils.logError('BookLibrary', err, { action: 'hideBook' });
       toast.error(HIDE_BOOK_COPY.failed);
     }
-
-    setDeleteTargetBook(null);
   }, [deleteTargetBook, hideBook]);
-
-  // 실패 시 BookDetailModal이 에러 토스트를 띄우도록 그대로 throw
-  const handleBookDelete = useCallback(
-    async (bookId) => {
-      await hideBook(bookId);
-      handleCloseDetailModal();
-    },
-    [hideBook, handleCloseDetailModal]
-  );
 
   if (!books || books.length === 0) {
     return null;
@@ -473,24 +376,23 @@ const BookLibrary = memo(({ books, onToggleFavorite, onBookDelete, onBookRestore
           book={book}
           onToggleFavorite={onToggleFavorite}
           onOpenBook={handleOpenBook}
-          onBookDetailClick={handleBookDetailClick}
-          onShowDeleteModal={handleShowDeleteModal}
+          onBookDetailClick={setSelectedBook}
+          onShowDeleteModal={setDeleteTargetBook}
           viewMode={viewMode}
-          openingMode={getOpeningMode(openingTarget, book.id)}
         />
       ))}
-      
+
       <BookDetailModal
         book={selectedBook}
-        isOpen={showDetailModal}
-        onClose={handleCloseDetailModal}
-        onDelete={handleBookDelete}
+        isOpen={selectedBook != null}
+        onClose={closeDetail}
+        onDelete={hideBook}
         viewMode={viewMode}
       />
 
       <ConfirmDialog
-        isOpen={showDeleteModal}
-        onClose={handleCloseDeleteModal}
+        isOpen={deleteTargetBook != null}
+        onClose={closeDeleteConfirm}
         onConfirm={handleDeleteConfirm}
         title={HIDE_BOOK_COPY.title}
         message={HIDE_BOOK_COPY.message}

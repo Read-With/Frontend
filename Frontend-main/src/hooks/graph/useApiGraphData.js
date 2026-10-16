@@ -9,21 +9,19 @@ import {
   prefetchMacroGraphToCache,
   fetchRelationTimelineCumulative,
   fetchRelationTimelineViewer,
-} from '../../utils/graph/graphFetch';
+  getBookScopeRelationshipGraph,
+} from '../../utils/graph/graphMacro';
 import { padSingleEvent } from '../../utils/graph/graphCharts';
-import { getBookScopeRelationshipGraph } from '../../utils/graph/graphModel';
 import { getMaxChapter } from '../../utils/common/cache/manifestCache';
 import { toPositiveNumberOrNull, toPositiveInt } from '../../utils/common/valueUtils';
 import { useManifestLoaded } from '../common/hooksShared';
-import { cacheKeyUtils } from '../../utils/viewer/viewerCore';
-import { enrichGraphPayload } from '../../utils/graph/graphCharacterNames';
+import { enrichGraphPayload } from '../../utils/graph/graphCore';
 
 async function fetchMacroGraph(bookId, chapter) {
   let failure = null;
   const data = await loadGraphDataWithCache({
     bookId,
     chapter,
-    cacheKey: cacheKeyUtils.macroGraphStorage(bookId, chapter),
     apiCall: () => getBookScopeRelationshipGraph(bookId, chapter),
     onError: (error) => { failure = error; },
   });
@@ -33,7 +31,6 @@ async function fetchMacroGraph(bookId, chapter) {
 
 export function useApiGraphData(serverBookId, currentChapter) {
   const {
-    loaded: manifestLoaded,
     ready: manifestReady,
     manifest: manifestData,
     error: manifestLoadError,
@@ -55,7 +52,7 @@ export function useApiGraphData(serverBookId, currentChapter) {
     queryKey: ['macroGraph', serverBookId, chapter],
     queryFn: () => fetchMacroGraph(serverBookId, chapter),
     enabled,
-    // 캐시된 챕터는 로딩 없이 즉시 표시 (TTL은 graphFetch 캐시가 관리)
+    // 캐시된 챕터는 로딩 없이 즉시 표시 (TTL은 graphMacro 캐시가 관리)
     initialData: () => {
       if (!enabled) return undefined;
       const cached = readMacroGraphCache(serverBookId, chapter);
@@ -95,7 +92,6 @@ export function useApiGraphData(serverBookId, currentChapter) {
   return {
     manifest: {
       data: manifestData,
-      loaded: manifestLoaded,
       ready: manifestReady,
     },
     graph: {

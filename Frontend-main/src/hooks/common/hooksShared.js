@@ -1,10 +1,11 @@
-/** hooks 공통: latest ref · viewport · focus trap · localStorage · manifest */
+/** hooks 공통: latest ref · viewport · focus trap · 요청 가드 · manifest */
 
-import { useRef, useState, useEffect, useCallback } from 'react';
+import { useRef, useState, useEffect, useCallback, useReducer } from 'react';
 import { getBookManifest } from '../../utils/api/booksApi';
 import { getManifestFromCache } from '../../utils/common/cache/manifestCache';
+import { PROGRESS_CACHE_UPDATED_EVENT } from '../../utils/common/cache/progressCache';
 import { errorUtils } from '../../utils/common/valueUtils';
-import { lockBodyScroll } from '../../utils/styles/styles';
+import { lockBodyScroll } from '../../utils/common/domUtils';
 import { useQuery } from '@tanstack/react-query';
 
 /** body 스크롤 잠금 (중첩 안전 — lockBodyScroll 참고) */
@@ -21,18 +22,18 @@ export function useLatestRef(value) {
 /** 뷰어·그래프 공통 모바일 브레이크포인트 */
 export const NARROW_VIEWPORT_MQ = '(max-width: 767px)';
 
-export function useIsNarrowViewport(mediaQuery = NARROW_VIEWPORT_MQ) {
+export function useIsNarrowViewport() {
   const [isNarrow, setIsNarrow] = useState(() =>
-    typeof window !== 'undefined' ? window.matchMedia(mediaQuery).matches : false
+    typeof window !== 'undefined' ? window.matchMedia(NARROW_VIEWPORT_MQ).matches : false
   );
 
   useEffect(() => {
-    const mq = window.matchMedia(mediaQuery);
+    const mq = window.matchMedia(NARROW_VIEWPORT_MQ);
     const onChange = () => setIsNarrow(mq.matches);
     onChange();
     mq.addEventListener('change', onChange);
     return () => mq.removeEventListener('change', onChange);
-  }, [mediaQuery]);
+  }, []);
 
   return isNarrow;
 }
@@ -121,29 +122,26 @@ export function useModalFocusTrap(isOpen, dialogRef, onClose, options = {}) {
   }, [isOpen, suspended, dialogRef, onClose, initialFocusRef, capture]);
 }
 
-/** 언마운트 후 setState 방지용: 마운트 상태를 ref로 추적 */
-export function useMountedRef() {
-  const mountedRef = useRef(true);
+/**
+ * progressCache 갱신 이벤트 구독. bookId를 주면 그 책의 갱신만 전달.
+ * onUpdate를 생략하면 갱신될 때마다 다시 렌더 (렌더 중 캐시를 다시 읽는 화면용).
+ * 반환값: 갱신 횟수 — 캐시를 읽는 useMemo의 의존성으로 사용
+ */
+export function useProgressCacheUpdates({ bookId = null, enabled = true, onUpdate = null } = {}) {
+  const [version, rerender] = useReducer((n) => n + 1, 0);
+  const onUpdateRef = useLatestRef(onUpdate ?? rerender);
 
   useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
+    if (!enabled) return undefined;
+    const handler = (e) => {
+      if (bookId != null && String(e?.detail?.bookId) !== String(bookId)) return;
+      onUpdateRef.current();
     };
-  }, []);
+    window.addEventListener(PROGRESS_CACHE_UPDATED_EVENT, handler);
+    return () => window.removeEventListener(PROGRESS_CACHE_UPDATED_EVENT, handler);
+  }, [enabled, bookId, onUpdateRef]);
 
-  return mountedRef;
-}
-
-/** imperative handle 슬롯: mount 시 할당, unmount 시 null */
-export function useRefSlot(slotRef, value) {
-  useEffect(() => {
-    if (!slotRef) return undefined;
-    slotRef.current = value;
-    return () => {
-      slotRef.current = null;
-    };
-  }, [slotRef, value]);
+  return version;
 }
 
 /** 비동기 effect race 방지용 request id */
@@ -161,61 +159,7 @@ export function useAsyncRequestGuard() {
     requestIdRef.current += 1;
   }, []);
 
-  return { nextRequestId, isStale, invalidate, requestIdRef };
-}
-
-export function useLocalStorageNumber(key, initialValue, options = {}) {
-  const { forceInitialValue = false } = options;
-
-  const [storedValue, setStoredValue] = useState(() => {
-    const numericInitial = Number(initialValue);
-    const sanitizedInitial = isNaN(numericInitial) ? initialValue : numericInitial;
-
-    if (forceInitialValue) {
-      try {
-        localStorage.setItem(key, sanitizedInitial.toString());
-      } catch (error) {
-        errorUtils.logWarning('useLocalStorageNumber', '초기값 강제 저장 실패', { key, message: error?.message });
-      }
-      return sanitizedInitial;
-    }
-
-    try {
-      const item = localStorage.getItem(key);
-      const parsedValue = item ? Number(item) : sanitizedInitial;
-      return isNaN(parsedValue) ? sanitizedInitial : parsedValue;
-    } catch (error) {
-      errorUtils.logWarning('useLocalStorageNumber', '초기값 로드 실패', { key, message: error?.message });
-      return sanitizedInitial;
-    }
-  });
-
-  const setValue = useCallback((value) => {
-    setStoredValue((prev) => {
-      const next = Number(value instanceof Function ? value(prev) : value);
-      if (isNaN(next)) return prev;
-      try {
-        localStorage.setItem(key, next.toString());
-        return next;
-      } catch (error) {
-        errorUtils.logWarning('useLocalStorageNumber', '저장 실패', { key, message: error?.message });
-        return prev;
-      }
-    });
-  }, [key]);
-
-  // 다른 탭의 변경 반영
-  useEffect(() => {
-    const handleStorageChange = (e) => {
-      if (e.key !== key || e.newValue === null) return;
-      const parsedValue = Number(e.newValue);
-      if (!isNaN(parsedValue)) setStoredValue(parsedValue);
-    };
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
-  }, [key]);
-
-  return [storedValue, setValue];
+  return { nextRequestId, isStale, invalidate };
 }
 
 async function fetchBookManifest(bookId) {
@@ -238,7 +182,7 @@ async function fetchBookManifest(bookId) {
 }
 
 const noop = () => {};
-const SKIPPED_MANIFEST = { loaded: true, ready: true, manifest: null, error: null, skipped: true, retry: noop };
+const SKIPPED_MANIFEST = { loaded: true, ready: true, manifest: null, error: null, retry: noop };
 
 /**
  * 뷰어/그래프용 manifest 준비 게이트.
@@ -273,7 +217,6 @@ export function useManifestLoaded(bookId) {
     manifest,
     // 재시도 중에는 에러를 숨김
     error: manifest || query.isFetching ? null : query.error ?? null,
-    skipped: false,
     retry,
   };
 }

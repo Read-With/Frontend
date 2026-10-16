@@ -10,18 +10,18 @@ import {
   pickResponseResult,
   toUnifiedApiResponse,
   authenticatedFetch,
+  getStoredAccessToken,
+  AUTH_CLEARED_EVENT,
 } from './authApi';
 import {
   asArray,
   toOneBasedChapterIndexOrNull,
   toPositiveNumberOrNull,
-  progressPayloadFromData,
-  resolveProgressLocator,
-  locatorsEqual,
   errorUtils,
   sleep,
   stringOrEmpty,
 } from '../common/valueUtils';
+import { progressPayloadFromData, resolveProgressLocator, locatorsEqual } from '../common/locator';
 import {
   getApiBaseUrl,
   sanitizeAssetUrl,
@@ -40,11 +40,9 @@ import {
 import { setManifestData, getManifestFromCache } from '../common/cache/manifestCache';
 import { withInflight } from '../common/cache/cacheManager';
 import { normalizeV2Book } from '../common/bookNormalize';
-import { getStoredAccessToken, AUTH_CLEARED_EVENT } from '../security/authTokenStorage';
-import {
-  DEFAULT_BOOKMARK_COLOR,
-  BOOKMARK_UPDATABLE_FIELDS,
-} from '../bookmarks/bookmarkUtils';
+
+/** PATCH /v2/bookmarks 로 수정 가능한 필드 */
+const BOOKMARK_UPDATABLE_FIELDS = Object.freeze(['color', 'memo']);
 
 const BOOK_LIST_SORT_VALUES = new Set(['updatedAt', 'title']);
 
@@ -292,7 +290,7 @@ export const createBookmark = async (bookmarkData) => {
     const dataToSend = {
       bookId: normalizedBookId,
       startLocator,
-      color: bookmarkData.color ?? DEFAULT_BOOKMARK_COLOR,
+      color: bookmarkData.color, // 기본 색은 createBookmarkData가 채움
       memo: bookmarkData.memo ?? '',
     };
     if (endLocator) {

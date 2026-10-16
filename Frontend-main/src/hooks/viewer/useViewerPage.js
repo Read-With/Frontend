@@ -3,11 +3,13 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { useServerBookMatching } from '../books/bookHooks';
-import { useViewerProgress, useProgressAutoSave } from './useViewerProgress';
-import { useViewerGraphState, useViewerGraphPipeline } from './useViewerGraph';
+import { useServerBookMatching } from '../bookHooks';
+import { useViewerProgress } from './useViewerProgress';
+import { useProgressAutoSave } from './useProgressAutoSave';
+import { useViewerGraphState } from './useViewerGraph';
+import { useViewerGraphPipeline } from './useViewerGraphPipeline';
 import { useManifestLoaded, useLatestRef, useBodyScrollLock } from '../common/hooksShared';
-import { createBookObject, resolveServerBookId, resolveViewerBookKey } from '../../utils/viewer/viewerCore';
+import { resolveServerBookId, resolveViewerBookKey } from '../../utils/common/bookNormalize';
 import {
   loadSettings,
   normalizeSettings,
@@ -16,15 +18,66 @@ import {
   waitForViewerMethod,
   runViewerPaging,
   restoreViewerPosition,
+  parseReadingLocatorKey,
 } from '../../utils/viewer/viewerSession';
-import { toViewerResumeAnchor, resolveChapterIndex, errorUtils } from '../../utils/common/valueUtils';
-import { useBookmarks } from '../bookmarks/bookmarkHooks';
+import { normalizeStartEndLocatorsForServer } from '../../utils/common/cache/progressCache';
+import { bookmarkPositionKey } from '../../utils/bookmarkUtils';
+import { resolveChapterIndex, errorUtils, toPositiveNumberOrNull } from '../../utils/common/valueUtils';
+import { toViewerResumeAnchor } from '../../utils/common/locator';
+import { useBookmarks } from '../bookmarkHooks';
 import {
   parseViewerReaderSplat,
   resolveViewerReadingPosition,
   userViewerReadingPath,
   userViewerBookmarksPath,
 } from '../../utils/common/urlUtils';
+
+const BOOK_PATH_KEYS = ['xhtmlPath', 'filePath', 's3Path', 'fileUrl'];
+
+function bookWithoutStoredPaths(base, overrides = {}) {
+  const next = { ...base, ...overrides };
+  for (const key of BOOK_PATH_KEYS) next[key] = undefined;
+  return next;
+}
+
+function makeLoadedBook(base, bookId, resolvedBookId) {
+  return bookWithoutStoredPaths(base, {
+    filename: String(resolvedBookId ?? bookId),
+    _needsLoad: true,
+    _bookId: resolvedBookId,
+  });
+}
+
+/** 라우트 state·서버 매칭 결과로 뷰어용 book 객체 생성 */
+function createBookObject({ stateBook, matchedServerBook, serverBook, bookId, loadingServerBook }) {
+  if (matchedServerBook && typeof matchedServerBook.id === 'number') {
+    return makeLoadedBook(matchedServerBook, bookId, matchedServerBook.id);
+  }
+
+  if (stateBook) {
+    if (serverBook && typeof serverBook.id === 'number') {
+      return makeLoadedBook({ ...stateBook, ...serverBook }, bookId, serverBook.id);
+    }
+
+    const { xhtmlFile: _xf, xhtmlArrayBuffer: _xb, ...stateRest } = stateBook;
+    return makeLoadedBook(stateRest, bookId, stateBook._bookId || stateBook.id || bookId);
+  }
+
+  if (serverBook) {
+    return makeLoadedBook(serverBook, bookId, serverBook.id);
+  }
+
+  const numericBookId = toPositiveNumberOrNull(bookId);
+  const resolvedId = loadingServerBook ? null : numericBookId;
+  return {
+    title: loadingServerBook ? '로딩 중...' : `Book ${bookId}`,
+    filename: bookId,
+    id: resolvedId,
+    _needsLoad: true,
+    _bookId: resolvedId ?? bookId,
+    xhtmlPath: undefined,
+  };
+}
 
 const EVENT_TRANSITION_FALLBACK_MS = 50;
 const IDLE_TRANSITION = { type: null, inProgress: false };
@@ -210,6 +263,62 @@ function usePersistedViewerSettings() {
   return [settings, setSettings];
 }
 
+/**
+ * 툴바 북마크: 현재 위치 북마크 여부 · 추가(이미 있으면 삭제 확인) · 삭제 확인 다이얼로그 상태
+ * @returns {{ isBookmarked: boolean, onAdd: Function, deleteConfirm: { isOpen, busy, onClose, onConfirm } }}
+ */
+function useViewerBookmarks({ serverBookId, bookKey, readingLocatorKey, viewerRef, setFailCount }) {
+  const { bookmarks, handleAddBookmark, removeBookmark, isMutating } =
+    useBookmarks(serverBookId, { viewerRef, setFailCount });
+  const [deleteConfirmId, setDeleteConfirmId] = useState(null);
+
+  // 북마크 위치 키는 목록이 바뀔 때만 계산 — 읽는 위치가 바뀔 때마다 목록 전체를 비교하지 않음 (O(B) → O(1))
+  const bookmarkPositionKeys = useMemo(
+    () => new Set((bookmarks || []).map(bookmarkPositionKey).filter(Boolean)),
+    [bookmarks]
+  );
+
+  const isBookmarked = useMemo(() => {
+    if (!bookmarkPositionKeys.size || !readingLocatorKey || !bookKey) return false;
+    const { start, end } = parseReadingLocatorKey(readingLocatorKey);
+    if (!start) return false;
+    const { startLocator, endLocator } = normalizeStartEndLocatorsForServer(bookKey, start, end ?? start);
+    if (!startLocator) return false;
+    return bookmarkPositionKeys.has(
+      bookmarkPositionKey({ startLocator, endLocator: endLocator ?? startLocator })
+    );
+  }, [bookmarkPositionKeys, readingLocatorKey, bookKey]);
+
+  const onAdd = useCallback(async () => {
+    const result = await handleAddBookmark();
+    if (result?.needsConfirm) setDeleteConfirmId(result.bookmarkId);
+  }, [handleAddBookmark]);
+
+  const closeDeleteConfirm = useCallback(() => setDeleteConfirmId(null), []);
+
+  const confirmDelete = useCallback(async () => {
+    if (deleteConfirmId == null) return;
+    try {
+      await removeBookmark(deleteConfirmId);
+      setDeleteConfirmId(null);
+    } catch (error) {
+      errorUtils.logError('[ViewerPage] 북마크 삭제 실패', error, { bookmarkId: deleteConfirmId });
+      toast.error('북마크 삭제에 실패했습니다. 잠시 후 다시 시도해 주세요.');
+    }
+  }, [deleteConfirmId, removeBookmark]);
+
+  return {
+    isBookmarked,
+    onAdd,
+    deleteConfirm: {
+      isOpen: deleteConfirmId != null,
+      busy: isMutating,
+      onClose: closeDeleteConfirm,
+      onConfirm: confirmDelete,
+    },
+  };
+}
+
 export function useViewerPage() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -229,8 +338,6 @@ export function useViewerPage() {
     skipViewerHistoryMutationRef.current = false;
   }, [bookId]);
 
-  const previousPage = location.state?.from || null;
-  const isFromLibrary = previousPage?.pathname === '/mypage' || location.state?.fromLibrary === true;
 
   const {
     serverBook,
@@ -285,11 +392,12 @@ export function useViewerPage() {
     showGraph: settings.showGraph,
   });
 
-  const manifestServerBookId = useMemo(
+  // 서버 bookId (manifest·북마크 공용). 없으면 라우트 id가 숫자일 때 그 값
+  const serverBookId = useMemo(
     () => resolveServerBookId(book, bookId),
     [book, bookId]
   );
-  const { loaded: manifestLoaded, ready: manifestReady } = useManifestLoaded(manifestServerBookId);
+  const { loaded: manifestLoaded, ready: manifestReady } = useManifestLoaded(serverBookId);
 
   const preferredResumeAnchor = useMemo(
     () => toViewerResumeAnchor(location.state?.resumeAnchor),
@@ -378,17 +486,13 @@ export function useViewerPage() {
     canPersist: isViewerPageReady,
   });
 
-  const bookmarkBookId = useMemo(
-    () => resolveServerBookId(book, bookKey || bookId),
-    [book, bookKey, bookId]
-  );
-
-  const {
-    bookmarks,
-    handleAddBookmark,
-    removeBookmark,
-    isMutating: isBookmarkMutating,
-  } = useBookmarks(bookmarkBookId, { viewerRef, setFailCount });
+  const bookmarkUi = useViewerBookmarks({
+    serverBookId,
+    bookKey,
+    readingLocatorKey,
+    viewerRef,
+    setFailCount,
+  });
 
   useBodyScrollLock();
 
@@ -448,11 +552,11 @@ export function useViewerPage() {
   }, [setProgress]);
 
   const onToggleBookmarkList = useCallback(() => {
-    const path = userViewerBookmarksPath(bookmarkBookId);
+    const path = userViewerBookmarksPath(serverBookId);
     if (!path) {
       errorUtils.logWarning('useViewerPage', '북마크 목록 경로 생성 실패', {
         action: 'openBookmarks',
-        bookId: bookmarkBookId ?? bookId,
+        bookId: serverBookId ?? bookId,
       });
       toast.error('책 정보가 없어 북마크 목록을 열 수 없습니다.');
       return;
@@ -460,7 +564,10 @@ export function useViewerPage() {
     navigate(path, {
       state: { ...(location.state || {}), book },
     });
-  }, [navigate, bookmarkBookId, bookId, location.state, book]);
+  }, [navigate, serverBookId, bookId, location.state, book]);
+
+  const openSettings = useCallback(() => setShowSettingsModal(true), []);
+  const closeSettings = useCallback(() => setShowSettingsModal(false), []);
 
   const exitToMypage = useCallback(() => {
     skipViewerHistoryMutationRef.current = true;
@@ -503,24 +610,22 @@ export function useViewerPage() {
   return {
     viewerRef,
     reloadKey,
-    showSettingsModal,
-    setShowSettingsModal,
+    // 툴바·다이얼로그 묶음
+    bookmarkUi: { ...bookmarkUi, onOpenList: onToggleBookmarkList },
+    settingsUi: {
+      isOpen: showSettingsModal,
+      open: openSettings,
+      close: closeSettings,
+      apply: handleApplySettings,
+    },
     setCurrentPage,
     setTotalPages,
     setCurrentChapter,
     setCurrentEvent,
     setShowToolbar,
-    bookmarks,
     manifestLoaded,
-    previousPage,
-    isFromLibrary,
     handlePrevPage,
     handleNextPage,
-    handleAddBookmark,
-    removeBookmark,
-    isBookmarkMutating,
-    handleApplySettings,
-    onToggleBookmarkList,
     handleSliderChange,
     toggleGraph,
     restoreAfterViewerLayoutChange,
@@ -531,7 +636,6 @@ export function useViewerPage() {
     searchState,
     searchActions,
     setProgressTopBar,
-    readingLocatorKey,
     serverResumeAnchor: resumeAnchor,
     applyReadingLocator,
     markViewerPageReady,

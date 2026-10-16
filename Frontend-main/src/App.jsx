@@ -5,17 +5,17 @@ import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import HomePage from './pages/HomePage';
 import OAuthCallback from './components/auth/OAuthCallback';
-import useAuth, { AuthProvider } from './hooks/auth/useAuth';
-import { prefetchBooks } from './hooks/books/bookHooks';
-import { GRAPH_COLORS } from './utils/styles/graphStyles.js';
+import useAuth, { AuthProvider } from './hooks/useAuth';
+import { prefetchBooks } from './hooks/bookHooks';
+import { GRAPH_COLORS } from './utils/graph/graphStyles';
 import { errorUtils } from './utils/common/valueUtils';
 import { rememberPostLoginPath } from './utils/common/urlUtils';
 
 const AdminPage = lazy(() => import('./pages/AdminPage'));
 const MyPage = lazy(() => import('./pages/MyPage'));
-const ViewerPage = lazy(() => import('./components/viewer/ViewerPage'));
+const ViewerPage = lazy(() => import('./pages/ViewerPage'));
 const BookmarksPage = lazy(() => import('./pages/BookmarksPage'));
-const GraphPage = lazy(() => import('./components/graph/page/GraphPage'));
+const GraphPage = lazy(() => import('./pages/GraphPage'));
 
 const PageLoader = ({ fullScreen = false }) => (
   <div

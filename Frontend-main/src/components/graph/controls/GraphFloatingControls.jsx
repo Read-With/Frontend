@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useId, useState } from "react";
 import { Search, SlidersHorizontal } from "lucide-react";
-import { useClickOutside } from "../../../hooks/ui/tooltipHooks";
-import { GRAPH_CHARACTER_FILTER_STAGE_OPTIONS, getCharacterFilterStageLabel } from "../../../utils/graph/graphCore.js";
+import { useClickOutside } from "../../../hooks/tooltipHooks";
+import { GRAPH_CHARACTER_FILTER_STAGE_OPTIONS, getCharacterFilterStageLabel } from '../../../utils/graph/graphCore.js';
 import GraphSearchPalette from "./GraphSearchPalette";
 import "../styles/graph.css";
 
@@ -78,9 +78,9 @@ export function GraphFloatingControls({
     searchTerm,
     appliedSearchTerm,
     isSearchActive,
-    suggestions = [],
-    showSuggestions = false,
-    selectedIndex = -1,
+    suggestions,
+    showSuggestions,
+    selectedIndex,
   } = searchState;
 
   // useGraphSearch().searchActions 형태 그대로 받음
@@ -107,9 +107,8 @@ export function GraphFloatingControls({
     const onKey = (e) => {
       if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "k") return;
       const tag = e.target?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || e.target?.isContentEditable) {
-        if (!paletteOpen) return;
-      }
+      const isTyping = tag === "INPUT" || tag === "TEXTAREA" || e.target?.isContentEditable;
+      if (isTyping && !paletteOpen) return;
       e.preventDefault();
       setPaletteOpen((v) => !v);
     };

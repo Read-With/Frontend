@@ -6,11 +6,12 @@ import {
   extractFitNodeIds,
   normalizeGraphSearchTerm,
   resolveGraphSearchFilter,
-} from '../../utils/graph/graphHighlight.js';
+} from '../../utils/graph/graphCy.js';
 import { filterMainCharacters } from '../../utils/graph/graphElements';
 import { sortElementsByDataId } from '../../utils/graph/graphCore';
 import { useLatestRef, NARROW_VIEWPORT_MQ } from '../common/hooksShared';
 import { cycleIndex } from '../../utils/common/valueUtils';
+import { readRaw, writeRaw } from '../../utils/common/cache/cacheManager';
 
 const SIDEBAR_OPEN_STORAGE_KEY = 'graph-chapter-sidebar-open';
 
@@ -33,17 +34,12 @@ export function useGraphDisplayToggles() {
 }
 
 export function useGraphState() {
+  // 저장된 값이 없으면 넓은 화면만 열어서 시작
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
     if (typeof window === 'undefined') return true;
-    const narrow = window.matchMedia(NARROW_VIEWPORT_MQ).matches;
-    try {
-      const raw = localStorage.getItem(SIDEBAR_OPEN_STORAGE_KEY);
-      if (raw === '0') return false;
-      if (raw === '1') return true;
-    } catch {
-      /* ignore */
-    }
-    return !narrow;
+    const raw = readRaw(SIDEBAR_OPEN_STORAGE_KEY);
+    if (raw === '0' || raw === '1') return raw === '1';
+    return !window.matchMedia(NARROW_VIEWPORT_MQ).matches;
   });
   const [activeTooltip, setActiveTooltip] = useState(null);
   const [isSidebarClosing, setIsSidebarClosing] = useState(false);
@@ -55,11 +51,7 @@ export function useGraphState() {
   } = useGraphDisplayToggles();
 
   const persistSidebarOpen = useCallback((next) => {
-    try {
-      localStorage.setItem(SIDEBAR_OPEN_STORAGE_KEY, next ? '1' : '0');
-    } catch {
-      /* ignore */
-    }
+    writeRaw(SIDEBAR_OPEN_STORAGE_KEY, next ? '1' : '0');
   }, []);
 
   const toggleSidebar = useCallback(() => {
@@ -126,7 +118,7 @@ export function useGraphElementPipeline({
     return filteredMainCharacters;
   }, [isSearchActive, filteredElements, filteredMainCharacters]);
 
-  return { filteredMainCharacters, finalElements };
+  return { finalElements };
 }
 
 export function useGraphSearch(elements, currentChapterData = null) {

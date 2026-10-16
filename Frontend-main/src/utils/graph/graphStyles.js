@@ -1,59 +1,35 @@
-/** Cytoscape 스타일시트·노드 크기·긍정성 색/라벨 */
+/** 그래프 스타일: Cytoscape 스타일시트·노드 크기·긍정성 색/라벨·팔레트·툴팁 transition */
 
 import { asArray, clamp01, clampPositivity, isPositiveFiniteNumberLiteral } from '../common/valueUtils';
 
-// styles.js가 이 모듈을 import하므로 styles.js를 import하지 않는다 (순환 방지).
-
-export const STYLE_DURATION = {
+const STYLE_DURATION = {
   NORMAL: '0.3s',
   SLOW: '0.4s',
 };
 
-/** --rg-* / --brand-* 와 동일 hex (Cytoscape는 CSS var 미지원) */
+/** 노드·간선 툴팁 transition: 드래그 중에는 끔. withTransform이면 위치 이동도 애니메이션 */
+export function tooltipTransition(isDragging, { withTransform = false } = {}) {
+  if (isDragging) return 'none';
+  const opacity = `opacity ${STYLE_DURATION.NORMAL}`;
+  return withTransform ? `${opacity}, transform ${STYLE_DURATION.SLOW}` : opacity;
+}
+
+/** --brand-* 와 동일 RGB */
 const BRAND_RGB = '62, 79, 47';
 
 export function brandAlpha(alpha) {
   return `rgba(${BRAND_RGB}, ${alpha})`;
 }
 
-const RG = {
-  brand: '#3E4F2F',
-  brandTint: '#E8F0E4',
-  brandTintSoft: '#F4F7F2',
-  surface: '#ffffff',
-  surfaceSlate: '#f8fafc',
-  surfaceIndigo: '#f8f9fc',
-  border: '#e5e7eb',
-  borderSoft: '#e3e6ef',
-  borderMuted: '#e2e8f0',
-  textSubtle: '#6c757d',
-  textBrand: '#2f3b2f',
-  textMutedBrand: '#3d4f3d',
-  textGray: '#374151',
-  danger: '#ef4444',
-  progressTrack: '#e8f0e8',
-  surfaceGlass: 'rgba(255, 255, 255, 0.96)',
-};
-
-/** 그래프·UI 공유 팔레트 — components/graph/styles/tokens.css :root 와 동기화 */
+/** 그래프·UI 공유 팔레트 (Cytoscape는 CSS var 미지원) — components/graph/styles/tokens.css :root 와 동기화 */
 export const GRAPH_COLORS = {
-  backgroundLighter: RG.surfaceSlate,
-  backgroundLight: RG.surfaceIndigo,
-  border: RG.border,
-  borderLight: RG.borderSoft,
-  borderMuted: RG.borderMuted,
-  primary: RG.brand,
-  primaryLight: RG.brandTint,
-  primaryTintSoft: RG.brandTintSoft,
-  textSecondary: RG.textSubtle,
-  white: RG.surface,
+  border: '#e5e7eb',
+  primary: '#3E4F2F',
+  textSecondary: '#6c757d',
+  white: '#ffffff',
   nodeBackground: '#f3f5f3',
-  nodeText: RG.textBrand,
-  edgeText: RG.textMutedBrand,
-  textGray: RG.textGray,
-  progressTrack: RG.progressTrack,
-  danger: RG.danger,
-  surfaceGlass: RG.surfaceGlass,
+  nodeText: '#2f3b2f',
+  edgeText: '#3d4f3d',
 };
 
 const NODE_SIZE_MIN = 30;

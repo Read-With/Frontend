@@ -71,7 +71,7 @@
 
 ## 인증(Auth)
 
-Google OAuth 로그인 후 세션은 다음과 같이 유지됩니다(`utils/security/authTokenStorage.js`, `utils/api/authApi.js`).
+Google OAuth 로그인 후 세션은 다음과 같이 유지됩니다(`utils/api/authApi.js`).
 
 - **액세스 토큰**: 메모리 + `sessionStorage`에 저장 (같은 탭 새로고침 시 복원, `localStorage`에는 저장하지 않음)
 - **리프레시 토큰**: `localStorage`에 저장 (여러 탭·재방문 시에도 유지)
@@ -84,40 +84,44 @@ Google OAuth 로그인 후 세션은 다음과 같이 유지됩니다(`utils/sec
 src/
 ├── App.jsx              # 라우팅 및 최상위 에러 바운더리
 ├── main.jsx             # 앱 엔트리 포인트
-├── pages/                # HomePage, AdminPage, MyPage, BookmarksPage
+├── pages/                # 라우트 페이지: Home, Admin, My, Bookmarks, Viewer, Graph
 ├── components/
 │   ├── auth/             # OAuth 콜백 등 인증 관련 컴포넌트
+│   ├── common/           # ModalFrame·ConfirmDialog (공용 모달·확인 다이얼로그)
 │   ├── library/           # 서재, 파일 업로드, 도서 상세 모달
 │   ├── viewer/             # EPUB 뷰어, 툴바, 설정
 │   └── graph/              # 관계 그래프 (Cytoscape 기반)
 │       ├── canvas/          # CytoscapeGraph·GraphCanvasArea·GraphA11yStatus (페이지·뷰어 공용)
 │       ├── controls/        # 상단바 메타·플로팅 도구·검색 팔레트 (공용)
 │       ├── detail/          # 노드/간선 상세·관계 분석 모달 (공용)
-│       ├── page/            # /user/graph 전용 (GraphPage·레이아웃·사이드바·Context)
+│       ├── page/            # /user/graph 전용 (레이아웃·사이드바·Context)
 │       └── styles/          # graph.css 진입점 + 섹션별 CSS
 ├── hooks/
-│   ├── auth/              # useAuth (로그인 상태·토큰)
-│   ├── books/              # 도서 목록 조회/프리페치
-│   ├── bookmarks/           # 북마크 CRUD
+│   ├── useAuth.js          # 로그인 상태·토큰
+│   ├── bookHooks.js         # 도서 목록 조회/프리페치
+│   ├── bookmarkHooks.js      # 북마크 CRUD
+│   ├── tooltipHooks.jsx      # 툴팁·바깥 클릭 등 범용 UI 훅
 │   ├── graph/                # 그래프 API 데이터, 뷰 상태, Cytoscape 인스턴스 제어
 │   ├── viewer/                # 뷰어 페이지 상태, 읽기 진행률, 뷰어-그래프 연동
-│   ├── ui/                     # 툴팁 등 범용 UI 훅
 │   └── common/                  # 공용 훅(요청 가드 등)
 └── utils/
-    ├── api/                # authApi, booksApi, graphApi — 백엔드 HTTP 클라이언트
-    ├── security/            # 토큰 저장(authTokenStorage), OAuth 보안(oauthSecurity)
+    ├── api/                # authApi(토큰 저장·갱신·인증 요청), oauthApi(Google OAuth state·에러 메시지), booksApi, graphApi
     ├── common/
     │   ├── cache/            # cacheManager, manifestCache, progressCache (TTL 캐시)
-    │   ├── urlUtils.js        # 환경 URL·OAuth·에러 로깅
-    │   └── valueUtils.js       # 숫자/문자열/locator 공통 유틸
+    │   ├── readingProgress.js  # locator ↔ 오프셋·진행률(%) 계산
+    │   ├── urlUtils.js        # 환경 URL·OAuth·공개 자산 URL·라우트 경로
+    │   ├── chapterLabel.js     # 챕터 제목 해석·표시 라벨 (Chapter N)
+    │   ├── domUtils.js         # 클래스명 join·ref 병합·키 입력 판별·body 스크롤 잠금
+    │   ├── locator.js          # 읽기 위치 locator 정규화·anchor/progress 변환
+    │   ├── bookNormalize.js    # 도서 응답·제목/저자 정규화·서버 bookId 해석
+    │   └── valueUtils.js       # 숫자/문자열 공통 유틸·errorUtils·이벤트 id/순번 해석
     ├── graph/               # 그래프 데이터·렌더링 로직
-    │                        #   graphCore(공통) · graphElements(elements 변환) · graphChapterCache(챕터 캐시)
-    │                        #   graphModel(책 누적 응답) · graphDeltas · graphFetch · graphProfileImages
-    │                        #   graphCy(인스턴스·동기화) · graphLayout(겹침·배치) · graphViewport · graphHighlight · graphCharts
-    ├── viewer/               # viewerCore/viewerGraph/viewerLocator/viewerSession
-    ├── library/              # 서재/EPUB 업로드 유틸
-    ├── bookmarks/             # 북마크 유틸
-    └── styles/                # 그래프 스타일시트, 색상 등
+    │                        #   graphCore(element 판별·eventUtils·인물 이름·관계 스키마·UI 상수) · graphElements(elements 변환·프로필 이미지)
+    │                        #   graphDeltas(delta 누적) · graphChapters(챕터 캐시·탐색) · graphMacro(책 누적 그래프·timeline) · graphCharts
+    │                        #   graphLayout(겹침·배치·뷰포트) · graphCy(인스턴스·동기화·강조·키보드 탐색) · graphStyles(스타일시트·색상·노드 크기)
+    ├── viewer/               # viewerGraph/viewerLocator/viewerSession
+    ├── libraryUtils.js        # 서재/EPUB 업로드 유틸
+    └── bookmarkUtils.js       # 북마크 유틸
 ```
 
 ## 라우트

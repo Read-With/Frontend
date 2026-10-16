@@ -1,8 +1,8 @@
 /** 관계 분석 모달의 연결 인물 목록·카드 (선택·"이 인물로 분석 전환") */
 
 import { RELATION_CONNECTION_KIND } from '../../../utils/graph/graphCore';
-import { getPositivityDisplay } from '../../../utils/styles/graphStyles.js';
-import { joinClasses } from '../../../utils/styles/styles.js';
+import { getPositivityDisplay } from '../../../utils/graph/graphStyles';
+import { joinClasses } from '../../../utils/common/domUtils';
 
 function RelationTagsRow({ tags }) {
   if (!tags?.length) return null;
@@ -83,13 +83,8 @@ export function RelationList({
   activeName,
   onSelect,
   onSwitch,
-  emptyMessage,
 }) {
-  if (!items?.length) {
-    return emptyMessage ? (
-      <div className="relation-modal-list-empty">{emptyMessage}</div>
-    ) : null;
-  }
+  if (!items?.length) return null;
 
   return (
     <ul className="relation-modal-list" role="listbox" aria-label="연결된 인물 목록">

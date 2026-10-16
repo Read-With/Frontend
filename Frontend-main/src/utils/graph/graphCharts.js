@@ -2,19 +2,19 @@
 
 import { asArray, clampPositivity, toNumberOrNull } from '../common/valueUtils';
 import {
-  isGraphEdgeElement,
-  isGraphNodeElement,
   processRelations,
   buildNodeIdentityContext,
   isSameNodeIdentifier,
   collectUndirectedRelations,
   NODE_TOOLTIP_VIEW_STATUS,
+  isGraphEdgeElement,
+  isGraphNodeElement,
+  pickCharacterDisplayName,
 } from './graphCore';
-import { pickCharacterDisplayName } from './graphCharacterNames';
 import { hasGraphPayload } from '../api/graphApi';
-import { getEventDataByIndex } from './graphChapterCache';
+import { getEventDataByIndex } from './graphChapters';
 
-export const extractRadarChartData = (nodeId, relations, elements, maxDisplay = 8) => {
+const extractRadarChartData = (nodeId, relations, elements, maxDisplay = 8) => {
   if (!nodeId || !relations || !Array.isArray(relations)) return [];
 
   const targetNodeId = String(nodeId);
@@ -349,7 +349,7 @@ export function buildEdgeRechartsLineData({
   };
 }
 
-export const EMPTY_RADAR_RESULT = Object.freeze({ items: [], status: NODE_TOOLTIP_VIEW_STATUS.NO_DATA });
+const EMPTY_RADAR_RESULT = Object.freeze({ items: [], status: NODE_TOOLTIP_VIEW_STATUS.NO_DATA });
 
 const radarOk = (items) => ({
   items,
@@ -362,27 +362,22 @@ const radarError = (message) => ({
   error: message || '관계 분석 데이터를 만들지 못했습니다.',
 });
 
-const nameOf = (obj) => obj?.common_name ?? obj?.label;
-
 /** 현재 챕터·이벤트에 인물이 등장했는지 (이벤트 데이터·elements 기준) */
-export function checkNodeAppearance({ data, node, currentChapter, folderKey, eventNum, elements }) {
+export function checkNodeAppearance({ data, node, currentChapter, bookId, eventNum, elements }) {
   if (!data || !currentChapter || currentChapter <= 0) {
     return { appeared: false, error: null };
   }
 
   try {
-    const json = getEventDataByIndex(folderKey, currentChapter, eventNum);
+    const json = getEventDataByIndex(bookId, currentChapter, eventNum);
     const idCtx = buildNodeIdentityContext({
       id: node?.id ?? data?.id ?? data?.data?.id,
-      common_name: nameOf(node) ?? nameOf(data) ?? nameOf(data?.data),
+      common_name: pickCharacterDisplayName(node) || pickCharacterDisplayName(data) || pickCharacterDisplayName(data?.data),
     });
 
     const inElements = Array.isArray(elements) && elements.some((el) => {
       if (!el || isGraphEdgeElement(el)) return false;
-      return isSameNodeIdentifier(
-        { id: el.data?.id ?? el.id, name: el.data?.common_name ?? el.data?.label },
-        idCtx,
-      );
+      return isSameNodeIdentifier(el.data ?? el, idCtx);
     });
 
     if (!json?.relations) {
@@ -410,7 +405,7 @@ export function buildRadarChartData({
   currentChapter,
   apiBookGraphData,
   elements,
-  folderKey,
+  bookId,
   eventNum,
 }) {
   if (!node?.id || !currentChapter) return EMPTY_RADAR_RESULT;
@@ -465,8 +460,8 @@ export function buildRadarChartData({
       );
     }
 
-    if (!folderKey) return EMPTY_RADAR_RESULT;
-    const json = getEventDataByIndex(folderKey, currentChapter, eventNum);
+    if (!bookId) return EMPTY_RADAR_RESULT;
+    const json = getEventDataByIndex(bookId, currentChapter, eventNum);
     if (!json?.relations) return EMPTY_RADAR_RESULT;
 
     const relations = collectUndirectedRelations(json.relations);

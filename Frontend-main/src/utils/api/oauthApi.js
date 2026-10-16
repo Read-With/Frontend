@@ -3,23 +3,18 @@
  */
 
 import { getApiBaseUrl, getGoogleOAuthRedirectUri, DEFAULT_DEV_PROXY_TARGET } from '../common/urlUtils';
-import { readRaw, writeRaw, removeKeys } from '../common/cache/cacheManager';
+import {
+  readRaw,
+  writeRaw,
+  removeKeys,
+  loadFromStorage,
+  saveToStorage,
+  removeFromStorage,
+} from '../common/cache/cacheManager';
 
 const GOOGLE_OAUTH_STATE_SESSION_KEY = 'readwith_google_oauth_state';
 const GOOGLE_OAUTH_STATE_VERIFIED_KEY = 'readwith_google_oauth_state_verified';
 const GOOGLE_OAUTH_PKCE_VERIFIER_KEY = 'readwith_google_oauth_pkce_verifier';
-
-const generateOAuthState = () => crypto.randomUUID();
-
-const validateOAuthState = (receivedState, storedState) => {
-  if (!receivedState || !storedState) {
-    return { isValid: false, error: 'State 파라미터가 없습니다.' };
-  }
-  if (receivedState !== storedState) {
-    return { isValid: false, error: 'State 파라미터가 일치하지 않습니다.' };
-  }
-  return { isValid: true };
-};
 
 function sessionStoreOrThrow(key, value, label) {
   if (!writeRaw(key, value, 'sessionStorage')) {
@@ -28,7 +23,7 @@ function sessionStoreOrThrow(key, value, label) {
 }
 
 function createAndStoreGoogleOAuthState() {
-  const state = generateOAuthState();
+  const state = crypto.randomUUID();
   sessionStoreOrThrow(GOOGLE_OAUTH_STATE_SESSION_KEY, state, 'OAuth state');
   removeKeys('sessionStorage', GOOGLE_OAUTH_STATE_VERIFIED_KEY);
   return state;
@@ -64,12 +59,12 @@ export function verifyGoogleOAuthState(receivedState) {
     };
   }
 
-  const result = validateOAuthState(receivedState, stored);
-  if (result.isValid) {
-    removeKeys('sessionStorage', GOOGLE_OAUTH_STATE_SESSION_KEY);
-    writeRaw(GOOGLE_OAUTH_STATE_VERIFIED_KEY, receivedState, 'sessionStorage');
+  if (receivedState !== stored) {
+    return { isValid: false, error: 'State 파라미터가 일치하지 않습니다.' };
   }
-  return result;
+  removeKeys('sessionStorage', GOOGLE_OAUTH_STATE_SESSION_KEY);
+  writeRaw(GOOGLE_OAUTH_STATE_VERIFIED_KEY, receivedState, 'sessionStorage');
+  return { isValid: true };
 }
 
 /* ─── 로그인 시작 ─── */
@@ -398,6 +393,13 @@ function secureLog(message, data = null) {
   }
 }
 
+const OAUTH_DEBUG_LOGS_KEY = 'oauth_debug_logs';
+
+function readOAuthDebugLogs() {
+  const logs = loadFromStorage(OAUTH_DEBUG_LOGS_KEY);
+  return Array.isArray(logs) ? logs : [];
+}
+
 if (typeof window !== 'undefined') {
   if (import.meta.env.DEV) {
     window.DEBUG_OAUTH = (message, data = null) => {
@@ -409,12 +411,7 @@ if (typeof window !== 'undefined') {
           timestamp: new Date().toISOString(),
           source: 'OAuth',
         };
-        const existingLogs = JSON.parse(localStorage.getItem('oauth_debug_logs') || '[]');
-        existingLogs.push(logEntry);
-        if (existingLogs.length > 50) {
-          existingLogs.splice(0, existingLogs.length - 50);
-        }
-        localStorage.setItem('oauth_debug_logs', JSON.stringify(existingLogs));
+        saveToStorage(OAUTH_DEBUG_LOGS_KEY, [...readOAuthDebugLogs(), logEntry].slice(-50));
         console.group(`🔒 ${message}`);
         if (safeData) console.table(safeData);
         console.groupEnd();
@@ -422,20 +419,8 @@ if (typeof window !== 'undefined') {
         /* ignore */
       }
     };
-    window.GET_OAUTH_LOGS = () => {
-      try {
-        return JSON.parse(localStorage.getItem('oauth_debug_logs') || '[]');
-      } catch {
-        return [];
-      }
-    };
-    window.CLEAR_OAUTH_LOGS = () => {
-      try {
-        localStorage.removeItem('oauth_debug_logs');
-      } catch {
-        /* ignore */
-      }
-    };
+    window.GET_OAUTH_LOGS = readOAuthDebugLogs;
+    window.CLEAR_OAUTH_LOGS = () => removeFromStorage(OAUTH_DEBUG_LOGS_KEY);
   } else {
     window.DEBUG_OAUTH = () => {};
     window.GET_OAUTH_LOGS = () => [];

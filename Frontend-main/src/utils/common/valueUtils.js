@@ -1,4 +1,4 @@
-/** 숫자·문자열·locator 공통 값 유틸 · 공통 로깅(errorUtils) */
+/** 숫자·문자열 공통 값 유틸 · 공통 로깅(errorUtils) */
 
 const getErrorDetails = (error) => ({
   message: error?.message || error?.toString() || '알 수 없는 오류',
@@ -51,11 +51,12 @@ export const errorUtils = {
     return fallbackValue;
   },
 
-  isNetworkError: (error) =>
-    error?.message?.includes('Failed to fetch') ||
-    error?.message?.includes('NetworkError') ||
-    error?.name === 'TypeError' ||
-    error?.code === 'NETWORK_ERROR',
+  /** fetch 단계 네트워크 실패 (HTTP 401 등 응답이 있는 에러는 제외) */
+  isNetworkError: (error) => {
+    if (!error || error.status === 401) return false;
+    if (error.name === 'TypeError' || error.code === 'NETWORK_ERROR') return true;
+    return /failed to fetch|networkerror|load failed|network request failed/i.test(String(error.message || ''));
+  },
 
   getUserFriendlyMessage: (error) => {
     const status = error?.status || error?.statusCode;
@@ -99,19 +100,19 @@ export function truncateWithEllipsis(text, maxLen) {
   return `${s.slice(0, maxLen - 1)}…`;
 }
 
-/** 순환 인덱스 (화살표·형제 전환). 미선택(index < 0)이면 앞으로는 처음, 뒤로는 마지막. */
-export function cycleIndex(index, length, delta = 1) {
+/** 목록 인덱스 이동. 미선택(index < 0)이면 앞으로는 처음, 뒤로는 마지막. wrap이면 끝에서 반대쪽으로 순환 */
+function moveIndex(index, length, delta, wrap) {
   if (!length || length < 1) return 0;
   if (!Number.isFinite(index) || index < 0) return delta >= 0 ? 0 : length - 1;
-  return (((Math.trunc(index) + delta) % length) + length) % length;
+  const next = Math.trunc(index) + delta;
+  return wrap ? ((next % length) + length) % length : Math.min(length - 1, Math.max(0, next));
 }
 
-/** cycleIndex와 같되 순환하지 않고 [0, length-1]에서 멈춤 (목록 끝 고정) */
-export function stepIndex(index, length, delta = 1) {
-  if (!length || length < 1) return 0;
-  if (!Number.isFinite(index) || index < 0) return delta >= 0 ? 0 : length - 1;
-  return Math.min(length - 1, Math.max(0, Math.trunc(index) + delta));
-}
+/** 순환 인덱스 (화살표·형제 전환) */
+export const cycleIndex = (index, length, delta = 1) => moveIndex(index, length, delta, true);
+
+/** 순환하지 않고 [0, length-1]에서 멈춤 (목록 끝 고정) */
+export const stepIndex = (index, length, delta = 1) => moveIndex(index, length, delta, false);
 
 /** 상대 시간 표기. withTime=false면 달력 날짜 기준 (오늘·어제·N일 전) */
 export function formatRelativeTime(value, { withTime = true } = {}) {
@@ -146,33 +147,19 @@ export const asArray = (value) => (Array.isArray(value) ? value : []);
 
 export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** 책 제목 비교용 정규화 (대소문자·공백·특수문자 제거) */
-export const normalizeTitle = (title) => {
-  if (!title) return '';
-  return String(title)
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, ' ')
-    .replace(/[^\w\s가-힣]/g, '')
-    .replace(/\s/g, '');
-};
-
-/** 저자 비교용 정규화 */
-export const normalizeAuthor = (author) =>
-  (author || '').toLowerCase().trim().replace(/\s+/g, ' ');
-
 /** number 리터럴이면서 양의 유한수인지 (문자열 강제 변환 없음) */
 export function isPositiveFiniteNumberLiteral(n) {
   return typeof n === 'number' && Number.isFinite(n) && n > 0;
 }
 
-/** 관계 긍정도 −1~+1. 비유한 값은 0 */
+/** 0~1로 자름. 비유한 값은 0 */
 export const clamp01 = (n) => Math.min(1, Math.max(0, Number(n) || 0));
 
 /** String#localeCompare와 같은 결과 — 정렬 비교마다 collator를 새로 만들지 않음 */
 export const compareLocale = new Intl.Collator().compare;
 export const compareKo = new Intl.Collator('ko').compare;
 
+/** 관계 긍정도 −1~+1. 비유한 값은 0 */
 export function clampPositivity(positivity) {
   const value = Number(positivity);
   return Number.isFinite(value) ? Math.max(-1, Math.min(1, value)) : 0;
@@ -210,27 +197,7 @@ export const toPositiveNumberFromId = (value) => {
   return lastDigits ? toPositiveNumberOrNull(lastDigits[1]) : null;
 };
 
-/** 'api:12' · '12' · 12 → 12 (그 외 null) */
-export const extractApiBookId = (folderKeyOrFilename) => {
-  if (!folderKeyOrFilename) return null;
-  if (typeof folderKeyOrFilename === 'number') {
-    return toPositiveNumberOrNull(folderKeyOrFilename);
-  }
-  const key = String(folderKeyOrFilename).trim();
-  if (!key) return null;
-  return toPositiveNumberOrNull(key.startsWith('api:') ? key.slice('api:'.length) : key);
-};
-
-/** 뷰어/그래프 라우트용 bookId — 후보 중 양의 정수만 채택 */
-export const resolvePositiveBookId = (...candidates) => {
-  for (const candidate of candidates) {
-    const id = extractApiBookId(candidate) ?? toPositiveNumberFromId(candidate);
-    if (id) return id;
-  }
-  return null;
-};
-
-/** locator·manifest·payload 공통 1-based 챕터 번호 해석 */
+/** locator·manifest·payload 행의 1-based 챕터 번호 (chapterIndex·chapterIdx·idx 필드만, 검증 없음). 이벤트는 resolveEventChapterIndex */
 export const resolveChapterIndex = (row) =>
   toNumberOrNull(row?.chapterIndex ?? row?.chapterIdx ?? row?.idx);
 
@@ -246,148 +213,7 @@ export const clampPercent = (value, fallback = null) => {
   return Math.min(100, Math.max(0, Math.round(n)));
 };
 
-// --- locator (merged from locatorUtils) ---
-
-const hasPositiveChapterHint = (locator) => toPositiveNumberOrNull(resolveChapterIndex(locator)) != null;
-
-const firstLocator = (...candidates) => {
-  for (const candidate of candidates) {
-    const loc = toLocator(candidate);
-    if (loc) return loc;
-  }
-  return null;
-};
-
-const extractLocationHint = (payload) => {
-  if (!payload || typeof payload !== 'object') return null;
-  return (
-    payload.startLocator ??
-    payload.locator ??
-    payload.anchor?.startLocator ??
-    payload.anchor?.start ??
-    payload.start ??
-    null
-  );
-};
-
-export const toLocator = (obj) => {
-  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return null;
-  const chapterIndex = resolveChapterIndex(obj);
-  const blockIndex = toNumberOrNull(obj.blockIndex);
-  const offset = toNumberOrNull(obj.offset);
-  if (chapterIndex == null || chapterIndex < 1) return null;
-  return {
-    chapterIndex: Number(chapterIndex),
-    blockIndex: Number.isFinite(blockIndex) ? blockIndex : 0,
-    offset: Number.isFinite(offset) ? offset : 0,
-  };
-};
-
-export const locatorsEqual = (a, b) => {
-  const A = toLocator(a);
-  const B = toLocator(b);
-  if (!A || !B) return false;
-  return A.chapterIndex === B.chapterIndex && A.blockIndex === B.blockIndex && A.offset === B.offset;
-};
-
-export const anchorToLocators = (anchor) => {
-  if (!anchor) return { startLocator: null, endLocator: null };
-  const start =
-    firstLocator(anchor.startLocator, anchor.start) ??
-    (hasPositiveChapterHint(anchor) ? toLocator(anchor) : null);
-  const end =
-    firstLocator(anchor.endLocator, anchor.end, anchor.startLocator, anchor.start) ??
-    start;
-  return {
-    startLocator: start,
-    endLocator: end ?? start,
-  };
-};
-
-/**
- * 그래프 패널 위치 힌트 여부.
- * requireEventNum: true면 chapterIdx+eventNum 폴백(캐시), false면 locator만(resume).
- */
-export function hasGraphPanelLocationHint(payload, { requireEventNum = false } = {}) {
-  const loc = extractLocationHint(payload);
-  if (loc && typeof loc === 'object' && hasPositiveChapterHint(loc)) {
-    return true;
-  }
-  if (!requireEventNum || !payload || typeof payload !== 'object') {
-    return false;
-  }
-  if (toPositiveNumberOrNull(resolveChapterIndex(payload)) == null) {
-    return false;
-  }
-  return toPositiveNumberOrNull(payload.eventNum) != null;
-}
-
-/** progress·캐시 payload에서 단일 reading locator 해석 */
-export const resolveProgressLocator = (data) => {
-  if (!data || typeof data !== 'object') return null;
-  const a = data.anchor;
-  const candidate =
-    data.startLocator ??
-    firstLocator(data.locator, data) ??
-    (a && firstLocator(a.startLocator, a.start, a));
-  if (candidate == null) return null;
-  return toLocator(candidate) ?? candidate;
-};
-
-/** 뷰어 displayAt / preferred resume용 앵커 (진도·북마크 공용) */
-export const toViewerResumeAnchor = (payload) => {
-  if (!payload || typeof payload !== 'object') return null;
-  const { startLocator, endLocator } = anchorToLocators(payload);
-  if (!startLocator) return null;
-  return { startLocator, endLocator: endLocator ?? startLocator };
-};
-
-/** progress payload → 뷰어용 { startLocator, endLocator } (동일 위치) */
-export const progressResultToViewerAnchor = (data) => {
-  const loc = resolveProgressLocator(data);
-  if (!loc) return null;
-  return { startLocator: loc, endLocator: loc };
-};
-
-/** 동일 resume 위치 중복 적용 방지 키 */
-export const viewerResumeAnchorKey = (anchor) => {
-  if (!anchor || typeof anchor !== 'object') return '';
-  const loc = toLocator(anchor.startLocator ?? anchor.start ?? null);
-  if (!loc) return '';
-  return `${loc.chapterIndex}:${loc.blockIndex}:${loc.offset}`;
-};
-
-/** POST /api/v2/progress 및 캐시 병합용 payload 생성 */
-export const progressPayloadFromData = (data) => {
-  if (data?.bookId == null || data.bookId === '') return null;
-  const locator = resolveProgressLocator(data);
-  if (!locator) return null;
-
-  const rawId = data.bookId;
-  const numId = Number(rawId);
-  const bookId =
-    String(rawId).trim() !== '' && Number.isFinite(numId) && numId > 0 ? numId : rawId;
-
-  const endLocator =
-    data.endLocator != null || data.end != null
-      ? toLocator(data.endLocator ?? data.end) ?? { ...locator }
-      : { ...locator };
-
-  const version =
-    typeof data.locatorVersion === 'string' && data.locatorVersion.trim()
-      ? data.locatorVersion.trim()
-      : 'v2';
-
-  return {
-    bookId,
-    startLocator: { ...locator },
-    endLocator,
-    locator: { ...locator },
-    locatorVersion: version,
-  };
-};
-
-// --- event id·순번 (manifestCache·viewerCore eventUtils 공용) ---
+// --- 이벤트 id·순번 (manifestCache·graphCore eventUtils 공용) ---
 
 function nonEmptyId(value) {
   if (value === undefined || value === null) return null;
@@ -447,4 +273,14 @@ export function sortEventsByIdx(events) {
     if (idxB == null) return -1;
     return idxA - idxB;
   });
+}
+
+/** 이벤트의 챕터 번호(양수): 챕터 필드(resolveChapterIndex) → event.chapter → 중첩 event 순. 없으면 null */
+export function resolveEventChapterIndex(event) {
+  if (!event || typeof event !== 'object') return null;
+  const own = toPositiveNumberOrNull(resolveChapterIndex(event)) ?? toPositiveNumberOrNull(event.chapter);
+  if (own) return own;
+  const nested = event.event;
+  if (!nested || typeof nested !== 'object') return null;
+  return toPositiveNumberOrNull(resolveChapterIndex(nested)) ?? toPositiveNumberOrNull(nested.chapter);
 }

@@ -8,7 +8,14 @@ import { resolveViewerSplitChapterMeta } from '../../../utils/viewer/viewerGraph
 import { GraphFloatingControls } from '../../graph/controls/GraphFloatingControls';
 import { GraphTopBarMeta } from '../../graph/controls/GraphTopBarMeta';
 import '../../graph/styles/graph.css';
-import { formatGraphEventMetaLabel } from '../../../utils/graph/graphCore';
+import { toPositiveNumberOrNull } from '../../../utils/common/valueUtils';
+
+/** 상단 메타·스크러버 공통: `Event 3` / `Event ?` */
+function formatGraphEventMetaLabel(eventNum, { unknown = '?' } = {}) {
+  const n = toPositiveNumberOrNull(eventNum);
+  if (n) return `Event ${Math.trunc(n)}`;
+  return `Event ${unknown}`;
+}
 
 /** 분할 상단바: 챕터 + 사건 메타 (계산중 포함) */
 function GraphChapterEventMeta({

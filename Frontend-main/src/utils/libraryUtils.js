@@ -1,8 +1,7 @@
 /** 라이브러리: 진행률·날짜 표시, EPUB 업로드 검증·메타 추출 */
 
-import { getProgressFromCache } from '../common/cache/progressCache';
-import { clampPercent, compareKo } from '../common/valueUtils';
-import { lockBodyScroll } from '../styles/styles';
+import { getProgressFromCache } from './common/cache/progressCache';
+import { clampPercent, compareKo } from './common/valueUtils';
 
 /** 서재 숨기기 — 카드 메뉴(BookLibrary)와 상세 모달(BookDetailModal) 공용 문구 */
 export const HIDE_BOOK_COPY = {
@@ -20,25 +19,6 @@ export function resolveLibraryReadingProgressPercent(book) {
   const bookIdStr = String(rawId);
   const cached = getProgressFromCache(bookIdStr);
   return clampPercent(cached?.readingProgressPercent, 0);
-}
-
-/** Escape 리스너 + body scroll lock. cleanup 함수 반환. */
-export function attachLibraryModalChrome({
-  onClose,
-  isBlocked = () => false,
-  onEscape,
-} = {}) {
-  const handleEscape = (e) => {
-    if (e.key !== 'Escape' || isBlocked()) return;
-    if (onEscape) onEscape(e);
-    else onClose?.();
-  };
-  document.addEventListener('keydown', handleEscape);
-  const unlockScroll = lockBodyScroll();
-  return () => {
-    document.removeEventListener('keydown', handleEscape);
-    unlockScroll();
-  };
 }
 
 export function dedupeAndSortCharacters(raw) {
@@ -71,19 +51,6 @@ export function libraryPanelBodyClass(isOpen) {
   return isOpen
     ? 'book-detail-panel-body book-detail-panel-body--open'
     : 'book-detail-panel-body book-detail-panel-body--closed';
-}
-
-export function makeOpeningTargetKey(bookId, mode) {
-  if (bookId == null || !mode) return null;
-  return `${bookId}:${mode}`;
-}
-
-export function getOpeningMode(openingTarget, bookId) {
-  if (!openingTarget || bookId == null) return null;
-  const id = Number(bookId);
-  if (openingTarget === makeOpeningTargetKey(id, 'viewer')) return 'viewer';
-  if (openingTarget === makeOpeningTargetKey(id, 'graph')) return 'graph';
-  return null;
 }
 
 const DC_NS = 'http://purl.org/dc/elements/1.1/';

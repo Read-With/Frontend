@@ -5,7 +5,9 @@ import {
   detectAndResolveOverlap,
   OVERLAP_RESOLVE,
   OVERLAP_PROFILES,
-} from "../../utils/graph/graphLayout.js";
+  isGraphContainerSizeReady,
+  fitGraphViewportInContainer,
+} from '../../utils/graph/graphLayout.js';
 import { errorUtils } from "../../utils/common/valueUtils";
 import {
   safeCyCall,
@@ -17,10 +19,11 @@ import {
   runCoseBilkentLayout,
   finalizeGraphLayout,
   resolveIncrementalOverlap,
-} from "../../utils/graph/graphCy.js";
-import { isGraphContainerSizeReady, fitGraphViewportInContainer } from "../../utils/graph/graphViewport.js";
-import { applySearchFadeEffect, syncReciprocalPairJunctionOffsets, clearHighlightClassesOn } from "../../utils/graph/graphHighlight.js";
-import { getResponsiveNodeSizeRange } from "../../utils/styles/graphStyles.js";
+  applySearchFadeEffect,
+  syncReciprocalPairJunctionOffsets,
+  clearHighlightClassesOn,
+} from '../../utils/graph/graphCy.js';
+import { getResponsiveNodeSizeRange } from "../../utils/graph/graphStyles";
 import { useLatestRef } from "../common/hooksShared.js";
 
 const EMPTY_ELEMENTS_UPDATE = {
@@ -32,8 +35,6 @@ const EMPTY_ELEMENTS_UPDATE = {
   needsLocalReorder: false,
   nodesRemoved: false,
 };
-
-const isEmpty = (arr) => !arr || arr.length === 0;
 
 function elementDataIds(elements) {
   return (Array.isArray(elements) ? elements : [])
@@ -155,7 +156,7 @@ export function useCyElementSync({ cy, elements, elementsGraphFingerprint, isDat
   useEffect(() => {
     if (!cy) return;
 
-    if (isEmpty(elements)) {
+    if (!elements?.length) {
       elementsUpdateRef.current = EMPTY_ELEMENTS_UPDATE;
       lastElementsGraphFingerprintRef.current = "";
       prevStructureFingerprintRef.current = "";
@@ -173,7 +174,7 @@ export function useCyElementSync({ cy, elements, elementsGraphFingerprint, isDat
       elementsGraphFingerprint === lastElementsGraphFingerprintRef.current &&
       cy.elements().length > 0
     ) {
-      elementsUpdateRef.current = { ...EMPTY_ELEMENTS_UPDATE };
+      elementsUpdateRef.current = EMPTY_ELEMENTS_UPDATE;
       return;
     }
 
@@ -214,9 +215,9 @@ export function useGraphLayout({
   isInitialLoad,
   setIsInitialLoad,
   containerRef,
-  pendingInitialFitRef = null,
-  canApplyPendingViewportFit = null,
-  clearPendingViewportFitBlock = null,
+  pendingInitialFitRef,
+  canApplyPendingViewportFit,
+  clearPendingViewportFitBlock,
 }) {
   const prevStylesheetRef = useRef(stylesheet);
 
@@ -224,15 +225,15 @@ export function useGraphLayout({
     (cyInstance, shouldFitOnInitialLoad, options = {}) => {
       if (!cyInstance) return;
       // 컨테이너 미준비 시 pending 유지 → resize에서 재시도
-      if (shouldFitOnInitialLoad && pendingInitialFitRef) pendingInitialFitRef.current = true;
+      if (shouldFitOnInitialLoad) pendingInitialFitRef.current = true;
       const fitted = finalizeGraphLayout(cyInstance, containerRef.current, {
         ...options,
         fitViewport: shouldFitOnInitialLoad,
-        canFit: () => typeof canApplyPendingViewportFit !== 'function' || canApplyPendingViewportFit(),
+        canFit: canApplyPendingViewportFit,
       });
       if (fitted) {
-        if (pendingInitialFitRef) pendingInitialFitRef.current = false;
-        clearPendingViewportFitBlock?.();
+        pendingInitialFitRef.current = false;
+        clearPendingViewportFitBlock();
       }
     },
     [containerRef, pendingInitialFitRef, canApplyPendingViewportFit, clearPendingViewportFitBlock],
@@ -256,13 +257,8 @@ export function useGraphLayout({
     const stylesheetChanged = prevStylesheetRef.current !== stylesheet;
     prevStylesheetRef.current = stylesheet;
 
-    const pendingFit = pendingInitialFitRef?.current === true;
-    const pendingFitAllowed =
-      !pendingFit ||
-      typeof canApplyPendingViewportFit !== 'function' ||
-      canApplyPendingViewportFit();
     const shouldFitViewport =
-      Boolean(isInitialLoad) || (pendingFit && pendingFitAllowed);
+      Boolean(isInitialLoad) || (pendingInitialFitRef.current === true && canApplyPendingViewportFit());
 
     const edgesOnlyIncremental =
       hasChanges && nodesToAdd.length === 0 && edgesToAdd.length > 0;

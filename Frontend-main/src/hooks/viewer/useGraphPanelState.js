@@ -3,8 +3,8 @@
 import { useMemo, useEffect, useState } from 'react';
 import { useGraphElementPipeline } from '../graph/useGraphViewState';
 import { resolveGraphCallContext, normalizeGraphApiError, getViewerGraphLoadingNotice } from '../../utils/viewer/viewerGraph';
-import { hasGraphPanelLocationHint } from '../../utils/common/valueUtils';
-import { eventUtils } from '../../utils/viewer/viewerCore';
+import { hasGraphPanelLocationHint } from '../../utils/common/locator';
+import { resolveEventNum } from '../../utils/common/valueUtils';
 
 /**
  * 그래프 패널에 무엇을 보여줄지 결정하는 파생 상태.
@@ -13,7 +13,7 @@ import { eventUtils } from '../../utils/viewer/viewerCore';
  * - isGraphRefreshing: 이벤트 전환 중 → 캔버스는 유지한 채 오버레이만 노출
  * - shouldShowLoading / resolvedApiError: 캔버스를 아직 그릴 수 없을 때의 대체 패널
  */
-export function resolveGraphPanelStatus({
+function resolveGraphPanelStatus({
   graphPhase,
   isEventTransition,
   isDataReady,
@@ -87,7 +87,7 @@ export function useGraphPanelState({
   const { graphPhase, isDataReady, isDataEmpty, appliedGraphKey, book } = viewerState;
   const { elements, currentEvent, currentChapter, prevValidEvent } = graphState;
 
-  const hasResolvedEvent = eventUtils.resolveEventNum(currentEvent) > 0;
+  const hasResolvedEvent = resolveEventNum(currentEvent) > 0;
   const targetGraphKey = useMemo(
     () => resolveTargetGraphKey({ book, currentChapter, currentEvent, hasResolvedEvent }),
     [book, currentChapter, currentEvent, hasResolvedEvent],

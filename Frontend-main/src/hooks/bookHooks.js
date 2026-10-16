@@ -1,16 +1,16 @@
 /** 책: 서버 목록 쿼리·라이브러리·뷰어 URL canonical 매칭 */
 
-import { useState, useEffect, useCallback, useMemo, useReducer } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { getBook, getBooks, getBooksArray, toggleBookFavorite, getBookManifest } from '../../utils/api/booksApi';
-import { normalizeTitle, normalizeAuthor, errorUtils } from '../../utils/common/valueUtils';
-import { userViewerPath } from '../../utils/common/urlUtils';
-import { PROGRESS_CACHE_UPDATED_EVENT } from '../../utils/common/cache/progressCache';
-import { readBooksCache, writeBooksCache, loadFromStorage, saveToStorage } from '../../utils/common/cache/cacheManager';
-import { resolveLibraryReadingProgressPercent } from '../../utils/library/libraryUtils';
-import { getStoredAccessToken } from '../../utils/security/authTokenStorage';
-import { ensureSessionAccessToken } from '../../utils/api/authApi';
+import { getBook, getBooks, getBooksArray, toggleBookFavorite, getBookManifest } from '../utils/api/booksApi';
+import { errorUtils, toPositiveNumberOrNull } from '../utils/common/valueUtils';
+import { normalizeTitle, normalizeAuthor } from '../utils/common/bookNormalize';
+import { userViewerPath } from '../utils/common/urlUtils';
+import { readBooksCache, writeBooksCache, loadFromStorage, saveToStorage } from '../utils/common/cache/cacheManager';
+import { resolveLibraryReadingProgressPercent } from '../utils/libraryUtils';
+import { getStoredAccessToken, ensureSessionAccessToken } from '../utils/api/authApi';
+import { useProgressCacheUpdates } from './common/hooksShared';
 
 export const BOOKS_QUERY_KEY = ['books', 'server'];
 
@@ -30,23 +30,26 @@ function writeHiddenBookIds(ids) {
   saveToStorage(HIDDEN_BOOK_IDS_KEY, [...ids]);
 }
 
+/** 유효한 서버 책이면 { id, key: 제목::저자 }, 아니면 null */
+function bookIdentity(book) {
+  const id = toPositiveNumberOrNull(book?.id);
+  if (id == null) return null;
+  const titleKey = normalizeTitle(book?.title || '');
+  const authorKey = normalizeAuthor(book?.author || '');
+  return { id, titleKey, authorKey, key: `${titleKey}::${authorKey}` };
+}
+
+/** 같은 제목+저자는 최소 id 한 권만 */
 function reconcileBooks(fetchedBooks) {
   if (!Array.isArray(fetchedBooks)) return [];
 
   const deduped = new Map();
   for (const book of fetchedBooks) {
-    const numericId = Number(book?.id);
-    if (!Number.isFinite(numericId) || numericId <= 0) continue;
-
-    const titleKey = normalizeTitle(book?.title || '');
-    const authorKey = normalizeAuthor(book?.author || '');
-    if (!titleKey || !authorKey) continue;
-
-    const dedupeKey = `${titleKey}::${authorKey}`;
-    const normalized = { ...book, isFavorite: !!book.isFavorite };
-    const existing = deduped.get(dedupeKey);
-    if (!existing || numericId < Number(existing.id)) {
-      deduped.set(dedupeKey, normalized);
+    const identity = bookIdentity(book);
+    if (!identity?.titleKey || !identity.authorKey) continue;
+    const existing = deduped.get(identity.key);
+    if (!existing || identity.id < Number(existing.id)) {
+      deduped.set(identity.key, { ...book, isFavorite: !!book.isFavorite });
     }
   }
   return Array.from(deduped.values());
@@ -55,22 +58,16 @@ function reconcileBooks(fetchedBooks) {
 export function findCanonicalBook(books, titleKey, authorKey) {
   return books
     .filter((item) => {
-      const id = Number(item?.id);
-      return (
-        Number.isFinite(id) &&
-        id > 0 &&
-        normalizeTitle(item?.title || '') === titleKey &&
-        normalizeAuthor(item?.author || '') === authorKey
-      );
+      const identity = bookIdentity(item);
+      return identity?.titleKey === titleKey && identity.authorKey === authorKey;
     })
     .sort((a, b) => Number(a.id) - Number(b.id))[0] ?? null;
 }
 
 function prefetchBookManifests(books) {
   for (const book of books) {
-    const id = Number(book?.id);
-    if (!Number.isFinite(id) || id <= 0) continue;
-    getBookManifest(id).catch(() => {});
+    const id = toPositiveNumberOrNull(book?.id);
+    if (id != null) getBookManifest(id).catch(() => {});
   }
 }
 
@@ -209,26 +206,21 @@ export function useServerBookMatching(bookId, options = {}) {
 
 export const useBooks = () => {
   const queryClient = useQueryClient();
-  const [, bumpProgressCacheEpoch] = useReducer((n) => n + 1, 0);
   const [hiddenBookIds, setHiddenBookIds] = useState(readHiddenBookIds);
-
-  useEffect(() => {
-    const onProgressCacheUpdated = () => bumpProgressCacheEpoch();
-    window.addEventListener(PROGRESS_CACHE_UPDATED_EVENT, onProgressCacheUpdated);
-    return () => window.removeEventListener(PROGRESS_CACHE_UPDATED_EVENT, onProgressCacheUpdated);
-  }, []);
+  // 진도 캐시가 바뀌면 progress를 다시 계산
+  const progressCacheVersion = useProgressCacheUpdates();
 
   const { data, isLoading, error: queryError, refetch } = useBooksQuery();
 
   const visibleBooks = useMemo(
-    () => reconcileBooks(data?.books)
-      .filter((book) => book?.id != null && !hiddenBookIds.has(`${book.id}`)),
+    () => reconcileBooks(data?.books).filter((book) => !hiddenBookIds.has(`${book.id}`)),
     [data, hiddenBookIds],
   );
-  const books = visibleBooks.map((book) => ({
-    ...book,
-    progress: resolveLibraryReadingProgressPercent(book),
-  }));
+  const books = useMemo(
+    () => visibleBooks.map((book) => ({ ...book, progress: resolveLibraryReadingProgressPercent(book) })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- progressCacheVersion: 캐시 갱신 시 재계산
+    [visibleBooks, progressCacheVersion],
+  );
 
   const toggleFavoriteMutation = useMutation({
     mutationFn: ({ bookId, favorite }) => toggleBookFavorite(bookId, favorite),

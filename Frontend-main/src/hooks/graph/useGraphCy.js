@@ -7,28 +7,20 @@ import {
   useRef,
   useState,
 } from 'react';
-import { isSidebarElement, openTooltipFromTap } from '../../utils/graph/graphCy';
 import {
-  captureCyViewport,
-  centerSelectionOnElementId,
-  fitGraphToNodes,
-  restoreCyViewport,
-} from '../../utils/graph/graphViewport';
-import { handleGraphCanvasHotkeys } from '../../utils/graph/graphKeyboardNav';
-import {
+  isSidebarElement,
+  openTooltipFromTap,
+  handleGraphCanvasHotkeys,
   applySelectionHighlight,
   buildTapShowArgs,
   calculateGraphTooltipPosition,
   clearHighlightClassesOn,
   resolveGraphTooltipAnchor,
-} from '../../utils/graph/graphHighlight';
-import { GRAPH_LAYOUT_CONSTANTS, GRAPH_ZOOM } from '../../utils/graph/graphCore.js';
+} from '../../utils/graph/graphCy';
+import { captureCyViewport, centerSelectionOnElementId, restoreCyViewport } from '../../utils/graph/graphLayout';
+import { GRAPH_LAYOUT_CONSTANTS } from '../../utils/graph/graphCore.js';
 import { errorUtils } from '../../utils/common/valueUtils';
 import { useLatestRef } from '../common/hooksShared';
-
-function toCyId(value) {
-  return String(value);
-}
 
 /**
  * @param {object} options
@@ -68,7 +60,7 @@ export function useGraphInteractions({
     const selected = selectedElementRef?.current;
     if (!cy || !selected?.id) return;
 
-    const el = cy.getElementById(toCyId(selected.id));
+    const el = cy.getElementById(String(selected.id));
     if (el.length > 0) applySelectionHighlight(cy, el);
   }, [cyRef, selectedElementRef]);
 
@@ -85,7 +77,7 @@ export function useGraphInteractions({
       return false;
     }
     if (selectedElementRef) {
-      selectedElementRef.current = { kind, id: toCyId(element.id()) };
+      selectedElementRef.current = { kind, id: String(element.id()) };
     }
     return true;
   }, [cyRef, selectedElementRef]);
@@ -120,9 +112,9 @@ export function useGraphInteractions({
     const element = evt.target;
     if (!element || typeof element.data !== 'function' || !element.data()) return;
 
-    const elementId = toCyId(element.id());
+    const elementId = String(element.id());
     const prev = selectedElementRef?.current;
-    if (prev?.kind === kind && toCyId(prev.id) === elementId) {
+    if (prev?.kind === kind && String(prev.id) === elementId) {
       dismissSelection();
       return;
     }
@@ -139,27 +131,17 @@ export function useGraphInteractions({
     dismissSelection();
   }, [cyRef, selectedElementRef, dismissSelection]);
 
-  /**
-   * @param {{ fitViewport?: boolean }} [options]
-   * 사용자 배율 보존이 기본이며, 명시적으로 요청한 경우에만 viewport를 fit한다.
-   */
-  const clearSelection = useCallback((options = {}) => {
-    const fitViewport = options?.fitViewport === true;
-    clearHighlightAndSelection();
-    if (fitViewport) fitGraphToNodes(cyRef?.current, { duration: GRAPH_ZOOM.FIT_DURATION_MS });
-  }, [cyRef, clearHighlightAndSelection]);
-
   const selectNodeByIdOrName = useCallback((idOrName) => {
     const cy = cyRef?.current;
     if (!cy || idOrName == null || idOrName === '') return false;
 
-    const key = toCyId(idOrName);
+    const key = String(idOrName);
     let element = cy.getElementById(key);
     if (!element?.length) {
       element = cy.nodes().filter((ele) => {
         const d = ele.data() || {};
         return (
-          toCyId(d.id) === key ||
+          String(d.id) === key ||
           d.common_name === key ||
           d.label === key ||
           d.name === key
@@ -175,7 +157,7 @@ export function useGraphInteractions({
     if (kind === 'node') return selectNodeByIdOrName(id);
     const cy = cyRef?.current;
     if (!cy || id == null || id === '') return false;
-    const element = cy.getElementById(toCyId(id));
+    const element = cy.getElementById(String(id));
     if (!element?.length || !element.isEdge?.()) return false;
     return selectAndShowTooltip('edge', element, null);
   }, [cyRef, selectNodeByIdOrName, selectAndShowTooltip]);
@@ -184,7 +166,7 @@ export function useGraphInteractions({
     tapNodeHandler,
     tapEdgeHandler,
     tapBackgroundHandler,
-    clearSelection,
+    clearSelection: clearHighlightAndSelection,
     reapplySelectionHighlight,
     selectNodeByIdOrName,
     selectElementById,
@@ -262,9 +244,8 @@ function useGraphOutsideDismiss({
 }
 
 /** 상단바 오른쪽 도구 너비 → CSS 변수 (--graph-split-tools-reserve) */
-export function useGraphTopbarToolsReserve(topbarRef, toolsRef, enabled = true) {
+export function useGraphTopbarToolsReserve(topbarRef, toolsRef) {
   useEffect(() => {
-    if (!enabled) return undefined;
     const topbar = topbarRef?.current;
     const tools = toolsRef?.current;
     if (!topbar || !tools) return undefined;
@@ -281,7 +262,7 @@ export function useGraphTopbarToolsReserve(topbarRef, toolsRef, enabled = true) 
     const ro = new ResizeObserver(applyReserve);
     ro.observe(tools);
     return () => ro.disconnect();
-  }, [enabled, topbarRef, toolsRef]);
+  }, [topbarRef, toolsRef]);
 }
 
 /**
@@ -333,9 +314,10 @@ export function useGraphViewportFocus({
     padding: 40,
   });
 
-  const clearGraphSelection = useCallback((options = {}) => {
-    graphClearRef.current?.(options);
-    releasePreFocusViewport(options.restoreViewport !== false);
+  /** @param {{ restoreViewport?: boolean }} [options] */
+  const clearGraphSelection = useCallback(({ restoreViewport = true } = {}) => {
+    graphClearRef.current?.();
+    releasePreFocusViewport(restoreViewport);
   }, [graphClearRef, releasePreFocusViewport]);
 
   const onClearTooltip = useCallback(() => {
@@ -344,20 +326,16 @@ export function useGraphViewportFocus({
   }, [closeSidebar, releasePreFocusViewport]);
 
   const dismissTooltip = useCallback(() => {
-    clearGraphSelection({ fitViewport: false });
+    clearGraphSelection();
     startClosing();
   }, [clearGraphSelection, startClosing]);
-
-  const onBeforeOpenTooltip = useCallback(() => {
-    cancelClosing();
-  }, [cancelClosing]);
 
   return {
     clearGraphSelection,
     centerSelection,
     onClearTooltip,
     dismissTooltip,
-    onBeforeOpenTooltip,
+    onBeforeOpenTooltip: cancelClosing,
   };
 }
 
@@ -375,7 +353,7 @@ export function useGraphTooltipSelection({
   const centerSelectionRef = useLatestRef(centerSelection);
   const focusTooltipId =
     activeTooltip?.id != null && activeTooltip.id !== ''
-      ? toCyId(activeTooltip.id)
+      ? String(activeTooltip.id)
       : '';
 
   const openElementTooltip = useCallback((tapPayload, type) => {

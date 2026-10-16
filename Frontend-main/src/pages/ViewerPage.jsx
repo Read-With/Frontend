@@ -1,22 +1,17 @@
-import { useRef, useEffect, useCallback, useMemo, useState } from 'react';
+import { useRef, useEffect, useCallback, useMemo } from 'react';
 import { toast } from 'react-toastify';
-import ViewerLayout from './ViewerLayout';
-import XhtmlViewer from './XhtmlViewer';
-import ViewerSettings from './ViewerSettings';
-import { useViewerPage } from '../../hooks/viewer/useViewerPage';
-import { useLatestRef } from '../../hooks/common/hooksShared';
-import { useTooltipState } from '../../hooks/ui/tooltipHooks';
-import { anchorToLocators, resolveChapterIndex, errorUtils, toPositiveNumberOrNull } from '../../utils/common/valueUtils';
-import {
-  resolveViewerLineEvent,
-  parseReadingLocatorKey,
-  patchTopBarFromLineEvent,
-} from '../../utils/viewer/viewerSession';
-import { isSameBookmarkPosition } from '../../utils/bookmarks/bookmarkUtils';
-import { normalizeStartEndLocatorsForServer } from '../../utils/common/cache/progressCache';
-import GraphSplitArea from './GraphSplitArea';
-import BookmarkDeleteConfirm from './BookmarkDeleteConfirm';
-import '../../pages/BookmarksPage.css';
+import ViewerLayout from '../components/viewer/ViewerLayout';
+import XhtmlViewer from '../components/viewer/XhtmlViewer';
+import ViewerSettings from '../components/viewer/ViewerSettings';
+import { useViewerPage } from '../hooks/viewer/useViewerPage';
+import { useLatestRef } from '../hooks/common/hooksShared';
+import { useTooltipState } from '../hooks/tooltipHooks';
+import { resolveChapterIndex, errorUtils, toPositiveNumberOrNull } from '../utils/common/valueUtils';
+import { anchorToLocators } from '../utils/common/locator';
+import { resolveViewerLineEvent, patchTopBarFromLineEvent } from '../utils/viewer/viewerSession';
+import { isTypingTarget } from '../utils/common/domUtils';
+import GraphSplitArea from '../components/viewer/GraphSplitArea';
+import ConfirmDialog from '../components/common/ConfirmDialog';
 
 const TOOLBAR_REVEAL_ZONE_PX = 72;
 
@@ -24,22 +19,16 @@ const ViewerPage = () => {
   const {
     viewerRef,
     reloadKey,
-    showSettingsModal,
-    setShowSettingsModal,
+    bookmarkUi,
+    settingsUi,
     setCurrentPage,
     setTotalPages,
     setCurrentChapter,
     setCurrentEvent,
     setShowToolbar,
-    bookmarks,
     manifestLoaded,
     handlePrevPage,
     handleNextPage,
-    handleAddBookmark,
-    removeBookmark,
-    isBookmarkMutating,
-    handleApplySettings,
-    onToggleBookmarkList,
     handleSliderChange,
     toggleGraph,
     restoreAfterViewerLayoutChange,
@@ -49,10 +38,7 @@ const ViewerPage = () => {
     viewerState,
     searchState,
     searchActions,
-    previousPage,
-    isFromLibrary,
     setProgressTopBar,
-    readingLocatorKey,
     serverResumeAnchor: resumeAnchor,
     applyReadingLocator,
     markViewerPageReady,
@@ -63,8 +49,6 @@ const ViewerPage = () => {
     graphApiError: apiError,
     flushProgressAsync,
   } = useViewerPage();
-
-  const [toolbarDeleteConfirmId, setToolbarDeleteConfirmId] = useState(null);
 
   const {
     currentChapter,
@@ -117,7 +101,7 @@ const ViewerPage = () => {
 
   useEffect(() => {
     const onKey = (e) => {
-      if (e.target.closest?.('input, textarea, [contenteditable], [role="dialog"]')) {
+      if (isTypingTarget(e.target) || e.target.closest?.('[role="dialog"]')) {
         return;
       }
       if (e.key === 't' || e.key === 'T') {
@@ -128,36 +112,6 @@ const ViewerPage = () => {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [toggleToolbar]);
-
-  const dismissDeleteConfirm = useCallback(() => {
-    setToolbarDeleteConfirmId(null);
-  }, []);
-
-  const openSettings = useCallback(() => {
-    setShowSettingsModal(true);
-  }, [setShowSettingsModal]);
-
-  const closeSettings = useCallback(() => {
-    setShowSettingsModal(false);
-  }, [setShowSettingsModal]);
-
-  const onAddBookmark = useCallback(async () => {
-    const result = await handleAddBookmark();
-    if (result?.needsConfirm) {
-      setToolbarDeleteConfirmId(result.bookmarkId);
-    }
-  }, [handleAddBookmark]);
-
-  const confirmToolbarDelete = useCallback(async () => {
-    if (toolbarDeleteConfirmId == null) return;
-    try {
-      await removeBookmark(toolbarDeleteConfirmId);
-      setToolbarDeleteConfirmId(null);
-    } catch (error) {
-      errorUtils.logError('[ViewerPage] 북마크 삭제 실패', error, { bookmarkId: toolbarDeleteConfirmId });
-      toast.error('북마크 삭제에 실패했습니다. 잠시 후 다시 시도해 주세요.');
-    }
-  }, [toolbarDeleteConfirmId, removeBookmark]);
 
   const onTooltipError = useCallback(() => {
     toast.error('노드 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.');
@@ -171,24 +125,6 @@ const ViewerPage = () => {
     onError: onTooltipError,
     graphClearRef,
   });
-
-  const isBookmarked = useMemo(() => {
-    if (!bookmarks?.length || !readingLocatorKey || !bookKey) return false;
-    const { start, end } = parseReadingLocatorKey(readingLocatorKey);
-    if (!start) return false;
-    const { startLocator, endLocator } = normalizeStartEndLocatorsForServer(
-      bookKey,
-      start,
-      end ?? start
-    );
-    if (!startLocator) return false;
-    return bookmarks.some((bookmark) =>
-      isSameBookmarkPosition(bookmark, {
-        startLocator,
-        endLocator: endLocator ?? startLocator,
-      })
-    );
-  }, [bookmarks, readingLocatorKey, bookKey]);
 
   const handleCurrentLineChange = useCallback(
     (receivedEvent) => {
@@ -302,18 +238,16 @@ const ViewerPage = () => {
         progressMetricsReady={progressMetricsReady}
         onPrev={handlePrevPage}
         onNext={handleNextPage}
-        isBookmarked={isBookmarked}
-        onToggleBookmarkList={onToggleBookmarkList}
-        onAddBookmark={onAddBookmark}
-        onOpenSettings={openSettings}
+        isBookmarked={bookmarkUi.isBookmarked}
+        onToggleBookmarkList={bookmarkUi.onOpenList}
+        onAddBookmark={bookmarkUi.onAdd}
+        onOpenSettings={settingsUi.open}
         onSliderChange={handleSliderChange}
         currentPage={currentPage}
         totalPages={totalPages}
         showGraph={showGraph}
         onToggleGraph={toggleGraph}
         graphFullScreen={graphFullScreen}
-        isFromLibrary={isFromLibrary}
-        previousPage={previousPage}
         onExitToMypage={handleExitToMypage}
         rightSideContent={rightSideContent}
         onViewerLayoutSettled={restoreAfterViewerLayoutChange}
@@ -335,19 +269,17 @@ const ViewerPage = () => {
           onToggleChrome={toggleToolbar}
         />
         <ViewerSettings
-          isOpen={showSettingsModal}
-          onClose={closeSettings}
-          onApplySettings={handleApplySettings}
+          isOpen={settingsUi.isOpen}
+          onClose={settingsUi.close}
+          onApplySettings={settingsUi.apply}
           settings={settings}
         />
       </ViewerLayout>
 
-      <BookmarkDeleteConfirm
-        open={toolbarDeleteConfirmId != null}
-        busy={isBookmarkMutating}
-        onCancel={dismissDeleteConfirm}
-        onConfirm={confirmToolbarDelete}
-        description="현재 위치에 표시된 북마크가 제거됩니다."
+      <ConfirmDialog
+        {...bookmarkUi.deleteConfirm}
+        title="북마크를 삭제할까요?"
+        message="현재 위치에 표시된 북마크가 제거됩니다."
       />
     </div>
   );
