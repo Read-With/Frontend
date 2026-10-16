@@ -10,6 +10,6 @@ on:
 jobs:
   ping:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 6
     steps:
       - run: curl -fsS -m 120 -o /dev/null -w "%{http_code} %{time_total}s\n" https://readwith-be.onrender.com/health
