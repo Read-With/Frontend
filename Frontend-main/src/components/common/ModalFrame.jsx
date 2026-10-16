@@ -8,6 +8,8 @@ import { useModalFocusTrap, useBodyScrollLock } from '../../hooks/common/hooksSh
  * @param {() => void} [onClose]       오버레이 클릭 시 호출 (closeOnOverlay=false면 무시)
  * @param {() => void} [onEscape]      Escape 처리. 상위가 Escape를 처리하면 생략 (useModalFocusTrap 참고)
  * @param {boolean}    [lockScroll]    열려 있는 동안 body 스크롤 잠금
+ * @param {object}     [returnFocusRef] 닫을 때 포커스를 돌려줄 요소 (기본: 열기 직전 포커스)
+ * @param {boolean}    [captureEscape] Escape를 캡처 단계에서 처리 (상위 keydown 핸들러보다 먼저)
  */
 export default function ModalFrame({
   open,
@@ -15,16 +17,19 @@ export default function ModalFrame({
   onEscape,
   closeOnOverlay = true,
   overlayClassName,
+  overlayStyle,
   className,
   role = 'dialog',
   labelledBy,
   describedBy,
   initialFocusRef,
   lockScroll = false,
+  returnFocusRef,
+  captureEscape = false,
   children,
 }) {
   const dialogRef = useRef(null);
-  useModalFocusTrap(open, dialogRef, onEscape, { initialFocusRef });
+  useModalFocusTrap(open, dialogRef, onEscape, { initialFocusRef, returnFocusRef, capture: captureEscape });
   useBodyScrollLock(open && lockScroll);
 
   if (!open) return null;
@@ -32,6 +37,7 @@ export default function ModalFrame({
   return (
     <div
       className={overlayClassName}
+      style={overlayStyle}
       role="presentation"
       onClick={closeOnOverlay ? onClose : undefined}
     >

@@ -69,7 +69,8 @@ export function loadSettings() {
   try {
     return normalizeSettings(loadFromStorage(SETTINGS_STORAGE_KEY) ?? defaultSettings);
   } catch (error) {
-    return errorUtils.handleError('loadSettings', error, defaultSettings);
+    errorUtils.logError('loadSettings', error);
+    return defaultSettings;
   }
 }
 

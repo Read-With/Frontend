@@ -1,4 +1,4 @@
-/** 뷰어 페이지: URL·책·북마크·설정·진도·그래프 파이프라인 오케스트레이션 */
+/** 뷰어 페이지: URL·책·툴바 북마크·설정·진도·그래프 파이프라인 오케스트레이션 */
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
@@ -18,13 +18,10 @@ import {
   waitForViewerMethod,
   runViewerPaging,
   restoreViewerPosition,
-  parseReadingLocatorKey,
 } from '../../utils/viewer/viewerSession';
-import { normalizeStartEndLocatorsForServer } from '../../utils/common/cache/progressCache';
-import { bookmarkPositionKey } from '../../utils/bookmarkUtils';
 import { resolveChapterIndex, errorUtils, toPositiveNumberOrNull } from '../../utils/common/valueUtils';
 import { toViewerResumeAnchor } from '../../utils/common/locator';
-import { useBookmarks } from '../bookmarkHooks';
+import { useViewerBookmarks } from '../bookmarkHooks';
 import {
   parseViewerReaderSplat,
   resolveViewerReadingPosition,
@@ -261,62 +258,6 @@ function usePersistedViewerSettings() {
   }, []);
 
   return [settings, setSettings];
-}
-
-/**
- * 툴바 북마크: 현재 위치 북마크 여부 · 추가(이미 있으면 삭제 확인) · 삭제 확인 다이얼로그 상태
- * @returns {{ isBookmarked: boolean, onAdd: Function, deleteConfirm: { isOpen, busy, onClose, onConfirm } }}
- */
-function useViewerBookmarks({ serverBookId, bookKey, readingLocatorKey, viewerRef, setFailCount }) {
-  const { bookmarks, handleAddBookmark, removeBookmark, isMutating } =
-    useBookmarks(serverBookId, { viewerRef, setFailCount });
-  const [deleteConfirmId, setDeleteConfirmId] = useState(null);
-
-  // 북마크 위치 키는 목록이 바뀔 때만 계산 — 읽는 위치가 바뀔 때마다 목록 전체를 비교하지 않음 (O(B) → O(1))
-  const bookmarkPositionKeys = useMemo(
-    () => new Set((bookmarks || []).map(bookmarkPositionKey).filter(Boolean)),
-    [bookmarks]
-  );
-
-  const isBookmarked = useMemo(() => {
-    if (!bookmarkPositionKeys.size || !readingLocatorKey || !bookKey) return false;
-    const { start, end } = parseReadingLocatorKey(readingLocatorKey);
-    if (!start) return false;
-    const { startLocator, endLocator } = normalizeStartEndLocatorsForServer(bookKey, start, end ?? start);
-    if (!startLocator) return false;
-    return bookmarkPositionKeys.has(
-      bookmarkPositionKey({ startLocator, endLocator: endLocator ?? startLocator })
-    );
-  }, [bookmarkPositionKeys, readingLocatorKey, bookKey]);
-
-  const onAdd = useCallback(async () => {
-    const result = await handleAddBookmark();
-    if (result?.needsConfirm) setDeleteConfirmId(result.bookmarkId);
-  }, [handleAddBookmark]);
-
-  const closeDeleteConfirm = useCallback(() => setDeleteConfirmId(null), []);
-
-  const confirmDelete = useCallback(async () => {
-    if (deleteConfirmId == null) return;
-    try {
-      await removeBookmark(deleteConfirmId);
-      setDeleteConfirmId(null);
-    } catch (error) {
-      errorUtils.logError('[ViewerPage] 북마크 삭제 실패', error, { bookmarkId: deleteConfirmId });
-      toast.error('북마크 삭제에 실패했습니다. 잠시 후 다시 시도해 주세요.');
-    }
-  }, [deleteConfirmId, removeBookmark]);
-
-  return {
-    isBookmarked,
-    onAdd,
-    deleteConfirm: {
-      isOpen: deleteConfirmId != null,
-      busy: isMutating,
-      onClose: closeDeleteConfirm,
-      onConfirm: confirmDelete,
-    },
-  };
 }
 
 export function useViewerPage() {

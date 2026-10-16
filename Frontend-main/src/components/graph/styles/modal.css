@@ -418,13 +418,6 @@
   border-color: var(--rg-border-soft);
 }
 
-.relation-modal-list-empty {
-  padding: 1rem;
-  text-align: center;
-  color: var(--rg-text-muted);
-  font-size: 0.85rem;
-}
-
 .relation-modal-switch-inline {
   align-self: stretch;
   width: 100%;

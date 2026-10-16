@@ -19,7 +19,7 @@ import {
   resolveEventNum,
 } from '../common/valueUtils';
 import { buildGraphEventMeta, fetchRelationshipDeltasList } from '../api/graphApi';
-import { requireBookId } from '../api/authApi';
+import { requireBookId } from '../api/client';
 import {
   getChapterData,
   getManifestFromCache,

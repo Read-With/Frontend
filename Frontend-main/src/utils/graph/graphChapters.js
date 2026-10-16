@@ -26,11 +26,8 @@ import {
   loadTtlStorage,
   saveToStorage,
   removeFromStorage,
-  CHAPTER_EVENT_CACHE_MAX_AGE_MS,
-  CHAPTER_EVENT_CACHE_PREFIX,
   saveTtlStorage,
   awaitTracked,
-  GRAPH_BOOK_CACHE_PREFIX,
 } from '../common/cache/cacheManager';
 import { buildElementsFromGraphPayload } from './graphElements';
 import { getBookManifest } from '../api/booksApi';
@@ -40,6 +37,11 @@ import {
   createDeltaAccumulateWalker,
   ensureBookRelationshipDeltas,
 } from './graphDeltas';
+
+const GRAPH_BOOK_CACHE_PREFIX = 'graph_cache_';
+const CHAPTER_EVENT_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+/** 챕터 이벤트 localStorage 키 — v2: convert 단일 진입점 이후 elements 스키마 */
+const CHAPTER_EVENT_CACHE_PREFIX = 'chapter_events_v2_';
 
 /* ─── 챕터 그래프 캐시: payload·재구성(커서)·이벤트 조회·캐시→events ─── */
 

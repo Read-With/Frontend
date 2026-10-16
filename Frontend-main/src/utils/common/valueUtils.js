@@ -46,11 +46,6 @@ export const errorUtils = {
     }
   },
 
-  handleError: (context, error, fallbackValue = null, additionalData = {}) => {
-    errorUtils.logError(context, error, additionalData);
-    return fallbackValue;
-  },
-
   /** fetch 단계 네트워크 실패 (HTTP 401 등 응답이 있는 에러는 제외) */
   isNetworkError: (error) => {
     if (!error || error.status === 401) return false;

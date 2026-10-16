@@ -19,7 +19,7 @@ import {
   compareLocale,
 } from '../common/valueUtils';
 import { buildGraphEventMeta, hasGraphPayload } from '../api/graphApi';
-import { requireBookId } from '../api/authApi';
+import { requireBookId } from '../api/client';
 import {
   getLastManifestEventInChapter,
   findManifestEventInChapter,

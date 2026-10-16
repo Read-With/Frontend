@@ -15,9 +15,10 @@ import {
   setBounded,
   loadTtlStorage,
   saveToStorage,
-  MANIFEST_CACHE_PREFIX,
-  MANIFEST_TTL_MS,
 } from './cacheManager';
+
+const MANIFEST_CACHE_PREFIX = 'manifest_cache_v2_';
+const MANIFEST_TTL_MS = 15 * 60 * 1000;
 
 const toFiniteNumberArray = (values) =>
   (asArray(values))
@@ -256,23 +257,6 @@ const calculateMaxChapterFromChapters = (chapters) => {
   }
   return Number.isFinite(maxV) ? maxV : 0;
 };
-
-function migrateLegacyManifestStorage() {
-  if (typeof localStorage === 'undefined') return;
-  try {
-    const keysToRemove = [];
-    for (let i = 0; i < localStorage.length; i += 1) {
-      const key = localStorage.key(i);
-      if (key?.startsWith('manifest_cache_') && !key.startsWith(MANIFEST_CACHE_PREFIX)) {
-        keysToRemove.push(key);
-      }
-    }
-    keysToRemove.forEach((key) => localStorage.removeItem(key));
-  } catch {
-    /* ignore */
-  }
-}
-migrateLegacyManifestStorage();
 
 const manifestCache = new Map();
 const MANIFEST_MEMORY_MAX = 100;

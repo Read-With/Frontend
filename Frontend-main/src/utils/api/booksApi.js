@@ -2,17 +2,15 @@
 
 import {
   authenticatedRequest,
+  authenticatedFetch,
   makeSilentError,
-  isTokenValid,
   mapSoftFailResponse,
   SOFT_FAIL_403_404,
   requireBookId,
   pickResponseResult,
   toUnifiedApiResponse,
-  authenticatedFetch,
-  getStoredAccessToken,
-  AUTH_CLEARED_EVENT,
-} from './authApi';
+} from './client';
+import { isTokenValid, getStoredAccessToken, AUTH_CLEARED_EVENT } from './authApi';
 import {
   asArray,
   toOneBasedChapterIndexOrNull,

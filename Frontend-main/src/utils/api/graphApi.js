@@ -6,7 +6,7 @@ import {
   SOFT_FAIL_403_404,
   requireBookId,
   pickResponseResult,
-} from './authApi';
+} from './client';
 
 /** characters 또는 relations가 하나라도 있으면 true */
 export const hasGraphPayload = (data) => {

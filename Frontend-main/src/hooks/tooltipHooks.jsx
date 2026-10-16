@@ -5,7 +5,6 @@ import { constrainToGraphCanvas } from '../utils/graph/graphLayout';
 import { useLatestRef } from './common/hooksShared';
 
 const TOOLTIP_CLEAR_DELAY_MS = 150;
-const TOOLTIP_ERROR_CHECK_DELAY_MS = 220;
 
 const GRAPH_CANVAS_SELECTOR = '#cy, .graph-canvas-area, [data-cy]';
 /** 툴팁이 선택 중심(avoid point)과 띄울 최소 거리 */
@@ -49,18 +48,11 @@ export function useTooltipState({
   graphClearRef = null,
 } = {}) {
   const [activeTooltip, setActiveTooltip] = useState(null);
-  const tooltipTimeoutRef = useRef(null);
   const lastTooltipOpenAtRef = useRef(0);
-  const activeTooltipRef = useLatestRef(activeTooltip);
   const onErrorRef = useLatestRef(onError);
   const graphClearRefRef = useLatestRef(graphClearRef);
 
   const handleClearTooltip = useCallback(() => {
-    if (tooltipTimeoutRef.current) {
-      clearTimeout(tooltipTimeoutRef.current);
-      tooltipTimeoutRef.current = null;
-    }
-
     const now = Date.now();
     if (now - lastTooltipOpenAtRef.current < TOOLTIP_CLEAR_DELAY_MS) {
       return;
@@ -73,36 +65,11 @@ export function useTooltipState({
   }, [graphClearRefRef]);
 
   const handleSetActiveTooltip = useCallback((tooltipData) => {
-    if (tooltipTimeoutRef.current) {
-      clearTimeout(tooltipTimeoutRef.current);
-      tooltipTimeoutRef.current = null;
-    }
-
-    // processTooltipData는 openTooltipFromTap에서 이미 수행
+    // processTooltipData는 openTooltipFromTap에서 이미 수행. null = 탭한 요소의 정보를 못 읽음
     lastTooltipOpenAtRef.current = Date.now();
     setActiveTooltip(tooltipData);
-
-    if (onErrorRef.current) {
-      const timeoutId = setTimeout(() => {
-        if (!activeTooltipRef.current) {
-          onErrorRef.current();
-        }
-        if (tooltipTimeoutRef.current === timeoutId) {
-          tooltipTimeoutRef.current = null;
-        }
-      }, TOOLTIP_ERROR_CHECK_DELAY_MS);
-      tooltipTimeoutRef.current = timeoutId;
-    }
-  }, [onErrorRef, activeTooltipRef]);
-
-  useEffect(() => {
-    return () => {
-      if (tooltipTimeoutRef.current) {
-        clearTimeout(tooltipTimeoutRef.current);
-        tooltipTimeoutRef.current = null;
-      }
-    };
-  }, []);
+    if (tooltipData == null) onErrorRef.current?.();
+  }, [onErrorRef]);
 
   return {
     activeTooltip,

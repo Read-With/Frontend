@@ -20,8 +20,6 @@ import {
   setBounded,
   loadFromStorage,
   saveToStorage,
-  PROGRESS_CACHE_KEY,
-  PROGRESS_CACHE_TTL_MS,
 } from './cacheManager';
 import { getChapterData } from './manifestCache';
 import {
@@ -31,6 +29,9 @@ import {
   readingProgressPercentFromLocator,
   resolveProgressMetricsFromLocator,
 } from '../readingProgress';
+
+const PROGRESS_CACHE_KEY = 'readwith_progress_cache';
+const PROGRESS_CACHE_TTL_MS = 3 * 24 * 60 * 60 * 1000;
 
 /** POST progress — 서버 blockIndex 검증에 맞게 paragraphStarts 축으로 재매핑 */
 const normalizeLocatorForServerProgress = (bookId, locator, manifestOverride = undefined) => {

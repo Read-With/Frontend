@@ -59,7 +59,7 @@ function GraphTooltipLayer({
             x={activeTooltip.x}
             y={activeTooltip.y}
             onClose={onClose}
-            variant="viewer"
+            displayMode="tooltip"
             currentChapter={currentChapter}
             eventNum={eventNum}
             bookId={bookId}

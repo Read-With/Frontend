@@ -9,11 +9,8 @@ import {
   useMemo,
   useState,
 } from 'react';
+import { logout as apiLogout } from '../utils/api/client';
 import {
-  logout as apiLogout,
-  refreshToken,
-  isTokenExpiringSoon,
-  getProactiveRefreshBufferSeconds,
   isTokenValid,
   ensureSessionAccessToken,
   getStoredAccessToken,
@@ -27,7 +24,6 @@ import {
   AUTH_CLEARED_EVENT,
 } from '../utils/api/authApi';
 import { getPostLoginHomeUrl, isOAuthCallbackRoute, rememberPostLoginPath } from '../utils/common/urlUtils';
-import { errorUtils } from '../utils/common/valueUtils';
 import { removeKeys } from '../utils/common/cache/cacheManager';
 
 const AuthContext = createContext(null);
@@ -52,14 +48,13 @@ const isCorruptedName = (name) => {
   return /[ìíîïðñòóôõö]/.test(name) || /\\x[0-9A-Fa-f]{2}/.test(name);
 };
 
-/** 저장된 Google 사용자 복원(토큰 재저장 포함). 이름이 깨졌으면 저장분을 지우고 corrupted */
+/** 저장된 Google 사용자 복원. 이름이 깨졌으면 저장분을 지우고 corrupted */
 function restoreSavedUser() {
   const savedUser = getStoredGoogleUserJson();
   if (!savedUser) return { profile: null, corrupted: false };
   let profile = null;
   try {
     const userData = JSON.parse(savedUser);
-    storeTokens(userData);
     profile = profileFromUserData(userData);
     setStoredGoogleUserJson(JSON.stringify(profile));
 
@@ -78,27 +73,6 @@ function AuthProvider({ children }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (isOAuthCallbackRoute()) return undefined;
-
-    const checkAndRefreshToken = async () => {
-      try {
-        const token = getStoredAccessToken();
-        if (token && isTokenExpiringSoon(token, getProactiveRefreshBufferSeconds(token))) {
-          await refreshToken();
-        }
-      } catch (error) {
-        errorUtils.logWarning('useAuth', '토큰 자동 갱신 실패', {
-          message: error?.message,
-        });
-      }
-    };
-
-    void checkAndRefreshToken();
-    const intervalId = setInterval(checkAndRefreshToken, 45 * 1000);
-    return () => clearInterval(intervalId);
-  }, []);
-
-  useEffect(() => {
     let cancelled = false;
 
     (async () => {
@@ -114,7 +88,7 @@ function AuthProvider({ children }) {
         await ensureSessionAccessToken();
         if (cancelled) return;
 
-        // 구버전 snake_case 키 정리 (authApi 토큰 저장소는 camelCase만 마이그레이션)
+        // 구버전 snake_case 키 정리
         removeKeys('localStorage', 'access_token');
 
         const accessToken = getStoredAccessToken();

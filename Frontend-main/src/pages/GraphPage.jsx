@@ -25,7 +25,7 @@ import {
   useChapterSelect,
 } from '../hooks/graph/useGraphPage';
 import { useIsNarrowViewport, useLatestRef } from '../hooks/common/hooksShared';
-import { resolveServerBookId } from '../utils/common/bookNormalize';
+import { resolveServerBookId, withServerBookId } from '../utils/common/bookNormalize';
 import { toPositiveNumberOrNull } from '../utils/common/valueUtils';
 import {
   shouldIgnoreGraphOutsideClick,
@@ -140,12 +140,8 @@ function GraphPage() {
       from: state?.from ? { ...state.from, search: '' } : { pathname, search: '' },
     };
 
-    if (book || serverBookId) {
-      nextState.book = {
-        ...(book || {}),
-        ...(serverBookId ? { id: serverBookId, _bookId: serverBookId } : {}),
-      };
-    }
+    const nextBook = withServerBookId(book, serverBookId);
+    if (nextBook) nextState.book = nextBook;
 
     navigate(userViewerPath(filename), { state: nextState });
   }, [navigate, filename, book, serverBookId, locationRef]);

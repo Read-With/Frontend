@@ -7,12 +7,35 @@ import { getBook, getBooks, getBooksArray, toggleBookFavorite, getBookManifest }
 import { errorUtils, toPositiveNumberOrNull } from '../utils/common/valueUtils';
 import { normalizeTitle, normalizeAuthor } from '../utils/common/bookNormalize';
 import { userViewerPath } from '../utils/common/urlUtils';
-import { readBooksCache, writeBooksCache, loadFromStorage, saveToStorage } from '../utils/common/cache/cacheManager';
+import { loadFromStorage, saveToStorage, removeFromStorage, loadTtlStorage, saveTtlStorage } from '../utils/common/cache/cacheManager';
 import { resolveLibraryReadingProgressPercent } from '../utils/libraryUtils';
-import { getStoredAccessToken, ensureSessionAccessToken } from '../utils/api/authApi';
+import { getStoredAccessToken, ensureSessionAccessToken, AUTH_CLEARED_EVENT } from '../utils/api/authApi';
 import { useProgressCacheUpdates } from './common/hooksShared';
 
 export const BOOKS_QUERY_KEY = ['books', 'server'];
+
+/** 마이페이지 책 목록 persist (react-query initialData용) */
+const BOOKS_CACHE_KEY = 'readwith_books_server_cache';
+const BOOKS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+function readBooksCache() {
+  const stored = loadTtlStorage(BOOKS_CACHE_KEY, BOOKS_CACHE_TTL_MS);
+  if (!stored || !Array.isArray(stored.books)) return null;
+  return {
+    books: stored.books,
+    updatedAt: Number(stored.timestamp) || Date.now(),
+  };
+}
+
+function writeBooksCache(books) {
+  if (!Array.isArray(books)) return;
+  saveTtlStorage(BOOKS_CACHE_KEY, { books });
+}
+
+// 로그아웃 시 이전 사용자 책 목록 제거. App.jsx가 이 모듈을 eager import하므로 앱 시작 시 등록됨
+if (typeof window !== 'undefined') {
+  window.addEventListener(AUTH_CLEARED_EVENT, () => removeFromStorage(BOOKS_CACHE_KEY));
+}
 
 const HIDDEN_BOOK_IDS_KEY = 'readwith_hidden_server_book_ids';
 const BOOKS_QUERY_OPTIONS = {

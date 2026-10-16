@@ -440,9 +440,9 @@ function EdgeDetailTooltip({
   );
 }
 
-/** variant: 'graphPage'(사이드바) | 'viewer'(플로팅 툴팁) */
-function EdgeDetail({ variant = 'graphPage', ...props }) {
-  return variant === 'graphPage' ? <EdgeDetailSidebar {...props} /> : <EdgeDetailTooltip {...props} />;
+/** displayMode: 'sidebar'(그래프 페이지) | 'tooltip'(뷰어 플로팅 툴팁) — NodeDetail과 동일 */
+function EdgeDetail({ displayMode = 'sidebar', ...props }) {
+  return displayMode === 'sidebar' ? <EdgeDetailSidebar {...props} /> : <EdgeDetailTooltip {...props} />;
 }
 
 export default memo(EdgeDetail);

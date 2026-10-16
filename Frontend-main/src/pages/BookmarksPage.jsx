@@ -13,7 +13,7 @@ import {
 } from '../utils/bookmarkUtils';
 import { userViewerPath, userViewerBookmarksPath, userViewerReadingPath } from '../utils/common/urlUtils';
 import { resolveChapterIndex, errorUtils, formatRelativeTime, truncateWithEllipsis } from '../utils/common/valueUtils';
-import { resolveServerBookId } from '../utils/common/bookNormalize';
+import { resolveServerBookId, withServerBookId } from '../utils/common/bookNormalize';
 import { formatChapterOrdinalLabel } from '../utils/common/chapterLabel';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import './BookmarksPage.css';
@@ -74,14 +74,7 @@ const syncToolbarHeightRef = (toolbar) => {
   syncToolbarHeight();
   const observer = new ResizeObserver(syncToolbarHeight);
   observer.observe(toolbar);
-  window.addEventListener('resize', syncToolbarHeight);
-  window.addEventListener('orientationchange', syncToolbarHeight);
-
-  return () => {
-    observer.disconnect();
-    window.removeEventListener('resize', syncToolbarHeight);
-    window.removeEventListener('orientationchange', syncToolbarHeight);
-  };
+  return () => observer.disconnect();
 };
 
 const onEnter = (handler) => (e) => {
@@ -355,25 +348,11 @@ function scrollToChapter(chapterKey) {
   el.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
 }
 
-const BookmarksPage = () => {
-  const { filename } = useParams();
-  const navigate = useNavigate();
-  const location = useLocation();
-  const cleanFilename = filename ? filename.replace(/^\//, '') : null;
-
-  const serverBookId = useMemo(
-    () => resolveServerBookId(location.state?.book, cleanFilename),
-    [location.state?.book, cleanFilename]
-  );
-
-  const viewerPath = useMemo(
-    () => (serverBookId != null ? userViewerPath(serverBookId) : '/mypage'),
-    [serverBookId]
-  );
-
-  const [sortOrder, setSortOrder] = useState('recent');
-  const [searchTerm, setSearchTerm] = useState('');
-  // 메모 작성(composerText)·수정(editing)은 펼쳐진 행(expandedId)에만 존재 — null이면 닫힘
+/**
+ * 행 펼침 + 펼친 행의 메모 작성·수정·삭제, 색상 변경, 북마크 삭제 확인.
+ * 메모 작성(composerText)·수정(editing)은 펼쳐진 행(expandedId)에만 존재 — null이면 닫힘
+ */
+function useBookmarkRowEditor({ bookmarks, isMutating, patchBookmark, removeBookmark }) {
   const [expandedId, setExpandedId] = useState(null);
   const [composerText, setComposerText] = useState(null);
   const [editing, setEditing] = useState(null);
@@ -392,86 +371,6 @@ const BookmarksPage = () => {
     setComposerText(null);
   };
 
-  useEffect(() => {
-    if (serverBookId == null || !cleanFilename) return;
-    const path = userViewerBookmarksPath(serverBookId);
-    if (!path) return;
-    if (String(cleanFilename) === String(serverBookId)) return;
-    navigate(path, {
-      replace: true,
-      state: location.state,
-    });
-  }, [serverBookId, cleanFilename, navigate, location.state]);
-
-  const {
-    bookmarks,
-    loading,
-    loadError,
-    isMutating,
-    fetchBookmarks,
-    removeBookmark,
-    patchBookmark,
-  } = useBookmarks(serverBookId);
-
-  // 검색 문자열은 목록이 바뀔 때만 생성 — 키 입력마다 locator 파싱·포맷 반복하지 않음
-  const bookmarkHaystacks = useMemo(
-    () => (bookmarks || []).map((bookmark) => buildBookmarkHaystack(bookmark, serverBookId)),
-    [bookmarks, serverBookId]
-  );
-
-  const filteredBookmarks = useMemo(() => {
-    const term = searchTerm.trim().toLowerCase();
-    if (!term) return bookmarks || [];
-    return (bookmarks || []).filter((_, i) => bookmarkHaystacks[i].includes(term));
-  }, [bookmarks, bookmarkHaystacks, searchTerm]);
-
-  const chapterGroups = useMemo(
-    () => groupBookmarksByChapter(filteredBookmarks, sortOrder, serverBookId),
-    [filteredBookmarks, sortOrder, serverBookId]
-  );
-
-  const isFilteredView = searchTerm.trim().length > 0;
-  const bookTitle = useMemo(() => resolveStateBookTitle(location.state?.book), [location.state?.book]);
-  const bookmarkCount = (bookmarks ?? []).length;
-
-  const goViewer = useCallback(
-    (path, stateExtra = {}) => {
-      const bookFromState = location.state?.book;
-      const bookFallback =
-        serverBookId != null ? { id: serverBookId, _bookId: serverBookId } : null;
-      navigate(path || viewerPath, {
-        state: {
-          ...(location.state || {}),
-          book: bookFromState || bookFallback,
-          ...stateExtra,
-        },
-      });
-    },
-    [navigate, viewerPath, location.state, serverBookId]
-  );
-
-  const handleOpenBookmark = useCallback(
-    (bookmark) => {
-      const resumeAnchor = bookmarkToResumeAnchor(bookmark);
-      if (!resumeAnchor) {
-        errorUtils.logWarning('BookmarksPage', '북마크 위치 해석 실패', {
-          action: 'open',
-          bookId: serverBookId,
-          bookmarkId: bookmark?.id,
-        });
-        toast.error('이 북마크의 위치를 찾을 수 없습니다.');
-        return;
-      }
-      const chapter = resolveChapterIndex(resumeAnchor.startLocator) ?? 1;
-      const path =
-        serverBookId != null
-          ? userViewerReadingPath(serverBookId, chapter, 1)
-          : viewerPath;
-      goViewer(path, { resumeAnchor });
-    },
-    [serverBookId, goViewer, viewerPath]
-  );
-
   const updateMemoEntries = useCallback(
     async (bookmarkId, updater) => {
       if (isMutating) return { success: false };
@@ -482,10 +381,12 @@ const BookmarksPage = () => {
     [bookmarks, isMutating, patchBookmark]
   );
 
-  const handleDeleteBookmark = async (bookmarkId) => {
-    if (isMutating) return;
-    collapseRow(bookmarkId);
-    await removeBookmark(bookmarkId);
+  // removeBookmark는 실패 시 토스트 후 { success: false } — 실패하면 다이얼로그·펼친 행 유지
+  const confirmDelete = async () => {
+    if (isMutating || deleteConfirmId == null) return;
+    const result = await removeBookmark(deleteConfirmId);
+    if (!result.success) return;
+    collapseRow(deleteConfirmId);
     setDeleteConfirmId(null);
   };
 
@@ -538,6 +439,123 @@ const BookmarksPage = () => {
     },
     requestDelete: setDeleteConfirmId,
   };
+
+  return {
+    expandedId,
+    toggleExpanded,
+    editing,
+    composerText,
+    memoActions,
+    deleteConfirmId,
+    closeDeleteConfirm: () => setDeleteConfirmId(null),
+    confirmDelete,
+  };
+}
+
+const BookmarksPage = () => {
+  const { filename } = useParams();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const serverBookId = useMemo(
+    () => resolveServerBookId(location.state?.book, filename),
+    [location.state?.book, filename]
+  );
+
+  const viewerPath = useMemo(
+    () => (serverBookId != null ? userViewerPath(serverBookId) : '/mypage'),
+    [serverBookId]
+  );
+
+  const [sortOrder, setSortOrder] = useState('recent');
+  const [searchTerm, setSearchTerm] = useState('');
+  useEffect(() => {
+    if (serverBookId == null || !filename) return;
+    const path = userViewerBookmarksPath(serverBookId);
+    if (!path) return;
+    if (String(filename) === String(serverBookId)) return;
+    navigate(path, {
+      replace: true,
+      state: location.state,
+    });
+  }, [serverBookId, filename, navigate, location.state]);
+
+  const {
+    bookmarks,
+    loading,
+    loadError,
+    isMutating,
+    fetchBookmarks,
+    removeBookmark,
+    patchBookmark,
+  } = useBookmarks(serverBookId);
+
+  const {
+    expandedId,
+    toggleExpanded,
+    editing,
+    composerText,
+    memoActions,
+    deleteConfirmId,
+    closeDeleteConfirm,
+    confirmDelete,
+  } = useBookmarkRowEditor({ bookmarks, isMutating, patchBookmark, removeBookmark });
+
+  // 검색 문자열은 목록이 바뀔 때만 생성 — 키 입력마다 locator 파싱·포맷 반복하지 않음
+  const bookmarkHaystacks = useMemo(
+    () => (bookmarks || []).map((bookmark) => buildBookmarkHaystack(bookmark, serverBookId)),
+    [bookmarks, serverBookId]
+  );
+
+  const filteredBookmarks = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return bookmarks || [];
+    return (bookmarks || []).filter((_, i) => bookmarkHaystacks[i].includes(term));
+  }, [bookmarks, bookmarkHaystacks, searchTerm]);
+
+  const chapterGroups = useMemo(
+    () => groupBookmarksByChapter(filteredBookmarks, sortOrder, serverBookId),
+    [filteredBookmarks, sortOrder, serverBookId]
+  );
+
+  const isFilteredView = searchTerm.trim().length > 0;
+  const bookTitle = useMemo(() => resolveStateBookTitle(location.state?.book), [location.state?.book]);
+  const bookmarkCount = (bookmarks ?? []).length;
+
+  const goViewer = useCallback(
+    (path, stateExtra = {}) => {
+      navigate(path || viewerPath, {
+        state: {
+          ...(location.state || {}),
+          book: withServerBookId(location.state?.book, serverBookId),
+          ...stateExtra,
+        },
+      });
+    },
+    [navigate, viewerPath, location.state, serverBookId]
+  );
+
+  const handleOpenBookmark = useCallback(
+    (bookmark) => {
+      const resumeAnchor = bookmarkToResumeAnchor(bookmark);
+      if (!resumeAnchor) {
+        errorUtils.logWarning('BookmarksPage', '북마크 위치 해석 실패', {
+          action: 'open',
+          bookId: serverBookId,
+          bookmarkId: bookmark?.id,
+        });
+        toast.error('이 북마크의 위치를 찾을 수 없습니다.');
+        return;
+      }
+      const chapter = resolveChapterIndex(resumeAnchor.startLocator) ?? 1;
+      const path =
+        serverBookId != null
+          ? userViewerReadingPath(serverBookId, chapter, 1)
+          : viewerPath;
+      goViewer(path, { resumeAnchor });
+    },
+    [serverBookId, goViewer, viewerPath]
+  );
 
   // 매 렌더 새 함수 — 펼쳐진 행에만 넘겨 접힌 행의 memo가 깨지지 않게 함
   const renderPanel = ({ bookmark, colorKey, memoEntries }) => (
@@ -688,8 +706,8 @@ const BookmarksPage = () => {
         busy={isMutating}
         title="북마크를 삭제할까요?"
         message="메모가 있다면 함께 삭제되며, 되돌릴 수 없습니다."
-        onClose={() => setDeleteConfirmId(null)}
-        onConfirm={() => handleDeleteBookmark(deleteConfirmId)}
+        onClose={closeDeleteConfirm}
+        onConfirm={confirmDelete}
       />
     </div>
   );

@@ -77,3 +77,9 @@ export function resolveViewerBookKey(book, routeBookId = null, { trimRoute = tru
   const str = String(raw);
   return trimRoute ? str.trim() : str;
 }
+
+/** 뷰어로 넘길 route state의 book: 원래 book에 서버 id를 덮어씀. 둘 다 없으면 null */
+export function withServerBookId(book, serverBookId) {
+  if (serverBookId == null) return book ?? null;
+  return { ...(book || {}), id: serverBookId, _bookId: serverBookId };
+}

@@ -1,8 +1,7 @@
 /** 그래프 캔버스 스크린리더 요약 (aria-live) */
 
 import { useMemo } from 'react';
-import { getCharacterFilterStageLabel, pickCharacterDisplayName } from '../../../utils/graph/graphCore.js';
-import { isGraphEdgeElement } from '../../../utils/graph/graphCore';
+import { getCharacterFilterStageLabel, pickCharacterDisplayName, isGraphEdgeElement } from '../../../utils/graph/graphCore';
 
 function countGraphElements(elements) {
   if (!Array.isArray(elements)) return { nodeCount: 0, edgeCount: 0 };

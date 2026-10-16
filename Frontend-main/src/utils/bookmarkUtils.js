@@ -92,11 +92,6 @@ export const bookmarkPositionKey = (bookmark) => {
   return `${locatorKey(start)}|${locatorKey(toLocator(bookmark.endLocator) ?? start)}`;
 };
 
-export const isSameBookmarkPosition = (bookmark, ref) => {
-  const key = bookmarkPositionKey(bookmark);
-  return key != null && key === bookmarkPositionKey(ref);
-};
-
 /** 진도 absolute offset 기준으로 정렬 키 */
 function getBookmarkPositionSortKey(bookmark, bookId = null) {
   if (!bookmark) return '';

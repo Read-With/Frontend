@@ -138,7 +138,7 @@ export function isProtectedPublicAsset(url) {
   return Boolean(parsed?.pathname.startsWith('/public/') && TRUSTED_PUBLIC_ASSET_ORIGINS.has(parsed.origin));
 }
 
-function rewriteLegacyAssetUrl(url) {
+export function sanitizeAssetUrl(url) {
   if (url == null) return '';
   const s = stripWrongApiPublicPrefix(String(url).trim());
   if (!s) return '';
@@ -155,8 +155,6 @@ function getPublicAssetOrigin() {
   if (apiBase) return apiBase;
   return DEFAULT_CDN_BASE_URL;
 }
-
-export const sanitizeAssetUrl = rewriteLegacyAssetUrl;
 
 function preferDevPublicProxyPath(url) {
   if (!import.meta.env.DEV || url == null) return url;

@@ -39,7 +39,7 @@
 - **매크로(책 범위) 그래프**: 선택한 챕터까지 책 전체를 누적 (`getBookScopeRelationshipGraph`)
 - **뷰어(읽는 위치) 그래프**: 현재 읽고 있는 이벤트까지만 누적 (`ensureChapterEventsDiscovered` → `resolveCumulativeGraphForDisplay`)
 
-매니페스트와 그래프 응답은 재요청을 줄이기 위해 로컬(storage/session) 캐시에 저장되어 재사용됩니다. 무효화 조건은 다음과 같습니다(`utils/common/cache/cacheManager.js`).
+매니페스트와 그래프 응답은 재요청을 줄이기 위해 로컬(storage/session) 캐시에 저장되어 재사용됩니다. 무효화 조건은 다음과 같습니다. TTL 상수는 각 캐시를 쓰는 모듈에 있습니다(`manifestCache.js`, `progressCache.js`, `graph/graphChapters.js`, `hooks/bookHooks.js`). 공용 storage·TTL 헬퍼는 `utils/common/cache/cacheManager.js`.
 
 | 캐시 | TTL | 비고 |
 | --- | --- | --- |
@@ -71,7 +71,7 @@
 
 ## 인증(Auth)
 
-Google OAuth 로그인 후 세션은 다음과 같이 유지됩니다(`utils/api/authApi.js`).
+Google OAuth 로그인 후 세션은 다음과 같이 유지됩니다. 토큰 저장·갱신은 `utils/api/authApi.js`, 요청 시 갱신·401 재시도는 `utils/api/client.js`.
 
 - **액세스 토큰**: 메모리 + `sessionStorage`에 저장 (같은 탭 새로고침 시 복원, `localStorage`에는 저장하지 않음)
 - **리프레시 토큰**: `localStorage`에 저장 (여러 탭·재방문 시에도 유지)
@@ -105,7 +105,7 @@ src/
 │   ├── viewer/                # 뷰어 페이지 상태, 읽기 진행률, 뷰어-그래프 연동
 │   └── common/                  # 공용 훅(요청 가드 등)
 └── utils/
-    ├── api/                # authApi(토큰 저장·갱신·인증 요청), oauthApi(Google OAuth state·에러 메시지), booksApi, graphApi
+    ├── api/                # client(인증 요청·재시도·공통 응답 헬퍼), authApi(토큰 저장·갱신·세션), oauthApi(Google OAuth state·에러 메시지), booksApi, graphApi
     ├── common/
     │   ├── cache/            # cacheManager, manifestCache, progressCache (TTL 캐시)
     │   ├── readingProgress.js  # locator ↔ 오프셋·진행률(%) 계산

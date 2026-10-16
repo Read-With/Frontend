@@ -268,7 +268,7 @@ function useAnalysisModalState(pendingKeepAnalysisOpenRef, onSelectRelatedNode, 
     if (pendingRef.current) {
       pendingRef.current = false;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 마운트 시 한 번만 pending 플래그를 소비 (pendingRef는 ref라 deps 불필요)
   }, []);
 
   useEffect(() => {

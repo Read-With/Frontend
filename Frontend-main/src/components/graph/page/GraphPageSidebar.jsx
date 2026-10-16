@@ -88,7 +88,7 @@ function GraphPageSidebar({ onRequestFocusCanvas = null }) {
       <Suspense fallback={<div role="status" aria-live="polite">관계 정보를 불러오는 중…</div>}>
         <EdgeDetail
           data={activeTooltip.data}
-          variant="graphPage"
+          displayMode="sidebar"
           bookId={bookId}
           sourceEndpoint={activeTooltip.sourceEndpoint}
           targetEndpoint={activeTooltip.targetEndpoint}

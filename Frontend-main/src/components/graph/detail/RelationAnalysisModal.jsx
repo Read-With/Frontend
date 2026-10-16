@@ -5,7 +5,8 @@ import { joinClasses } from '../../../utils/common/domUtils';
 import { NodeProfileAvatar } from './GraphTooltipParts';
 import RelationRadarChart from './RelationRadarChart';
 import { RelationList, FewConnectionsPanel } from './RelationOptions';
-import { useLatestRef, useModalFocusTrap, useBodyScrollLock } from '../../../hooks/common/hooksShared';
+import { useLatestRef } from '../../../hooks/common/hooksShared';
+import ModalFrame from '../../common/ModalFrame';
 import '../styles/graph.css';
 
 const CONNECTION = RELATION_CONNECTION_KIND;
@@ -190,7 +191,6 @@ function RelationAnalysisModalImpl({
   /** 슬라이드바(툴팁 패널)가 열려 있을 때 오른쪽 예약 너비 (레이더 표시 시엔 무시) */
   reserveRight,
 }) {
-  const dialogRef = useRef(null);
   const closeBtnRef = useRef(null);
   const { activeName, activate } = useActiveRelation(node?.id, radarChartData);
   const layout = resolveModalLayout(connectionKind);
@@ -199,14 +199,6 @@ function RelationAnalysisModalImpl({
     () => buildOverlayStyle(chapterRailWidth, reserveRight, layout.hasChart),
     [chapterRailWidth, reserveRight, layout.hasChart],
   );
-
-  // 포커스 트랩·Escape(캡처 단계)·닫을 때 분석 버튼으로 포커스 복귀
-  useModalFocusTrap(true, dialogRef, onClose, {
-    initialFocusRef: closeBtnRef,
-    returnFocusRef,
-    capture: true,
-  });
-  useBodyScrollLock();
 
   const switchToRelated = useCallback((item) => {
     if (!item || !onSelectRelatedNode) return;
@@ -222,52 +214,50 @@ function RelationAnalysisModalImpl({
   const canSwitch = Boolean(onSelectRelatedNode);
   const nodeName = node?.displayName;
 
+  // 포커스 트랩·Escape(캡처 단계)·닫을 때 분석 버튼으로 포커스 복귀
   return (
-    <div
-      className={layout.overlayClass}
-      style={overlayStyle}
-      onClick={onClose}
-      role="presentation"
+    <ModalFrame
+      open
+      onClose={onClose}
+      onEscape={onClose}
+      overlayClassName={layout.overlayClass}
+      overlayStyle={overlayStyle}
+      className={layout.containerClass}
+      labelledBy={TITLE_ID}
+      initialFocusRef={closeBtnRef}
+      returnFocusRef={returnFocusRef}
+      captureEscape
+      lockScroll
     >
-      <div
-        ref={dialogRef}
-        className={layout.containerClass}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={TITLE_ID}
-        tabIndex={-1}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <RelationModalHeader
-          node={node}
-          isError={connectionKind === CONNECTION.ERROR}
-          count={radarChartData.length}
-          onSibling={canSwitch && radarChartData.length > 1 ? goSibling : null}
-          closeBtnRef={closeBtnRef}
-          onClose={onClose}
-        />
+      <RelationModalHeader
+        node={node}
+        isError={connectionKind === CONNECTION.ERROR}
+        count={radarChartData.length}
+        onSibling={canSwitch && radarChartData.length > 1 ? goSibling : null}
+        closeBtnRef={closeBtnRef}
+        onClose={onClose}
+      />
 
-        <div className={layout.bodyClass}>
-          {layout.hasChart ? (
-            <RelationRadarChart
-              nodeName={nodeName}
-              data={radarChartData}
-              activeName={activeName}
-              onActivate={activate}
-            />
-          ) : null}
-          <RelationModalPanel
-            connectionKind={connectionKind}
-            loadError={loadError}
-            items={radarChartData}
-            sourceName={nodeName}
+      <div className={layout.bodyClass}>
+        {layout.hasChart ? (
+          <RelationRadarChart
+            nodeName={nodeName}
+            data={radarChartData}
             activeName={activeName}
-            onSelect={activate}
-            onSwitch={canSwitch ? switchToRelated : null}
+            onActivate={activate}
           />
-        </div>
+        ) : null}
+        <RelationModalPanel
+          connectionKind={connectionKind}
+          loadError={loadError}
+          items={radarChartData}
+          sourceName={nodeName}
+          activeName={activeName}
+          onSelect={activate}
+          onSwitch={canSwitch ? switchToRelated : null}
+        />
       </div>
-    </div>
+    </ModalFrame>
   );
 }
 

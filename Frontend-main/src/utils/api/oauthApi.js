@@ -1,4 +1,4 @@
-/** OAuth 로그인 시작·검증·state·PKCE·에러 메시지·dev 디버그 (Self-XSS 방지)
+/** OAuth 로그인 시작·검증·state·PKCE·에러 메시지
  * PKCE helpers는 백엔드 PKCE 연동 전까지 dormant — 삭제하지 말 것.
  */
 
@@ -7,9 +7,6 @@ import {
   readRaw,
   writeRaw,
   removeKeys,
-  loadFromStorage,
-  saveToStorage,
-  removeFromStorage,
 } from '../common/cache/cacheManager';
 
 const GOOGLE_OAUTH_STATE_SESSION_KEY = 'readwith_google_oauth_state';
@@ -107,10 +104,9 @@ export function startGoogleOAuthLogin() {
     };
   }
 
-  secureLog('Google OAuth 로그인 시작', {
-    clientId: `${import.meta.env.VITE_GOOGLE_CLIENT_ID.substring(0, 10)}...`,
-    redirectUri: getGoogleOAuthRedirectUri(),
-  });
+  if (import.meta.env.DEV) {
+    console.debug('[oauth] Google OAuth 로그인 시작', { redirectUri: getGoogleOAuthRedirectUri() });
+  }
 
   try {
     window.location.href = buildGoogleOAuthAuthUrl();
@@ -371,59 +367,3 @@ export const validateUserData = (userData) => {
 
   return { isValid: true };
 };
-
-function maskSensitiveData(data) {
-  if (!data || typeof data !== 'object') return data;
-  const masked = { ...data };
-  const sensitiveFields = ['code', 'token', 'password', 'secret', 'key', 'id', 'verifier'];
-  for (const [key, value] of Object.entries(masked)) {
-    if (!sensitiveFields.some((field) => key.toLowerCase().includes(field))) continue;
-    if (typeof value !== 'string') continue;
-    masked[key] =
-      value.length > 10
-        ? `${value.substring(0, 6)}...${value.substring(value.length - 4)}`
-        : '*'.repeat(value.length);
-  }
-  return masked;
-}
-
-function secureLog(message, data = null) {
-  if (typeof window !== 'undefined' && typeof window.DEBUG_OAUTH === 'function') {
-    window.DEBUG_OAUTH(message, data);
-  }
-}
-
-const OAUTH_DEBUG_LOGS_KEY = 'oauth_debug_logs';
-
-function readOAuthDebugLogs() {
-  const logs = loadFromStorage(OAUTH_DEBUG_LOGS_KEY);
-  return Array.isArray(logs) ? logs : [];
-}
-
-if (typeof window !== 'undefined') {
-  if (import.meta.env.DEV) {
-    window.DEBUG_OAUTH = (message, data = null) => {
-      try {
-        const safeData = data ? maskSensitiveData(data) : null;
-        const logEntry = {
-          message,
-          data: safeData,
-          timestamp: new Date().toISOString(),
-          source: 'OAuth',
-        };
-        saveToStorage(OAUTH_DEBUG_LOGS_KEY, [...readOAuthDebugLogs(), logEntry].slice(-50));
-        console.group(`🔒 ${message}`);
-        if (safeData) console.table(safeData);
-        console.groupEnd();
-      } catch {
-        /* ignore */
-      }
-    };
-    window.GET_OAUTH_LOGS = readOAuthDebugLogs;
-    window.CLEAR_OAUTH_LOGS = () => removeFromStorage(OAUTH_DEBUG_LOGS_KEY);
-  } else {
-    window.DEBUG_OAUTH = () => {};
-    window.GET_OAUTH_LOGS = () => [];
-    window.CLEAR_OAUTH_LOGS = () => {};
-  }
-}

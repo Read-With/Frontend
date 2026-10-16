@@ -17,19 +17,10 @@ export function useOpenGraphPage(currentChapter) {
   const isFromLibrary = previousPage?.pathname === '/mypage' || location.state?.fromLibrary === true;
 
   return useCallback(() => {
-    const bookData = book || {
-      title: String(bookId || '')
-        .replace(/\.(xhtml|html|htm)$/i, '')
-        .replace(/([A-Z])/g, ' $1')
-        .trim(),
-      author: '알 수 없음',
-      path: `/${bookId}`,
-      filename: bookId,
-    };
     const currentPathname = location.pathname || userViewerPath(bookId);
     navigate(userGraphPath(bookId), {
       state: {
-        book: bookData,
+        book,
         selectedChapter: Number(currentChapter) || 1,
         fromLibrary: isFromLibrary,
         from: previousPage || { pathname: currentPathname, search: '' },
