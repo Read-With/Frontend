@@ -3,18 +3,28 @@
 import {
   aggregateCharactersFromEvents,
   buildElementsFromGraphPayload,
-  getGraphEventState,
-  getCachedChapterMaxEventIdx,
   resolveGraphElementsProfileImages,
   graphElementsHaveUnresolvedProfileImages,
   GRAPH_IMAGE_DEFERRED_RETRY_MS,
-} from '../graph/graphModel';
+} from '../graph/graphElements';
+import { getGraphEventState, getCachedChapterMaxEventIdx } from '../graph/graphChapters';
 import {
   enrichGraphCharacters,
   applyDisplayNamesToElements,
+  cacheKeyUtils,
+  eventUtils,
+  ELEMENTS_TO_RELATIONS_OPTS,
 } from '../graph/graphCore';
-import { resolveChapterIndex, toPositiveInt, toPositiveNumberOrNull, asArray } from '../common/valueUtils';
-import { cacheKeyUtils, eventUtils, ELEMENTS_TO_RELATIONS_OPTS, formatChapterOrdinalLabel } from './viewerCore';
+import {
+  resolveChapterIndex,
+  toPositiveInt,
+  toPositiveNumberOrNull,
+  asArray,
+  resolveEventChapterIndex,
+  resolveEventNum,
+  resolveEventId,
+} from '../common/valueUtils';
+import { formatChapterOrdinalLabel } from '../common/chapterLabel';
 import { resolveServerEventMatch } from './viewerSession';
 import { getChapterData } from '../common/cache/manifestCache.js';
 
@@ -50,10 +60,10 @@ export function resolveGraphCallContext({ book, currentChapter, currentEvent }) 
   const match = resolveServerEventMatch({ book, currentChapter, event: currentEvent });
   const bookId = Number(match.bookId);
   const chapter =
-    toPositiveInt(eventUtils.resolveChapterIdx(currentEvent), 0) ||
+    toPositiveInt(resolveEventChapterIndex(currentEvent), 0) ||
     toPositiveInt(match.chapterIdx, 0) ||
     Number(currentChapter);
-  const eventIdx = eventUtils.resolveEventNum(currentEvent, toPositiveInt(match.eventIdx, 0));
+  const eventIdx = resolveEventNum(currentEvent, toPositiveInt(match.eventIdx, 0));
 
   if (!bookId || !chapter) return null;
 
@@ -79,7 +89,7 @@ export function buildChapterCharacterSearchData(events, currentChapter) {
     return { characters: [] };
   }
   const chapterEvents = events.filter(
-    (evt) => Number(eventUtils.resolveChapterIdx(evt)) === Number(currentChapter),
+    (evt) => Number(resolveEventChapterIndex(evt)) === Number(currentChapter),
   );
   return { characters: Array.from(aggregateCharactersFromEvents(chapterEvents).values()) };
 }
@@ -202,7 +212,7 @@ export const graphDataTransformUtils = {
     if (!apiEvent || typeof apiEvent !== 'object') return null;
     const chapterIdx = resolveChapterIndex(apiEvent);
     if (!Number.isFinite(chapterIdx) || chapterIdx < 1) return null;
-    const eventNum = eventUtils.resolveEventNum(apiEvent, null);
+    const eventNum = resolveEventNum(apiEvent, null);
     if (!eventNum) return null;
     return {
       ...apiEvent,
@@ -231,15 +241,15 @@ export const graphDataTransformUtils = {
   createNextEventData: (normalizedEvent, currentChapter, apiEventIdx, resultData) => {
     const eventNum = toPositiveNumberOrNull(normalizedEvent?.eventNum) ?? apiEventIdx;
     const originalEventIdx = normalizedEvent
-      ? eventUtils.resolveEventNum(normalizedEvent)
+      ? resolveEventNum(normalizedEvent)
       : apiEventIdx;
     const relations = asArray(resultData.relations);
     const characters = asArray(resultData.characters);
 
     const withEventFields = (base, rawId) => ({
       ...base,
-      chapter: eventUtils.resolveChapterIdx(base) ?? currentChapter,
-      chapterIdx: eventUtils.resolveChapterIdx(base) ?? currentChapter,
+      chapter: resolveEventChapterIndex(base) ?? currentChapter,
+      chapterIdx: resolveEventChapterIndex(base) ?? currentChapter,
       eventNum,
       eventIdx: eventNum,
       eventId: rawId != null ? rawId : eventNum,
@@ -249,14 +259,14 @@ export const graphDataTransformUtils = {
     });
 
     if (normalizedEvent) {
-      return withEventFields(normalizedEvent, eventUtils.resolveEventId(normalizedEvent));
+      return withEventFields(normalizedEvent, resolveEventId(normalizedEvent));
     }
 
     const raw = resultData?.event;
     const parsed = raw ? graphDataTransformUtils.normalizeApiEvent(raw) : null;
     return withEventFields(
       { chapter: currentChapter, chapterIdx: currentChapter },
-      eventUtils.resolveEventId(raw) ?? eventUtils.resolveEventId(parsed)
+      resolveEventId(raw) ?? resolveEventId(parsed)
     );
   },
 };

@@ -124,10 +124,6 @@
   margin: 0;
 }
 
-.viewer-settings-step-btn {
-  flex-shrink: 0;
-}
-
 .viewer-settings-step-value {
   flex-shrink: 0;
   min-width: 3.75rem;
@@ -152,6 +148,7 @@
 }
 
 .viewer-settings-step-btn {
+  flex-shrink: 0;
   padding: 0.5rem 0.75rem;
   font-weight: bold;
 }

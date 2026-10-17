@@ -1,92 +1,79 @@
-/** 인증·토큰 갱신·authenticatedFetch */
+/** 인증: 토큰 저장소·JWT 검사·토큰 갱신·세션 부트스트랩. HTTP 클라이언트는 ./client */
 
 import { getApiBaseUrl } from '../common/urlUtils';
-import { errorUtils, sleep } from '../common/valueUtils';
-import {
-  getStoredAccessToken,
-  setStoredAccessToken,
-  getStoredRefreshToken,
-  setStoredRefreshToken,
-  setStoredGoogleUserJson,
-  clearAuthData,
-} from '../security/authTokenStorage';
+import { errorUtils } from '../common/valueUtils';
+import { readRaw, writeRaw, removeKeys } from '../common/cache/cacheManager';
 
-export const makeSilentError = (code, message) => ({
-  isSuccess: false,
-  code,
-  message,
-  result: null,
-});
-
-export const SOFT_FAIL_403_404 = [403, 404];
-
-export const requireBookId = (bookId) => {
-  if (!bookId) throw new Error('bookId는 필수 매개변수입니다.');
-};
-
-const hasOwnKeys = (obj) =>
-  !!obj && typeof obj === 'object' && !Array.isArray(obj) && Object.keys(obj).length > 0;
-
-export const pickResponseResult = (response) => {
-  if (!response || typeof response !== 'object') return null;
-
-  const candidates = [response.result, response.data, response.payload];
-  const rich = candidates.find((c) => hasOwnKeys(c));
-  if (rich) return rich;
-
-  const scalar = candidates.find((c) => c != null);
-  if (scalar != null) return scalar;
-
-  return Array.isArray(response.deltas) ? response : null;
-};
-
-export const toUnifiedApiResponse = (
-  response,
-  { defaultCode = 'SUCCESS', defaultMessage = '', defaultResult = null } = {}
-) => {
-  const safe = response && typeof response === 'object' ? response : {};
-  return {
-    ...safe,
-    isSuccess: typeof safe.isSuccess === 'boolean' ? safe.isSuccess : true,
-    code: safe.code ?? defaultCode,
-    message: safe.message ?? defaultMessage,
-    result: safe.result ?? defaultResult,
-  };
-};
+/* ─── 토큰 저장소 ─── */
 
 /**
- * softFailStatuses 응답(FORBIDDEN/NOT_FOUND) 정규화.
- * @param {'empty'|'error'} [options.mode]
- *   - empty: 목록·조회 미생성 → isSuccess true + emptyResult (softEmpty)
- *   - error: silent fail (isSuccess false)
- * @returns {object|null} 해당 코드가 아니면 null
+ * 액세스 토큰: 메모리 + sessionStorage (같은 탭에서 새로고침 시 복원). localStorage에는 두지 않음.
+ * 리프레시 토큰: localStorage (멀티 탭·재방문). 완전한 XSS 방어는 httpOnly·Secure 쿠키 세션이 필요하다.
  */
-export const mapSoftFailResponse = (
-  response,
-  {
-    mode = 'error',
-    emptyResult = null,
-    includeNotFound = true,
-    forbiddenMessage = '접근 권한이 없습니다',
-    notFoundMessage = '데이터를 찾을 수 없습니다',
-  } = {}
-) => {
-  const code = response?.code;
-  if (code !== 'FORBIDDEN' && !(includeNotFound && code === 'NOT_FOUND')) {
-    return null;
+
+export const AUTH_CLEARED_EVENT = 'readwith:auth-cleared';
+
+const KEY_ACCESS = 'accessToken';
+const KEY_SESSION_ACCESS = 'readwith_session_access';
+const KEY_REFRESH = 'refreshToken';
+const KEY_GOOGLE_USER = 'google_user';
+
+let memoryAccessToken = null;
+
+export function getStoredAccessToken() {
+  if (memoryAccessToken) return memoryAccessToken;
+  const fromSs = readRaw(KEY_SESSION_ACCESS, 'sessionStorage');
+  if (fromSs) {
+    memoryAccessToken = fromSs;
+    return fromSs;
   }
-  const message = code === 'FORBIDDEN' ? forbiddenMessage : notFoundMessage;
-  if (mode === 'empty') {
-    return toUnifiedApiResponse({
-      isSuccess: true,
-      code,
-      message,
-      result: emptyResult,
-      softEmpty: true,
-    });
+  return null;
+}
+
+export function setStoredAccessToken(token) {
+  if (token == null || token === '') {
+    memoryAccessToken = null;
+    removeKeys('localStorage', KEY_ACCESS);
+    removeKeys('sessionStorage', KEY_SESSION_ACCESS);
+    return;
   }
-  return makeSilentError(code, message);
-};
+  memoryAccessToken = token;
+  removeKeys('localStorage', KEY_ACCESS);
+  writeRaw(KEY_SESSION_ACCESS, token, 'sessionStorage');
+}
+
+export function getStoredRefreshToken() {
+  return readRaw(KEY_REFRESH);
+}
+
+export function setStoredRefreshToken(token) {
+  writeRaw(KEY_REFRESH, token);
+}
+
+export function getStoredGoogleUserJson() {
+  return readRaw(KEY_GOOGLE_USER);
+}
+
+export function setStoredGoogleUserJson(jsonString) {
+  writeRaw(KEY_GOOGLE_USER, jsonString);
+}
+
+export function removeStoredGoogleUser() {
+  removeKeys('localStorage', KEY_GOOGLE_USER);
+}
+
+/** 로그아웃/세션 초기화: 토큰·사용자 삭제 후 AUTH_CLEARED_EVENT 발행 (사용자별 캐시는 이 이벤트를 구독해 정리) */
+export function clearAuthData() {
+  memoryAccessToken = null;
+  const lsCleared = removeKeys('localStorage', KEY_ACCESS, KEY_REFRESH, KEY_GOOGLE_USER);
+  const ssCleared = removeKeys('sessionStorage', KEY_SESSION_ACCESS);
+  if (!lsCleared || !ssCleared) {
+    errorUtils.logWarning('authApi', '스토리지 접근 실패 — 토큰 삭제 불완전', { lsCleared, ssCleared });
+  }
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(AUTH_CLEARED_EVENT));
+  }
+}
 
 const JSON_ACCEPT_HEADERS = {
   'Content-Type': 'application/json',
@@ -164,185 +151,7 @@ export function getProactiveRefreshBufferSeconds(token) {
   return Math.min(MAX_REFRESH_BUFFER_SEC, Math.max(MIN_REFRESH_BUFFER_SEC, fromTtl));
 }
 
-const createAuthExpiredError = () => {
-  const error = new Error('인증이 만료되었습니다. 다시 로그인해주세요.');
-  error.status = 401;
-  return error;
-};
-
-async function refreshAccessTokenIfExpiringSoon() {
-  let token = getStoredAccessToken();
-  if (!token || !isTokenExpiringSoon(token, getProactiveRefreshBufferSeconds(token))) {
-    return token;
-  }
-  try {
-    await refreshToken();
-    token = getStoredAccessToken();
-  } catch (error) {
-    errorUtils.logWarning('ensureValidAccessToken', '토큰 자동 갱신 실패', {
-      message: error?.message,
-    });
-  }
-  return token;
-}
-
-async function authorizedFetch(url, options = {}, retryCount = 0) {
-  await ensureSessionAccessToken();
-  const token = await refreshAccessTokenIfExpiringSoon();
-
-  const isFormData = options.body instanceof FormData;
-  const headers = {
-    Accept: options.acceptHeader ?? 'application/json',
-    ...(!isFormData && options.skipJsonContentType !== true && { 'Content-Type': 'application/json' }),
-    ...options.headers,
-  };
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
-
-  const { acceptHeader: _a, skipJsonContentType: _s, ...fetchOptions } = options;
-  const response = await fetch(url, {
-    ...fetchOptions,
-    headers: {
-      ...headers,
-      ...fetchOptions.headers,
-    },
-  });
-
-  if (response.status === 401 && retryCount === 0) {
-    try {
-      await refreshToken();
-      return authorizedFetch(url, options, retryCount + 1);
-    } catch {
-      clearAuthData();
-      throw createAuthExpiredError();
-    }
-  }
-
-  return response;
-}
-
-const API_REQUEST_MAX_ATTEMPTS = 3;
-const API_REQUEST_RETRY_BASE_MS = 400;
-
-
-const isNetworkFetchError = (error) => {
-  if (!error || error.status === 401) return false;
-  if (error.name === 'TypeError') return true;
-  return /failed to fetch|networkerror|load failed|network request failed/i.test(
-    String(error.message || '')
-  );
-};
-
-/** 일시적 API 실패 — 403/404는 softFail, 401은 토큰 갱신 경로로 둔다 */
-const isRetryableApiStatus = (status, method = 'GET') => {
-  if (status === 408 || status === 429) return true;
-  if (status === 502 || status === 503 || status === 504) return true;
-  const m = String(method || 'GET').toUpperCase();
-  // 500은 GET만 (쓰기 중복 방지)
-  if (status === 500 && (m === 'GET' || m === 'HEAD')) return true;
-  return false;
-};
-
-const toHttpError = async (response) => {
-  let data;
-  try {
-    data = await response.json();
-  } catch {
-    const error = new Error('응답을 파싱할 수 없습니다');
-    error.status = response.status;
-    return error;
-  }
-  const error = new Error(data.message || `API 요청 실패: ${response.status}`);
-  error.status = response.status;
-  return error;
-};
-
-const softFailFromStatus = (status) => {
-  if (status === 404) return makeSilentError('NOT_FOUND', '데이터를 찾을 수 없습니다');
-  if (status === 403) return makeSilentError('FORBIDDEN', '접근 권한이 없습니다');
-  return makeSilentError('ERROR', `API 요청 실패: ${status}`);
-};
-
-/**
- * @param {string} endpoint `/v2/...` 형태 (`/api` prefix는 내부에서 붙임)
- * @param {object} [options]
- * @param {number[]} [options.softFailStatuses] throw 대신 makeSilentError를 반환할 HTTP 상태
- * @param {number} [options.maxAttempts] 일시 실패 재시도 횟수 (기본 3)
- * @param {boolean} [options.retry] false면 재시도 안 함
- * @param {boolean} [options.silent] true면 hard-fail 시 authenticatedRequest 자체 로그 생략
- */
-export const authenticatedRequest = async (endpoint, options = {}) => {
-  const {
-    softFailStatuses = [],
-    maxAttempts = API_REQUEST_MAX_ATTEMPTS,
-    retry = true,
-    silent = false,
-    ...requestOptions
-  } = options;
-  const isFormData = requestOptions.body instanceof FormData;
-  const method = String(requestOptions.method || 'GET').toUpperCase();
-  const attempts = retry === false ? 1 : Math.max(1, Number(maxAttempts) || API_REQUEST_MAX_ATTEMPTS);
-  const url = `${getApiBaseUrl()}/api${endpoint}`;
-
-  const logHardFail = (error, extra = {}) => {
-    if (silent) return;
-    if (error?.status === 401 || error?.statusCode === 401) return;
-    errorUtils.logError('authenticatedRequest', error, {
-      endpoint,
-      method,
-      ...extra,
-    });
-  };
-
-  for (let attempt = 1; attempt <= attempts; attempt++) {
-    let response;
-    try {
-      response = await authorizedFetch(url, {
-        ...requestOptions,
-        skipJsonContentType: isFormData,
-        acceptHeader: 'application/json',
-      });
-    } catch (error) {
-      if (error?.status === 401) throw error;
-      if (!isNetworkFetchError(error) || attempt >= attempts) {
-        logHardFail(error, { attempt, kind: 'network' });
-        throw error;
-      }
-      await sleep(API_REQUEST_RETRY_BASE_MS * attempt);
-      continue;
-    }
-
-    if (response.ok) {
-      return response.json();
-    }
-
-    if (response.status === 401) {
-      clearAuthData();
-      throw createAuthExpiredError();
-    }
-
-    if (softFailStatuses.includes(response.status)) {
-      return softFailFromStatus(response.status);
-    }
-
-    if (isRetryableApiStatus(response.status, method) && attempt < attempts) {
-      await sleep(API_REQUEST_RETRY_BASE_MS * attempt);
-      continue;
-    }
-
-    const httpError = await toHttpError(response);
-    logHardFail(httpError, { attempt, status: response.status, kind: 'http' });
-    throw httpError;
-  }
-
-  const exhausted = new Error('API 요청 실패');
-  logHardFail(exhausted, { kind: 'exhausted' });
-  throw exhausted;
-};
-
-export const refreshToken = async (options = {}) => {
-  const { silent = false } = options;
+const requestTokenRefresh = async ({ silent = false } = {}) => {
   try {
     const refreshTokenValue = getStoredRefreshToken();
 
@@ -400,49 +209,31 @@ export const refreshToken = async (options = {}) => {
   }
 };
 
-/** JWT를 붙여 임의 URL(/public 자산 등) fetch */
-export async function authenticatedFetch(url, options = {}) {
-  return authorizedFetch(url, {
-    ...options,
-    skipJsonContentType: true,
-    acceptHeader: 'application/json, text/html, application/xhtml+xml, */*',
+let refreshInflight = null;
+
+/**
+ * 동시 호출은 진행 중인 갱신 하나를 공유 (refresh token rotation 시 두 번째 요청이 옛 토큰으로 401 → 로그아웃 되는 것 방지).
+ * 이미 진행 중이면 먼저 호출한 쪽의 silent 옵션을 따른다
+ */
+export const refreshToken = (options = {}) => {
+  refreshInflight ??= requestTokenRefresh(options).finally(() => {
+    refreshInflight = null;
   });
-}
+  return refreshInflight;
+};
 
-let sessionBootstrapPromise = null;
-
-/** 액세스 토큰 없을 때 리프레시로 세션 부트스트랩 */
+/** 액세스 토큰 없을 때 리프레시로 세션 부트스트랩 (동시 호출은 refreshToken이 하나로 합침) */
 export async function ensureSessionAccessToken() {
   const existing = getStoredAccessToken();
   if (existing && isTokenValid(existing)) return;
-  if (existing && !isTokenValid(existing)) {
-    setStoredAccessToken(null);
-  }
+  if (existing) setStoredAccessToken(null);
   if (!getStoredRefreshToken()) return;
-  if (!sessionBootstrapPromise) {
-    sessionBootstrapPromise = (async () => {
-      try {
-        await refreshToken({ silent: true });
-      } catch {
-        /* refresh 실패 시 refreshToken 내부에서 clearAuth 처리 */
-      }
-    })().finally(() => {
-      sessionBootstrapPromise = null;
-    });
+  try {
+    await refreshToken({ silent: true });
+  } catch {
+    /* refresh 실패 시 refreshToken 내부에서 clearAuth 처리 */
   }
-  await sessionBootstrapPromise;
 }
 
-export const logout = async () => {
-  try {
-    await authenticatedRequest('/auth/logout', {
-      method: 'POST',
-    });
-  } catch (error) {
-    errorUtils.logWarning('logout', '로그아웃 API 호출 실패', {
-      message: error?.message,
-    });
-  } finally {
-    clearAuthData();
-  }
-};
+// AdminPage가 authApi에서 import — AdminPage는 수정하지 않으므로 re-export 유지 (client ↔ authApi 순환은 함수 참조뿐이라 런타임 안전)
+export { authenticatedRequest } from './client';

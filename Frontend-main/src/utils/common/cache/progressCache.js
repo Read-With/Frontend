@@ -7,28 +7,31 @@ import {
   toStringOrNull,
   toTrimmedStringOrNull,
   toPositiveNumberOrNull,
+  errorUtils,
+} from '../valueUtils';
+import {
   toLocator,
   locatorsEqual,
   resolveProgressLocator,
   progressPayloadFromData,
   progressResultToViewerAnchor,
-  errorUtils,
-} from '../valueUtils';
+} from '../locator';
 import {
   setBounded,
   loadFromStorage,
   saveToStorage,
-  PROGRESS_CACHE_KEY,
-  PROGRESS_CACHE_TTL_MS,
 } from './cacheManager';
+import { getChapterData } from './manifestCache';
 import {
-  getChapterData,
   locatorFromChapterLocalOffset,
   chapterLocalOffsetFromLocator,
   locatorFromBookAbsoluteOffset,
   readingProgressPercentFromLocator,
   resolveProgressMetricsFromLocator,
-} from './manifestCache';
+} from '../readingProgress';
+
+const PROGRESS_CACHE_KEY = 'readwith_progress_cache';
+const PROGRESS_CACHE_TTL_MS = 3 * 24 * 60 * 60 * 1000;
 
 /** POST progress — 서버 blockIndex 검증에 맞게 paragraphStarts 축으로 재매핑 */
 const normalizeLocatorForServerProgress = (bookId, locator, manifestOverride = undefined) => {
@@ -87,25 +90,16 @@ export const withNormalizedProgressLocators = (progressData, manifestOverride = 
 };
 
 
-const progressPercentFromData = (data, options, pickValue) => {
+/** progress payload의 locator → 전체 진행률(0~100). 계산 불가면 null */
+export const normalizeReadingProgressPercent = (data, options = {}) => {
   if (!data || typeof data !== 'object') return null;
   const bookId = options.bookId ?? data.bookId;
   const locator = resolveProgressLocator(data);
   if (bookId == null || !locator) return null;
-  const value = pickValue(bookId, locator);
+  const value = readingProgressPercentFromLocator(bookId, locator);
   return value != null ? clampPercent(value) : null;
 };
 
-export const normalizeReadingProgressPercent = (data, options = {}) =>
-  progressPercentFromData(data, options, (bookId, locator) =>
-    readingProgressPercentFromLocator(bookId, locator)
-  );
-
-const normalizeChapterProgressPercent = (data, options = {}) =>
-  progressPercentFromData(data, options, (bookId, locator) => {
-    const metrics = resolveProgressMetricsFromLocator(bookId, locator);
-    return metrics?.chapterProgress ?? null;
-  });
 
 export const resolveProgressEventName = (source) => {
   if (!source || typeof source !== 'object') return '';
@@ -323,11 +317,8 @@ export const setProgressToCache = (progressData) => {
   const locator = payload?.locator ?? resolveProgressLocator(withLoc);
   const metrics =
     bookIdStr && locator ? resolveProgressMetricsFromLocator(bookIdStr, locator) : null;
-  const pct =
-    metrics?.readingProgressPercent ??
-    normalizeReadingProgressPercent(withLoc, { bookId: bookIdStr });
-  const chpFromLoc =
-    metrics?.chapterProgress ?? normalizeChapterProgressPercent(withLoc, { bookId: bookIdStr });
+  const pct = metrics?.readingProgressPercent ?? null;
+  const chpFromLoc = metrics?.chapterProgress ?? null;
 
   let progress;
 

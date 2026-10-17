@@ -1,38 +1,355 @@
-/** 그래프 도메인 primitive, 관계 스키마, UI 상수, 챕터 라벨 */
+/** 그래프 도메인 기반: element 판별·eventUtils·캐시 키 · 인물 id·표시 이름 · 관계 스키마 · 공용 UI 상수 (다른 graph 모듈에 의존하지 않음) */
 
 import {
-  getChapterData,
-  getManifestFromCache,
-} from '../common/cache/manifestCache.js';
-import {
+  asArray,
   toPositiveNumberFromId,
   toNumberOrNull,
-  toPositiveNumberOrNull,
   toTrimmedStringOrNull,
-  asArray,
   clampPositivity,
   compareLocale,
+  resolveEventId,
+  resolveEventNum,
+  resolveEventChapterIndex,
 } from '../common/valueUtils';
-import {
-  formatFallbackChapterLabel,
-  resolveChapterTitleMeta,
-  stripSharedListPrefix,
-  stripChapterOrdinalPrefix,
-  eventUtils,
-  isGraphEdgeElement,
-} from '../viewer/viewerCore.js';
-import { removeKeys } from '../common/cache/cacheManager';
+import { getManifestFromCache } from '../common/cache/manifestCache.js';
 
-/* ─── 요소 ID · 타입 판별 ─── */
+/* ─── 그래프 도메인 primitive: element 판별, eventUtils, 캐시 키 ─── */
+
+export const isGraphEdgeElement = (element) =>
+  Boolean(element?.data && element.data.source !== undefined && element.data.target !== undefined);
+
+export const isGraphNodeElement = (element) =>
+  Boolean(element?.data && element.data.id !== undefined && !isGraphEdgeElement(element));
+
+/** elements → relations 변환 시 공통 옵션 (표시용) */
+export const ELEMENTS_TO_RELATIONS_OPTS = {
+  includeLabel: true,
+  includeCount: false,
+  positivityDefault: null,
+};
+
+function chapterNumOf(event) {
+  return Number(resolveEventChapterIndex(event));
+}
+
+function chapterNumOrZero(event) {
+  return Number(resolveEventChapterIndex(event) ?? 0);
+}
+
+function compareByEventNum(a, b) {
+  return resolveEventNum(a) - resolveEventNum(b);
+}
+
+function compareByChapterThenEvent(a, b) {
+  const chapterA = chapterNumOrZero(a);
+  const chapterB = chapterNumOrZero(b);
+  if (chapterA !== chapterB) return chapterA - chapterB;
+  return compareByEventNum(a, b);
+}
+
+export const eventUtils = {
+  resolveRelationNodeIds: (relation) => {
+    if (!relation || typeof relation !== 'object') return { id1: null, id2: null };
+    const id1 = relation.id1 ?? relation.source ?? null;
+    const id2 = relation.id2 ?? relation.target ?? null;
+    return {
+      id1: id1 != null ? String(id1) : null,
+      id2: id2 != null ? String(id2) : null,
+    };
+  },
+
+  convertElementsToRelations: (elements, options = {}) => {
+    if (!Array.isArray(elements) || elements.length === 0) return [];
+
+    const { includeLabel = false, includeCount = true, positivityDefault = null } = options;
+
+    return elements
+      .filter(isGraphEdgeElement)
+      .map((edge) => {
+        const relation = {
+          id1: edge.data.source,
+          id2: edge.data.target,
+          relation: Array.isArray(edge.data.relation) ? [...edge.data.relation] : [],
+          positivity:
+            typeof edge.data.positivity === 'number' ? edge.data.positivity : positivityDefault,
+        };
+        if (includeLabel) relation.label = edge.data.label || '';
+        if (includeCount) relation.count = edge.data.count || 1;
+        return relation;
+      });
+  },
+
+  updateEventsInState: (prevEvents, newEvent, targetChapter) =>
+    eventUtils.mergeEventsInState(prevEvents, [newEvent], targetChapter),
+
+  /** 같은 순번은 병합, 없으면 추가 — 여러 건을 한 번에 (건별 filter·정렬 반복 없음) */
+  mergeEventsInState: (prevEvents, newEvents, targetChapter) => {
+    const previous = asArray(prevEvents);
+    const otherChapterEvents = previous.filter(
+      (evt) => chapterNumOf(evt) !== targetChapter
+    );
+    // 정렬은 마지막 1회 — 안정 정렬이라 같은 순번 중 "처음 것"은 원래 순서 기준으로 동일
+    const current = previous.filter((evt) => chapterNumOf(evt) === targetChapter);
+
+    const indexByNum = new Map();
+    current.forEach((evt, idx) => {
+      const num = resolveEventNum(evt);
+      if (!indexByNum.has(num)) indexByNum.set(num, idx);
+    });
+    for (const newEvent of asArray(newEvents)) {
+      const num = resolveEventNum(newEvent);
+      const existingIdx = indexByNum.get(num);
+      if (existingIdx != null) {
+        current[existingIdx] = { ...current[existingIdx], ...newEvent };
+      } else {
+        indexByNum.set(num, current.length);
+        current.push(newEvent);
+      }
+    }
+
+    return [...otherChapterEvents, ...current].sort(compareByChapterThenEvent);
+  },
+};
+
+export const cacheKeyUtils = {
+  createChapterKey: (bookId, chapter) => `${bookId}-${chapter}`,
+  createEventKey: (bookId, chapter, eventIdx) => `${bookId}-${chapter}-${eventIdx}`,
+  createCacheKey: (chapter, eventIdx) => `${chapter}-${eventIdx}`,
+  macroGraphStorage: (bookId, chapter) => `graph_macro_${Number(bookId)}_upto_${Number(chapter)}`,
+  macroSession: (bookId, chapter) => `${Number(bookId)}:${Number(chapter)}`,
+};
+
+/* ─── 인물 id·표시 이름: 이름 고르기·기억(책별)·manifest 조회·elements/payload에 표시 이름 반영 ─── */
+
+function normalizeCharacterId(value) {
+  if (value == null || value === '') return null;
+  const numId = Number(value);
+  if (!Number.isFinite(numId)) return null;
+  return String(Math.trunc(numId));
+}
+
+export function extractCharacterId(character) {
+  if (!character || typeof character !== 'object') return null;
+  return normalizeCharacterId(character.id);
+}
+
+/** 표시 이름으로 쓸 수 있는 문자열인지 (ID 숫자 문자열은 제외) */
+export function isUsableCharacterDisplayName(name, characterId = null) {
+  if (typeof name !== 'string') return false;
+  const trimmed = name.trim();
+  if (!trimmed) return false;
+  const id = normalizeCharacterId(characterId);
+  if (id && trimmed === id) return false;
+  if (/^\d+$/.test(trimmed) && (!id || trimmed === id)) return false;
+  return true;
+}
+
+export function pickCharacterDisplayName(character) {
+  if (!character || typeof character !== 'object') return '';
+  const id = extractCharacterId(character);
+  const fromNames = asArray(character.names).find((n) => isUsableCharacterDisplayName(n, id));
+  const candidates = [
+    character.common_name,
+    character.name,
+    character.label,
+    character.displayName,
+    fromNames,
+  ];
+  for (const candidate of candidates) {
+    if (isUsableCharacterDisplayName(candidate, id)) return String(candidate).trim();
+  }
+  return '';
+}
+
+/** bookId → (characterId → displayName) — 챕터/페이지 전환 후에도 재사용 */
+const characterDisplayNameMemory = new Map();
+
+function getMemoryMap(bookId) {
+  const key = normalizeCharacterId(bookId) ?? String(bookId ?? '').trim();
+  if (!key) return null;
+  let map = characterDisplayNameMemory.get(key);
+  if (!map) {
+    map = new Map();
+    characterDisplayNameMemory.set(key, map);
+  }
+  return map;
+}
+
+export function rememberCharacterDisplayName(bookId, characterId, displayName) {
+  const id = normalizeCharacterId(characterId);
+  if (!id || !isUsableCharacterDisplayName(displayName, id)) return;
+  const map = getMemoryMap(bookId);
+  if (!map) return;
+  map.set(id, String(displayName).trim());
+}
+
+/** id·표시 이름이 모두 있는 인물만 fn(id, name) 호출 */
+/** id가 있는 인물만 visit(char, id) */
+export function forEachIdentifiedCharacter(characters, visit) {
+  asArray(characters).forEach((char) => {
+    const id = char ? extractCharacterId(char) : null;
+    if (id) visit(char, id);
+  });
+}
+
+function forEachCharacterName(characters, fn) {
+  forEachIdentifiedCharacter(characters, (char, id) => {
+    const name = pickCharacterDisplayName(char);
+    if (name) fn(id, name);
+  });
+}
+
+function rememberCharacterDisplayNames(bookId, characters) {
+  forEachCharacterName(characters, (id, name) => rememberCharacterDisplayName(bookId, id, name));
+}
+
+export function lookupRememberedCharacterDisplayName(bookId, characterId) {
+  const id = normalizeCharacterId(characterId);
+  if (!id) return '';
+  return getMemoryMap(bookId)?.get(id) || '';
+}
+
+// manifest 객체는 캐시 후 변경하지 않음 — 객체 identity 기준 메모 (인물·요소마다 Map 재생성 방지)
+const manifestNameLookupMemo = new WeakMap();
+
+/** 읽기 전용 공유 Map (없으면 null) — 변경 금지 */
+function getManifestCharacterNameLookup(bookId) {
+  if (bookId == null || bookId === '') return null;
+  const manifest = getManifestFromCache(bookId);
+  if (!manifest || typeof manifest !== 'object') return null;
+  let lookup = manifestNameLookupMemo.get(manifest);
+  if (!lookup) {
+    lookup = new Map();
+    forEachCharacterName(manifest.characters, (id, name) => lookup.set(id, name));
+    manifestNameLookupMemo.set(manifest, lookup);
+  }
+  return lookup;
+}
+
+/** 호출부가 변경해도 되는 복사본 */
+export function buildManifestCharacterNameLookup(bookId) {
+  return new Map(getManifestCharacterNameLookup(bookId));
+}
+
+/** payload·manifest·세션 메모리를 합쳐 ID→이름 룩업 생성 */
+function buildCharacterDisplayNameLookup(bookId, characters = null) {
+  const lookup = buildManifestCharacterNameLookup(bookId);
+  const memory = getMemoryMap(bookId);
+  if (memory) {
+    memory.forEach((name, id) => {
+      if (!lookup.has(id) && isUsableCharacterDisplayName(name, id)) lookup.set(id, name);
+    });
+  }
+  forEachCharacterName(characters, (id, name) => lookup.set(id, name));
+  return lookup;
+}
+
+function resolveCharacterDisplayName(characterOrId, { bookId, lookup = null } = {}) {
+  const id =
+    characterOrId != null && typeof characterOrId === 'object'
+      ? extractCharacterId(characterOrId)
+      : normalizeCharacterId(characterOrId);
+  if (!id) return '';
+
+  if (characterOrId && typeof characterOrId === 'object') {
+    const picked = pickCharacterDisplayName(characterOrId);
+    if (picked) return picked;
+  }
+
+  const fromLookup = lookup?.get(id);
+  if (isUsableCharacterDisplayName(fromLookup, id)) return fromLookup;
+
+  const fromManifest = getManifestCharacterNameLookup(bookId)?.get(id);
+  if (fromManifest) return fromManifest;
+
+  return lookupRememberedCharacterDisplayName(bookId, id);
+}
+
+export function enrichGraphCharacters(characters, { bookId } = {}) {
+  const list = asArray(characters);
+  if (!list.length) return list;
+
+  const lookup = buildCharacterDisplayNameLookup(bookId, list);
+  const enriched = list.map((char) => {
+    if (!char || typeof char !== 'object') return char;
+    const id = extractCharacterId(char);
+    const name = resolveCharacterDisplayName(char, { bookId, lookup });
+    if (id && name) {
+      rememberCharacterDisplayName(bookId, id, name);
+      lookup.set(id, name);
+    }
+    if (!name) return char;
+
+    const nextNames = asArray(char.names);
+    const names =
+      name && !nextNames.some((n) => String(n).trim() === name)
+        ? [name, ...nextNames]
+        : nextNames;
+
+    return {
+      ...char,
+      common_name: name,
+      name: isUsableCharacterDisplayName(char.name, id) ? String(char.name).trim() : name,
+      names,
+    };
+  });
+
+  rememberCharacterDisplayNames(bookId, enriched);
+  return enriched;
+}
+
+export function applyDisplayNamesToElements(elements, { bookId, characters = null } = {}) {
+  const list = asArray(elements);
+  if (!list.length) return list;
+
+  const lookup = buildCharacterDisplayNameLookup(bookId, characters);
+  return list.map((el) => {
+    if (!isGraphNodeElement(el) || !el.data) return el;
+    const id = normalizeCharacterId(el.data.id);
+    if (!id) return el;
+
+    const resolved =
+      resolveCharacterDisplayName(el.data, { bookId, lookup }) ||
+      lookup.get(id) ||
+      '';
+    if (!resolved) return el;
+
+    rememberCharacterDisplayName(bookId, id, resolved);
+    const label = el.data.label;
+    const common = el.data.common_name;
+    const needsFix =
+      !isUsableCharacterDisplayName(label, id) ||
+      !isUsableCharacterDisplayName(common, id);
+
+    if (!needsFix && label === resolved && common === resolved) return el;
+
+    return {
+      ...el,
+      data: {
+        ...el.data,
+        label: resolved,
+        name: resolved,
+        common_name: resolved,
+      },
+    };
+  });
+}
+
+export function enrichGraphPayload(payload, bookId) {
+  if (!payload || typeof payload !== 'object') return payload;
+  const characters = enrichGraphCharacters(payload.characters, { bookId });
+  const next = { ...payload, characters };
+  if (Array.isArray(payload.elements)) {
+    next.elements = applyDisplayNamesToElements(payload.elements, { bookId, characters });
+  }
+  return next;
+}
+
+/* ─── element id·관계 라벨 이력·태그 표시 · 공용 UI 상수 ─── */
 
 export const directedEdgeElementId = (fromId, toId) => `${String(fromId)}->${String(toId)}`;
 
 export const normalizeElementId = (element) => element?.id ?? element?.data?.id ?? null;
-
-export { isGraphEdgeElement };
-
-export const isGraphNodeElement = (element) =>
-  Boolean(element?.data && element.data.id !== undefined && !isGraphEdgeElement(element));
 
 /** 무방향 노드 쌍 키 (순서 무관) */
 export function undirectedPairKey(s, t) {
@@ -314,7 +631,7 @@ export const GRAPH_LAYOUT_CONSTANTS = {
   PAGE_CHROME_OFFSET: 60,
   /** 관계 분석(레이더) 모달 — 챕터 레일·상단바로부터의 여백 */
   ANALYSIS_MODAL_INSET: 16,
-  /** GraphCanvas 툴팁 사이드바 실제 너비와 동일해야 센터링이 맞음 */
+  /** GraphPageSidebar 툴팁 사이드바 실제 너비와 동일해야 센터링이 맞음 */
   TOOLTIP_SIDEBAR_WIDTH: 480,
   /** 우측 툴팁 사이드바 slide in/out */
   ANIMATION_MS: 520,
@@ -352,42 +669,8 @@ export const GRAPH_CHARACTER_FILTER_STAGE_OPTIONS = [
   { value: 0, label: '전체', title: '모든 인물' },
 ];
 
-export function resolveChapterSidebarWidth(isSidebarOpen, { isNarrow = false } = {}) {
-  // 좁은 화면은 오버레이 드로어 — 레이아웃 offset 없음
-  if (isNarrow) return 0;
-  const { OPEN_WIDTH, CLOSED_WIDTH } = GRAPH_LAYOUT_CONSTANTS.SIDEBAR;
-  return isSidebarOpen ? OPEN_WIDTH : CLOSED_WIDTH;
-}
-
-/* ─── 챕터 사이드바 라벨 ─── */
-
-/** 챕터 사이드바 목록용 항목 */
-export function buildChapterSidebarItems(chapterList, manifestBookId, bookTitle, manifestHint) {
-  const rows = chapterList.map((chapter) => {
-    const chData =
-      manifestBookId != null && Number.isFinite(chapter) && chapter >= 1
-        ? getChapterData(manifestBookId, chapter, manifestHint ?? undefined)
-        : null;
-    const meta = resolveChapterTitleMeta(chData, bookTitle, chapter);
-    const events = Array.isArray(chData?.events) ? chData.events : null;
-    // manifest에 events가 있을 때만 판정. 없으면 unknown(표시만, dim 안 함)
-    const hasGraph = events == null ? null : events.length > 0;
-    const fallback = formatFallbackChapterLabel(chapter);
-
-    return {
-      chapter,
-      label: meta.display || fallback,
-      hasGraph,
-    };
-  });
-
-  const stripped = stripSharedListPrefix(rows.map((row) => row.label), bookTitle);
-  return rows.map((row, index) => {
-    const base = stripped[index] || formatFallbackChapterLabel(row.chapter);
-    const label = stripChapterOrdinalPrefix(base, row.chapter) || base;
-    return { ...row, label };
-  });
-}
+export const getCharacterFilterStageLabel = (stage) =>
+  GRAPH_CHARACTER_FILTER_STAGE_OPTIONS.find((o) => o.value === stage)?.label;
 
 /* ─── 관계 정규화 · 태그 · 레이더 ─── */
 
@@ -396,49 +679,44 @@ export function normalizeRelation(raw) {
     return null;
   }
 
-  try {
-    const id1 = toNumberOrNull(raw.id1);
-    const id2 = toNumberOrNull(raw.id2);
+  const id1 = toNumberOrNull(raw.id1);
+  const id2 = toNumberOrNull(raw.id2);
 
-    if (
-      !Number.isFinite(id1) ||
-      !Number.isFinite(id2) ||
-      id1 === 0 ||
-      id2 === 0 ||
-      id1 === id2
-    ) {
-      return null;
-    }
-
-    const positivity = raw.positivity;
-    const weight = raw.weight ?? 1;
-    const count = raw.count;
-    const relationArray = normalizeRelationArray(raw.relation);
-    const latestArray = normalizeRelationArray(raw.latestLabels);
-    const tags = relationArray.length > 0 ? relationArray : latestArray;
-    // 겉 라벨: 이번 델타 latestLabels 마지막 → 누적 relation 마지막 → raw.label
-    const label =
-      pickLastRelationLabel(latestArray) ||
-      pickLastRelationLabel(tags) ||
-      (typeof raw.label === 'string' ? raw.label.trim() : '') ||
-      '';
-
-    return {
-      id1,
-      id2,
-      positivity,
-      weight,
-      count,
-      relation: tags,
-      latestLabels: latestArray,
-      labelHistory:
-        raw.labelHistory && typeof raw.labelHistory === 'object' ? raw.labelHistory : {},
-      latestEventId: raw.latestEventId ?? null,
-      label,
-    };
-  } catch {
+  if (
+    !Number.isFinite(id1) ||
+    !Number.isFinite(id2) ||
+    id1 === 0 ||
+    id2 === 0 ||
+    id1 === id2
+  ) {
     return null;
   }
+
+  const positivity = raw.positivity;
+  const weight = raw.weight ?? 1;
+  const count = raw.count;
+  const relationArray = normalizeRelationArray(raw.relation);
+  const latestArray = normalizeRelationArray(raw.latestLabels);
+  const tags = relationArray.length > 0 ? relationArray : latestArray;
+  // 겉 라벨: 이번 델타 latestLabels 마지막 → 누적 relation 마지막 → raw.label
+  const label =
+    pickLastRelationLabel(latestArray) ||
+    pickLastRelationLabel(tags) ||
+    (typeof raw.label === 'string' ? raw.label.trim() : '');
+
+  return {
+    id1,
+    id2,
+    positivity,
+    weight,
+    count,
+    relation: tags,
+    latestLabels: latestArray,
+    labelHistory:
+      raw.labelHistory && typeof raw.labelHistory === 'object' ? raw.labelHistory : {},
+    latestEventId: raw.latestEventId ?? null,
+    label,
+  };
 }
 
 export function isSamePair(rel, a, b) {
@@ -492,7 +770,7 @@ export function relationEventMetaPassthrough(raw) {
 
 /** manifest / structure / delta 이벤트에서 eventId 추출 */
 export function resolveManifestEventId(ev) {
-  return toTrimmedStringOrNull(eventUtils.resolveEventId(ev));
+  return toTrimmedStringOrNull(resolveEventId(ev));
 }
 
 export function processRelations(relations) {
@@ -500,240 +778,10 @@ export function processRelations(relations) {
     return [];
   }
 
-  try {
-    return relations
-      .map((raw) => ({ raw, norm: normalizeRelation(raw) }))
-      .filter(({ norm }) => norm != null)
-      .map(({ raw, norm }) => ({ ...norm, ...relationEventMetaPassthrough(raw) }));
-  } catch {
-    return [];
-  }
-}
-
-/* ─── 인물 표시 이름 (from graphCharacterNames) ─── */
-
-function normalizeCharacterId(value) {
-  if (value == null || value === '') return null;
-  const numId = Number(value);
-  if (!Number.isFinite(numId)) return null;
-  return String(Math.trunc(numId));
-}
-
-export function extractCharacterId(character) {
-  if (!character || typeof character !== 'object') return null;
-  return normalizeCharacterId(character.id);
-}
-
-/** 표시 이름으로 쓸 수 있는 문자열인지 (ID 숫자 문자열은 제외) */
-export function isUsableCharacterDisplayName(name, characterId = null) {
-  if (typeof name !== 'string') return false;
-  const trimmed = name.trim();
-  if (!trimmed) return false;
-  const id = normalizeCharacterId(characterId);
-  if (id && trimmed === id) return false;
-  if (/^\d+$/.test(trimmed) && (!id || trimmed === id)) return false;
-  return true;
-}
-
-export function pickCharacterDisplayName(character) {
-  if (!character || typeof character !== 'object') return '';
-  const id = extractCharacterId(character);
-  const fromNames = asArray(character.names).find((n) => isUsableCharacterDisplayName(n, id));
-  const candidates = [
-    character.common_name,
-    character.name,
-    character.label,
-    character.displayName,
-    fromNames,
-  ];
-  for (const candidate of candidates) {
-    if (isUsableCharacterDisplayName(candidate, id)) return String(candidate).trim();
-  }
-  return '';
-}
-
-/** bookId → (characterId → displayName) — 챕터/페이지 전환 후에도 재사용 */
-const characterDisplayNameMemory = new Map();
-
-function getMemoryMap(bookId) {
-  const key = normalizeCharacterId(bookId) ?? String(bookId ?? '').trim();
-  if (!key) return null;
-  let map = characterDisplayNameMemory.get(key);
-  if (!map) {
-    map = new Map();
-    characterDisplayNameMemory.set(key, map);
-  }
-  return map;
-}
-
-export function rememberCharacterDisplayName(bookId, characterId, displayName) {
-  const id = normalizeCharacterId(characterId);
-  if (!id || !isUsableCharacterDisplayName(displayName, id)) return;
-  const map = getMemoryMap(bookId);
-  if (!map) return;
-  map.set(id, String(displayName).trim());
-}
-
-/** id·표시 이름이 모두 있는 인물만 fn(id, name) 호출 */
-function forEachCharacterName(characters, fn) {
-  asArray(characters).forEach((char) => {
-    const id = extractCharacterId(char);
-    const name = pickCharacterDisplayName(char);
-    if (id && name) fn(id, name);
-  });
-}
-
-function rememberCharacterDisplayNames(bookId, characters) {
-  forEachCharacterName(characters, (id, name) => rememberCharacterDisplayName(bookId, id, name));
-}
-
-export function lookupRememberedCharacterDisplayName(bookId, characterId) {
-  const id = normalizeCharacterId(characterId);
-  if (!id) return '';
-  return getMemoryMap(bookId)?.get(id) || '';
-}
-
-// manifest 객체는 캐시 후 변경하지 않음 — 객체 identity 기준 메모 (인물·요소마다 Map 재생성 방지)
-const manifestNameLookupMemo = new WeakMap();
-
-/** 읽기 전용 공유 Map (없으면 null) — 변경 금지 */
-function getManifestCharacterNameLookup(bookId) {
-  if (bookId == null || bookId === '') return null;
-  const manifest = getManifestFromCache(bookId);
-  if (!manifest || typeof manifest !== 'object') return null;
-  let lookup = manifestNameLookupMemo.get(manifest);
-  if (!lookup) {
-    lookup = new Map();
-    forEachCharacterName(manifest.characters, (id, name) => lookup.set(id, name));
-    manifestNameLookupMemo.set(manifest, lookup);
-  }
-  return lookup;
-}
-
-/** 호출부가 변경해도 되는 복사본 */
-export function buildManifestCharacterNameLookup(bookId) {
-  return new Map(getManifestCharacterNameLookup(bookId));
-}
-
-/** payload·manifest·세션 메모리를 합쳐 ID→이름 룩업 생성 */
-function buildCharacterDisplayNameLookup(bookId, characters = null) {
-  const lookup = buildManifestCharacterNameLookup(bookId);
-  const memory = getMemoryMap(bookId);
-  if (memory) {
-    memory.forEach((name, id) => {
-      if (!lookup.has(id) && isUsableCharacterDisplayName(name, id)) lookup.set(id, name);
-    });
-  }
-  forEachCharacterName(characters, (id, name) => lookup.set(id, name));
-  return lookup;
-}
-
-function resolveCharacterDisplayName(characterOrId, { bookId, lookup = null } = {}) {
-  const id =
-    characterOrId != null && typeof characterOrId === 'object'
-      ? extractCharacterId(characterOrId)
-      : normalizeCharacterId(characterOrId);
-  if (!id) return '';
-
-  if (characterOrId && typeof characterOrId === 'object') {
-    const picked = pickCharacterDisplayName(characterOrId);
-    if (picked) return picked;
-  }
-
-  const fromLookup = lookup?.get(id);
-  if (isUsableCharacterDisplayName(fromLookup, id)) return fromLookup;
-
-  const fromManifest = getManifestCharacterNameLookup(bookId)?.get(id);
-  if (fromManifest) return fromManifest;
-
-  return lookupRememberedCharacterDisplayName(bookId, id);
-}
-
-export function enrichGraphCharacters(characters, { bookId } = {}) {
-  const list = asArray(characters);
-  if (!list.length) return list;
-
-  const lookup = buildCharacterDisplayNameLookup(bookId, list);
-  const enriched = list.map((char) => {
-    if (!char || typeof char !== 'object') return char;
-    const id = extractCharacterId(char);
-    const name = resolveCharacterDisplayName(char, { bookId, lookup });
-    if (id && name) {
-      rememberCharacterDisplayName(bookId, id, name);
-      lookup.set(id, name);
-    }
-    if (!name) return char;
-
-    const nextNames = asArray(char.names);
-    const names =
-      name && !nextNames.some((n) => String(n).trim() === name)
-        ? [name, ...nextNames]
-        : nextNames;
-
-    return {
-      ...char,
-      common_name: name,
-      name: isUsableCharacterDisplayName(char.name, id) ? String(char.name).trim() : name,
-      names,
-    };
-  });
-
-  rememberCharacterDisplayNames(bookId, enriched);
-  return enriched;
-}
-
-export function applyDisplayNamesToElements(elements, { bookId, characters = null } = {}) {
-  const list = asArray(elements);
-  if (!list.length) return list;
-
-  const lookup = buildCharacterDisplayNameLookup(bookId, characters);
-  return list.map((el) => {
-    if (!isGraphNodeElement(el) || !el.data) return el;
-    const id = normalizeCharacterId(el.data.id);
-    if (!id) return el;
-
-    const resolved =
-      resolveCharacterDisplayName(el.data, { bookId, lookup }) ||
-      lookup.get(id) ||
-      '';
-    if (!resolved) return el;
-
-    rememberCharacterDisplayName(bookId, id, resolved);
-    const label = el.data.label;
-    const common = el.data.common_name;
-    const needsFix =
-      !isUsableCharacterDisplayName(label, id) ||
-      !isUsableCharacterDisplayName(common, id);
-
-    if (!needsFix && label === resolved && common === resolved) return el;
-
-    return {
-      ...el,
-      data: {
-        ...el.data,
-        label: resolved,
-        name: resolved,
-        common_name: resolved,
-      },
-    };
-  });
-}
-
-export function enrichGraphPayload(payload, bookId) {
-  if (!payload || typeof payload !== 'object') return payload;
-  const characters = enrichGraphCharacters(payload.characters, { bookId });
-  const next = { ...payload, characters };
-  if (Array.isArray(payload.elements)) {
-    next.elements = applyDisplayNamesToElements(payload.elements, { bookId, characters });
-  }
-  return next;
-}
-
-/** 상단 메타·스크러버 공통: `Event 3` / `Event ?` */
-export function formatGraphEventMetaLabel(eventNum, { unknown = '?' } = {}) {
-  const n = toPositiveNumberOrNull(eventNum);
-  if (n) return `Event ${Math.trunc(n)}`;
-  return `Event ${unknown}`;
+  return relations
+    .map((raw) => ({ raw, norm: normalizeRelation(raw) }))
+    .filter(({ norm }) => norm != null)
+    .map(({ raw, norm }) => ({ ...norm, ...relationEventMetaPassthrough(raw) }));
 }
 
 /* ─── 노드 툴팁 · 관계 분석 연결 상태 ─── */
@@ -746,18 +794,7 @@ export const RELATION_CONNECTION_KIND = Object.freeze({
   ERROR: 'load_error',
 });
 
-/** 레이더 연결 수 → 모달 connectionKind */
-export function resolveRelationConnectionKind(connectionCount, { hasError = false, enabled = true } = {}) {
-  if (!enabled) return RELATION_CONNECTION_KIND.NONE;
-  if (hasError) return RELATION_CONNECTION_KIND.ERROR;
-  const n = Number(connectionCount) || 0;
-  if (n === 0) return RELATION_CONNECTION_KIND.NONE;
-  if (n === 1) return RELATION_CONNECTION_KIND.SINGLE;
-  if (n === 2) return RELATION_CONNECTION_KIND.PAIR;
-  return RELATION_CONNECTION_KIND.SUFFICIENT;
-}
-
-/** POV/레이더 뷰 상태 (FETCH_STATUS.EMPTY와 구분) */
+/** POV/레이더 뷰 상태 */
 export const NODE_TOOLTIP_VIEW_STATUS = Object.freeze({
   NO_DATA: 'no-data',
   OK: 'ok',
@@ -766,30 +803,6 @@ export const NODE_TOOLTIP_VIEW_STATUS = Object.freeze({
   READY: 'ready',
   PENDING: 'pending',
 });
-
-function normalizeMatchName(value) {
-  return String(value ?? '')
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, ' ');
-}
-
-function collectNodeMatchNames(node) {
-  const names = [];
-  const push = (v) => {
-    if (typeof v !== 'string') return;
-    const n = normalizeMatchName(v);
-    if (n) names.push(n);
-  };
-  push(node?.common_name);
-  push(node?.label);
-  push(node?.displayName);
-  push(node?.name);
-  if (Array.isArray(node?.names)) {
-    node.names.forEach(push);
-  }
-  return [...new Set(names)];
-}
 
 /** id/이름 비교용 문자열 */
 function normalizeGraphIdString(value) {
@@ -805,9 +818,7 @@ export function buildNodeIdentityContext(nodeLike) {
   return {
     normalizedNodeId,
     nodeIdNum: toNumberOrNull(normalizedNodeId),
-    normalizedNodeName: normalizeGraphIdString(
-      nodeLike?.common_name ?? nodeLike?.label ?? nodeLike?.name,
-    ),
+    normalizedNodeName: normalizeGraphIdString(pickCharacterDisplayName(nodeLike)),
   };
 }
 
@@ -820,8 +831,7 @@ export function isSameNodeIdentifier(candidate, idCtx) {
     candidate.char_id ??
     candidate.pk ??
     candidate.node_id;
-  const candidateName =
-    candidate.common_name ?? candidate.name ?? candidate.label ?? candidate.displayName;
+  const candidateName = pickCharacterDisplayName(candidate);
 
   const candidateIdStr = normalizeGraphIdString(candidateId);
   if (candidateIdStr && idCtx.normalizedNodeId && candidateIdStr === idCtx.normalizedNodeId) {
@@ -866,89 +876,4 @@ export function collectUndirectedRelations(rawRelations, targetNodeId = null) {
   });
 
   return Array.from(relationMap.values());
-}
-
-/** 툴팁용 노드 표시 모델 */
-export function buildProcessedNode(data) {
-  const raw = (data && (data.id || data.label))
-    ? data
-    : (data?.data || { id: data?.id, label: data?.label });
-  if (!raw) return null;
-
-  // personalityText만 표시 (profileText/프롬프트 폴백 금지)
-  const description = String(raw.personalityText || raw.description || '').trim();
-  return {
-    ...raw,
-    names: normalizeRelationArray(raw.names || [], raw.common_name),
-    displayName: raw.common_name || raw.label || 'Unknown',
-    hasImage: !!raw.image,
-    isMainCharacter: !!raw.isMainCharacter,
-    description,
-  };
-}
-
-const POV_SPOILER_SESSION_KEY = 'readwith:pov-spoiler-unlocked';
-
-// ponytail: 이 키를 쓰는 코드가 없음 — 이전 버전 잔여 세션 정리용. 배포 몇 주 뒤 함수째 삭제
-export function clearPovSpoilerSession() {
-  removeKeys('sessionStorage', POV_SPOILER_SESSION_KEY);
-}
-
-/**
- * @returns {{ text: string, status: string }}
- */
-export function resolvePovSummary(
-  node,
-  currentChapter,
-  povSummaries,
-  povError = null,
-  { isLoading = false, povCached = null } = {},
-) {
-  const S = NODE_TOOLTIP_VIEW_STATUS;
-  if (!node) {
-    return {
-      text: '해당 챕터에서는 해당 캐릭터의 등장 비중이 낮아 별도의 분석 내용이 제공되지 않습니다.',
-      status: S.NO_DATA,
-    };
-  }
-
-  if (isLoading) {
-    return { text: '시점 요약을 불러오는 중…', status: S.LOADING };
-  }
-
-  if (povError) {
-    return {
-      text: typeof povError === 'string' ? povError : '관점 요약을 불러오지 못했습니다.',
-      status: S.ERROR,
-    };
-  }
-
-  const list = povSummaries?.povSummaries;
-  if (Array.isArray(list) && list.length > 0) {
-    const nodeId = Number(node.id);
-    let match = Number.isFinite(nodeId)
-      ? list.find((s) => Number(s.characterId) === nodeId)
-      : null;
-    if (!match) {
-      const names = collectNodeMatchNames(node);
-      match = list.find((s) => names.includes(normalizeMatchName(s.characterName)));
-    }
-    const summaryText = typeof match?.summaryText === 'string' ? match.summaryText.trim() : '';
-    if (summaryText) {
-      return { text: summaryText, status: S.READY };
-    }
-  }
-
-  const chapterLabel = currentChapter || 1;
-  if (povCached === false) {
-    return {
-      text: `${node.displayName}의 챕터 ${chapterLabel} 시점 요약은 아직 준비되지 않았습니다. 잠시 후 다시 확인해 주세요.`,
-      status: S.PENDING,
-    };
-  }
-
-  return {
-    text: '해당 챕터에서는 해당 캐릭터의 등장 비중이 낮아 별도의 분석 내용이 제공되지 않습니다.',
-    status: S.NO_DATA,
-  };
 }

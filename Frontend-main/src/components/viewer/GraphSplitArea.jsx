@@ -1,215 +1,104 @@
-import { lazy, Suspense, useMemo, useRef, memo, useCallback, useEffect, useState, useId } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { AlertCircle, Filter, Inbox, Loader2, Maximize, Minimize } from 'lucide-react';
-import CytoscapeGraphUnified from '../graph/CytoscapeGraphUnified';
-import UnifiedNodeInfo from '../graph/UnifiedNodeInfo';
-import { useGraphElementPipeline } from '../../hooks/graph/useGraphViewState';
-import { getEdgeStyle, createGraphStylesheet } from '../../utils/styles/graphStyles';
-import { captureCyViewport, centerSelectionOnElementId, restoreCyViewport } from '../../utils/graph/graphCy';
-import {
-  GraphA11yStatus,
-  shouldIgnoreGraphOutsideClick,
-  useGraphCanvasKeyboard,
-  useGraphTooltipSelection,
-  useGraphTopbarToolsReserve,
-} from '../../hooks/graph/useGraphCy';
+import { lazy, Suspense, useMemo, useRef, memo, useCallback, useEffect } from 'react';
+import GraphCanvasArea from '../graph/canvas/GraphCanvasArea';
+import NodeDetail from '../graph/detail/NodeDetail';
+import { getEdgeStyle, createGraphStylesheet } from '../../utils/graph/graphStyles';
+import { usePreFocusViewport, shouldIgnoreGraphOutsideClick, useGraphTooltipSelection } from '../../hooks/graph/useGraphCy';
 import { resolveEventOrdinalForDisplay } from '../../utils/viewer/viewerSession';
-import {
-  resolveGraphCallContext,
-  normalizeGraphApiError,
-  getViewerGraphLoadingNotice,
-  resolveViewerSplitChapterMeta,
-} from '../../utils/viewer/viewerGraph';
-import { hasGraphPanelLocationHint, toPositiveNumberOrNull, resolvePositiveBookId } from '../../utils/common/valueUtils';
-import { eventUtils, formatChapterOrdinalLabel } from '../../utils/viewer/viewerCore';
-import { userGraphPath } from '../../utils/common/urlUtils';
-import '../graph/RelationGraph.css';
-import {
-  GraphFloatingControls,
-  GraphChapterEventMeta,
-  GraphNoticePanel,
-} from '../graph/GraphControls';
+import { toPositiveNumberOrNull } from '../../utils/common/valueUtils';
+import { formatChapterOrdinalLabel } from '../../utils/common/chapterLabel';
+import { GraphSplitTopBar } from './graph/GraphSplitTopBar';
+import { GraphEmptyEventsNotice, GraphErrorNotice, GraphFilteredEmptyNotice, GraphLoadingNotice, GraphRefreshOverlay } from './graph/GraphPanelNotices';
+import { useGraphPanelState } from '../../hooks/viewer/useGraphPanelState';
+import { useOpenGraphPage } from '../../hooks/viewer/useOpenGraphPage';
+import '../graph/styles/graph.css';
 
-const UnifiedEdgeTooltip = lazy(() => import('../graph/UnifiedEdgeTooltip'));
+const EdgeDetail = lazy(() => import('../graph/detail/EdgeDetail'));
 
-const FULLSCREEN_TOGGLE = {
-  enter: {
-    label: '그래프 확대 — 같은 읽기 그래프를 키움',
-    title: '그래프 확대 (챕터 탐색은 「전체 관계도」)',
-  },
-  exit: {
-    label: '분할로 — 본문과 함께 보기',
-    title: '분할로 (본문+그래프)',
-  },
-};
+const VIEWER_FOCUS_OPTIONS = { duration: 400, reserveRight: 48, padding: 24 };
 
-const GraphSplitTopBar = memo(function GraphSplitTopBar({
-  graphState,
-  graphActions,
+/** 노드/간선 플로팅 툴팁 (활성 툴팁 종류에 따라 하나만) */
+function GraphTooltipLayer({
+  activeTooltip,
+  onClose,
+  tooltipBoundsRef,
+  currentChapter,
+  currentEvent,
+  prevValidEvent,
+  eventNum,
+  filename,
+  elements,
   bookId,
-  searchState,
-  searchActions,
 }) {
-  const {
-    currentChapter,
-    currentEvent,
-    prevValidEvent,
-    graphFullScreen,
-    progressTopBar,
-    edgeLabelVisible,
-  } = graphState;
-
-  const { setGraphFullScreen, setEdgeLabelVisible, filterStage, setFilterStage } = graphActions;
-
-  const chapterMeta = useMemo(
-    () => resolveViewerSplitChapterMeta(bookId, currentChapter),
-    [bookId, currentChapter],
-  );
-
-  const fullscreenCopy = graphFullScreen ? FULLSCREEN_TOGGLE.exit : FULLSCREEN_TOGGLE.enter;
-
-  const topbarRef = useRef(null);
-  const toolsRef = useRef(null);
-  useGraphTopbarToolsReserve(topbarRef, toolsRef);
-
   return (
-    <div className="graph-split-topbar" ref={topbarRef}>
-      <button
-        type="button"
-        className="graph-fullscreen-btn"
-        aria-label={fullscreenCopy.label}
-        title={fullscreenCopy.title}
-        onClick={() => setGraphFullScreen(!graphFullScreen)}
-      >
-        {graphFullScreen ? (
-          <Minimize size={18} aria-hidden />
-        ) : (
-          <Maximize size={18} aria-hidden />
-        )}
-      </button>
-
-      <div className="graph-split-topbar-center">
-        <GraphChapterEventMeta
-          bookId={bookId}
-          progressTopBar={progressTopBar}
+    <div
+      className="graph-tooltip-layer"
+      onClick={(e) => e.stopPropagation()}
+    >
+      {activeTooltip?.type === 'node' && (
+        <NodeDetail
+          key={`node-tooltip-${activeTooltip.id}`}
+          displayMode="tooltip"
+          data={activeTooltip}
+          x={activeTooltip.x}
+          y={activeTooltip.y}
+          onClose={onClose}
+          currentChapter={currentChapter}
+          eventNum={eventNum}
+          filename={filename}
+          elements={elements}
           currentEvent={currentEvent}
           prevValidEvent={prevValidEvent}
-          resolvedServerChapter={chapterMeta.resolvedServerChapter}
-          chapterDisplayLabel={chapterMeta.chapterDisplayLabel}
+          tooltipBoundsRef={tooltipBoundsRef}
         />
-      </div>
-
-      <div className="graph-split-topbar-tools" ref={toolsRef}>
-        <GraphFloatingControls
-          searchState={searchState}
-          searchActions={searchActions}
-          edgeLabelVisible={edgeLabelVisible}
-          onToggleEdgeLabel={() => setEdgeLabelVisible((v) => !v)}
-          filterStage={filterStage}
-          onFilterChange={setFilterStage}
-        />
-      </div>
+      )}
+      {activeTooltip?.type === 'edge' && (
+        <Suspense fallback={<div role="status" aria-live="polite">관계 정보를 불러오는 중…</div>}>
+          <EdgeDetail
+            key={`edge-tooltip-${activeTooltip.id}`}
+            data={activeTooltip.data}
+            x={activeTooltip.x}
+            y={activeTooltip.y}
+            onClose={onClose}
+            displayMode="tooltip"
+            currentChapter={currentChapter}
+            eventNum={eventNum}
+            bookId={bookId}
+            sourceEndpoint={activeTooltip.sourceEndpoint}
+            targetEndpoint={activeTooltip.targetEndpoint}
+            tooltipBoundsRef={tooltipBoundsRef}
+          />
+        </Suspense>
+      )}
     </div>
   );
-});
+}
 
 /** 뷰어 분할 패널용 그래프 + 플로팅 툴팁 */
-const GraphContainer = memo(function GraphContainer({
-  currentEvent,
-  currentChapter,
-  chapterDisplayLabel = null,
-  edgeLabelVisible = true,
-  filename,
-  elements = [],
-  prevValidEvent = null,
-  activeTooltip = null,
-  onClearTooltip = null,
-  onSetActiveTooltip = null,
-  graphClearRef = null,
-  isEventTransition = false,
-  searchTerm = '',
-  isSearchActive = false,
-  filteredElements = [],
-  fitNodeIds = [],
-  filterStage = 0,
-  bookId = null,
-  cyRef: externalCyRef = null,
-  onCyReady = null,
-  showZoomControls = false,
-}) {
-  const eventNum = resolveEventOrdinalForDisplay({
-    currentEvent,
-    prevValidEvent,
-    currentChapter,
-    progressTopBar: null,
-    fallback: 0,
-  });
-  const localCyRef = useRef(null);
-  const cyRef = externalCyRef ?? localCyRef;
-  const selectedElementRef = useRef(null);
-  const graphSelectNodeRef = useRef(null);
-  const graphSelectElementRef = useRef(null);
-  const tooltipBoundsRef = useRef(null);
-  const canvasAreaRef = useRef(null);
-  const a11yStatusId = useId();
-  const chapterLabel = chapterDisplayLabel || formatChapterOrdinalLabel(currentChapter);
-  const a11yElements = isSearchActive && Array.isArray(filteredElements)
-    ? filteredElements
-    : elements;
-
-  // 클릭으로 뷰포트가 이동하기 전 상태를 저장해뒀다가, 선택 해제 시 그 배치로 되돌린다.
-  const preFocusViewportRef = useRef(null);
+/**
+ * 뷰어 그래프 선택·툴팁: 선택 시 해당 요소로 이동하고, 해제(바깥 클릭·닫기)하면 이동 전 배치로 복귀.
+ * 닫기 버튼으로 닫으면 키보드 포커스를 캔버스로 돌려준다
+ */
+function useViewerTooltipFocus({ cyRef, canvasAreaRef, currentChapter, currentEvent, tooltip }) {
+  const { activeTooltip, onClearTooltip, onSetActiveTooltip } = tooltip;
+  // 분할화면은 패널이 좁아 툴팁 전체 폭을 비우면 줌이 과도하게 줄어듦 — 약간 겹침 허용
+  const { centerSelection, releasePreFocusViewport } = usePreFocusViewport(cyRef, VIEWER_FOCUS_OPTIONS);
 
   // 챕터·이벤트가 바뀌면 그래프 자체가 다시 fit되므로, 이전 배치 스냅샷은 더 이상 유효하지 않다.
   useEffect(() => {
-    preFocusViewportRef.current = null;
-  }, [currentChapter, currentEvent]);
+    releasePreFocusViewport(false);
+  }, [currentChapter, currentEvent, releasePreFocusViewport]);
 
-  const restoreFocusViewport = useCallback(() => {
-    const snapshot = preFocusViewportRef.current;
-    preFocusViewportRef.current = null;
-    if (snapshot) restoreCyViewport(cyRef.current, snapshot, { duration: 400 });
-  }, [cyRef]);
+  const clearTooltip = useCallback(() => {
+    releasePreFocusViewport();
+    onClearTooltip();
+  }, [releasePreFocusViewport, onClearTooltip]);
 
-  const handleClearTooltip = useCallback(() => {
-    restoreFocusViewport();
-    onClearTooltip?.();
-  }, [restoreFocusViewport, onClearTooltip]);
-
-  const closeTooltipAndRestoreFocus = useCallback(() => {
-    handleClearTooltip();
+  const closeAndRestoreFocus = useCallback(() => {
+    clearTooltip();
     requestAnimationFrame(() => {
       canvasAreaRef.current?.focus({ preventScroll: true });
     });
-  }, [handleClearTooltip]);
-
-  const { onKeyDown: handleCanvasKeyDown, liveAnnouncement, ariaLabel } = useGraphCanvasKeyboard({
-    cyRef,
-    graphClearRef,
-    selectElementRef: graphSelectElementRef,
-    activeTooltip,
-    onClearTooltip: handleClearTooltip,
-  });
-
-  const centerSelection = useCallback((elementId) => {
-    const cy = cyRef.current;
-    if (!cy) return;
-
-    if (!preFocusViewportRef.current) {
-      preFocusViewportRef.current = captureCyViewport(cy);
-    }
-
-    // 분할화면은 패널이 좁아 툴팁 전체 폭을 비우면 줌이 과도하게 줄어듦 — 약간 겹침 허용
-    centerSelectionOnElementId(cy, elementId, {
-      duration: 400,
-      reserveRight: 48,
-      padding: 24,
-    });
-  }, [cyRef]);
-
-  const handleSelectRelatedNode = useCallback((idOrName) => {
-    return graphSelectNodeRef.current?.(idOrName) ?? false;
-  }, []);
+  }, [clearTooltip, canvasAreaRef]);
 
   const { onShowNodeTooltip, onShowEdgeTooltip } = useGraphTooltipSelection({
     activeTooltip,
@@ -217,10 +106,46 @@ const GraphContainer = memo(function GraphContainer({
     centerSelection,
     focusDelayMs: 50,
     tooltipOpen: !!activeTooltip,
-    onDismiss: handleClearTooltip,
+    onDismiss: clearTooltip,
     shouldIgnoreClick: (event) => shouldIgnoreGraphOutsideClick(event, 'viewer'),
     attachDelayMs: 50,
   });
+
+  return { clearTooltip, closeAndRestoreFocus, onShowNodeTooltip, onShowEdgeTooltip };
+}
+
+/** 뷰어 분할 패널용 그래프 + 플로팅 툴팁. tooltip = ViewerPage의 tooltipProps */
+const GraphContainer = memo(function GraphContainer({
+  currentEvent,
+  currentChapter,
+  chapterLabel,
+  edgeLabelVisible,
+  filename,
+  elements,
+  prevValidEvent,
+  tooltip,
+  isEventTransition,
+  searchTerm,
+  isSearchActive,
+  filteredElements,
+  fitNodeIds,
+  filterStage,
+  bookId,
+}) {
+  const { activeTooltip, graphClearRef } = tooltip;
+  const eventNum = resolveEventOrdinalForDisplay({
+    currentEvent,
+    prevValidEvent,
+    currentChapter,
+    progressTopBar: null,
+    fallback: 0,
+  });
+  const cyRef = useRef(null);
+  const selectedElementRef = useRef(null);
+  const tooltipBoundsRef = useRef(null);
+  const canvasAreaRef = useRef(null);
+  const { clearTooltip, closeAndRestoreFocus, onShowNodeTooltip, onShowEdgeTooltip } =
+    useViewerTooltipFocus({ cyRef, canvasAreaRef, currentChapter, currentEvent, tooltip });
 
   const stylesheet = useMemo(
     () => createGraphStylesheet(getEdgeStyle('viewer'), edgeLabelVisible),
@@ -229,236 +154,64 @@ const GraphContainer = memo(function GraphContainer({
 
   return (
     <div className="graph-shell" ref={tooltipBoundsRef}>
-      <div
-        className="graph-tooltip-layer"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {activeTooltip?.type === 'node' && (
-          <UnifiedNodeInfo
-            key={`node-tooltip-${activeTooltip.id}`}
-            displayMode="tooltip"
-            data={activeTooltip}
-            x={activeTooltip.x}
-            y={activeTooltip.y}
-            onClose={closeTooltipAndRestoreFocus}
-            currentChapter={currentChapter}
-            eventNum={eventNum}
-            filename={filename}
-            elements={elements}
-            currentEvent={currentEvent}
-            prevValidEvent={prevValidEvent}
-            onSelectRelatedNode={handleSelectRelatedNode}
-            showPovSummary={false}
-            tooltipBoundsRef={tooltipBoundsRef}
-          />
-        )}
-        {activeTooltip?.type === 'edge' && (
-          <Suspense fallback={<div role="status" aria-live="polite">관계 정보를 불러오는 중…</div>}>
-            <UnifiedEdgeTooltip
-              key={`edge-tooltip-${activeTooltip.id}`}
-              data={activeTooltip.data}
-              x={activeTooltip.x}
-              y={activeTooltip.y}
-              onClose={closeTooltipAndRestoreFocus}
-              variant="viewer"
-              currentChapter={currentChapter}
-              eventNum={eventNum}
-              bookId={bookId}
-              sourceEndpoint={activeTooltip.sourceEndpoint}
-              targetEndpoint={activeTooltip.targetEndpoint}
-              tooltipBoundsRef={tooltipBoundsRef}
-            />
-          </Suspense>
-        )}
-      </div>
+      <GraphTooltipLayer
+        activeTooltip={activeTooltip}
+        onClose={closeAndRestoreFocus}
+        tooltipBoundsRef={tooltipBoundsRef}
+        currentChapter={currentChapter}
+        currentEvent={currentEvent}
+        prevValidEvent={prevValidEvent}
+        eventNum={eventNum}
+        filename={filename}
+        elements={elements}
+        bookId={bookId}
+      />
 
-      <div
+      <GraphCanvasArea
         ref={canvasAreaRef}
-        className="graph-canvas-area"
-        role="region"
-        tabIndex={0}
-        aria-label={ariaLabel}
-        aria-describedby={a11yStatusId}
-        onKeyDown={handleCanvasKeyDown}
-      >
-        <GraphA11yStatus
-          id={a11yStatusId}
-          chapterLabel={chapterLabel}
-          eventNum={eventNum}
-          elements={a11yElements}
-          filterStage={filterStage}
-          isSearchActive={isSearchActive}
-          searchTerm={searchTerm}
-          activeTooltip={activeTooltip}
-          isLoading={isEventTransition}
-          liveAnnouncement={liveAnnouncement}
-        />
-        <CytoscapeGraphUnified
-          elements={elements}
-          stylesheet={stylesheet}
-          cyRef={cyRef}
-          fitNodeIds={fitNodeIds}
-          searchTerm={searchTerm}
-          isSearchActive={isSearchActive}
-          filteredElements={filteredElements}
-          onShowNodeTooltip={onShowNodeTooltip}
-          onShowEdgeTooltip={onShowEdgeTooltip}
-          onClearTooltip={handleClearTooltip}
-          selectedElementRef={selectedElementRef}
-          graphClearRef={graphClearRef}
-          graphSelectNodeRef={graphSelectNodeRef}
-          graphSelectElementRef={graphSelectElementRef}
-          showZoomControls={showZoomControls}
-          onCyReady={onCyReady}
-          viewportFitKey={currentChapter}
-        />
-      </div>
+        activeTooltip={activeTooltip}
+        chapterLabel={chapterLabel}
+        eventNum={eventNum}
+        filterStage={filterStage}
+        isLoading={isEventTransition}
+        elements={elements}
+        stylesheet={stylesheet}
+        cyRef={cyRef}
+        fitNodeIds={fitNodeIds}
+        searchTerm={searchTerm}
+        isSearchActive={isSearchActive}
+        filteredElements={filteredElements}
+        onShowNodeTooltip={onShowNodeTooltip}
+        onShowEdgeTooltip={onShowEdgeTooltip}
+        onClearTooltip={clearTooltip}
+        selectedElementRef={selectedElementRef}
+        graphClearRef={graphClearRef}
+        viewportFitKey={currentChapter}
+      />
     </div>
   );
 });
 
-/**
- * 그래프 패널에 무엇을 보여줄지 결정하는 파생 상태.
- * - canShowGraph: 확정 이벤트 + 타깃 callKey 일치 + elements 있음 → 캔버스 노출 (이전 이벤트 stale 금지)
- * - isDataLoadCompleteAndEmpty: 로딩이 끝났고 이 챕터엔 표시할 이벤트가 없음 → 빈 상태 패널
- * - isGraphRefreshing: 이벤트 전환 중 → 캔버스는 유지한 채 오버레이만 노출
- * - shouldShowLoading / resolvedApiError: 캔버스를 아직 그릴 수 없을 때의 대체 패널
- */
-function resolveGraphPanelStatus({
-  graphPhase,
-  isEventTransition,
-  isDataReady,
-  hasResolvedEvent,
-  hasElements,
-  graphMatchesTarget,
-  isDataEmpty,
-  apiError,
-  isLocationDetermined,
-  transitionType,
-}) {
-  const canShowGraph = isDataReady && hasResolvedEvent && hasElements && graphMatchesTarget;
-  const isGraphRefreshing = graphPhase === 'event' || isEventTransition;
-  const isDataLoadCompleteAndEmpty =
-    graphPhase === 'idle' && isDataReady && isDataEmpty && !hasElements && hasResolvedEvent && graphMatchesTarget;
-  const resolvedApiError = normalizeGraphApiError(apiError);
-  const shouldShowLoading = !canShowGraph && !isDataLoadCompleteAndEmpty && !resolvedApiError;
-  // 에러가 있으면 "이벤트 반영 중" 칩과 동시에 겹쳐 보이지 않도록 에러를 우선한다.
-  const showRefreshOverlay = canShowGraph && isGraphRefreshing && !resolvedApiError;
-  const loadingNotice = getViewerGraphLoadingNotice(
-    isGraphRefreshing || !isDataReady || !hasResolvedEvent || !graphMatchesTarget,
-    isLocationDetermined,
-    transitionType
-  );
-  return {
-    canShowGraph,
-    isDataLoadCompleteAndEmpty,
-    resolvedApiError,
-    shouldShowLoading,
-    showRefreshOverlay,
-    loadingNotice,
-  };
-}
-
-/** 확정 이벤트·타깃 그래프 callKey (이벤트 미확정이면 null) */
-function resolveTargetGraphKey({ book, currentChapter, currentEvent, hasResolvedEvent }) {
-  if (!hasResolvedEvent) return null;
-  const ctx = resolveGraphCallContext({ book, currentChapter, currentEvent });
-  return ctx?.eventIdx >= 1 ? ctx.callKey : null;
-}
-
-/** 캔버스를 못 그리는 동안에는 마지막으로 표시한 이벤트 메타 유지 (새 이벤트+옛 elements 혼선 방지) */
-function useMountedGraphMeta(canShowGraph, currentEvent, currentChapter, prevValidEvent) {
-  const [mounted, setMounted] = useState({ currentEvent, currentChapter, prevValidEvent });
-  useEffect(() => {
-    if (!canShowGraph) return;
-    // 값이 같으면 이전 객체 유지 (불필요한 재렌더 방지)
-    setMounted((prev) => (
-      prev.currentEvent === currentEvent &&
-      prev.currentChapter === currentChapter &&
-      prev.prevValidEvent === prevValidEvent
-        ? prev
-        : { currentEvent, currentChapter, prevValidEvent }
-    ));
-  }, [canShowGraph, currentEvent, currentChapter, prevValidEvent]);
-  return canShowGraph ? { currentEvent, currentChapter, prevValidEvent } : mounted;
-}
-
-function GraphPanelButton({ variant = 'primary', onClick, children }) {
+/** 캔버스 위/대신 보여줄 안내: 갱신 중 · 필터 결과 없음 · 로딩 · 오류 */
+function GraphPanelNotices({ panel, onResetFilter, inCanvas }) {
+  const overlayClass = panel.hasElements ? 'graph-fill-overlay' : 'graph-fill-overlay graph-fill-overlay--bare';
+  if (inCanvas) {
+    const showFilteredEmpty =
+      panel.isFilteredToEmpty && !panel.resolvedApiError && !panel.shouldShowLoading && !panel.showRefreshOverlay;
+    return (
+      <>
+        {panel.showRefreshOverlay ? <GraphRefreshOverlay /> : null}
+        {showFilteredEmpty ? (
+          <GraphFilteredEmptyNotice className={overlayClass} onReset={onResetFilter} />
+        ) : null}
+      </>
+    );
+  }
   return (
-    <button type="button" className={`graph-panel-btn graph-panel-btn--${variant}`} onClick={onClick}>
-      {children}
-    </button>
-  );
-}
-
-function GraphEmptyEventsNotice({ onToggleGraph, onOpenRelationGraph }) {
-  return (
-    <GraphNoticePanel
-      variant="empty"
-      title="아직 이벤트가 없습니다"
-      description="이 챕터에는 표시할 그래프 데이터가 없습니다. 본문을 더 읽거나 그래프를 닫을 수 있습니다."
-      icon={<Inbox size={24} strokeWidth={1.75} aria-hidden />}
-      actions={
-        <>
-          {onToggleGraph ? (
-            <GraphPanelButton variant="secondary" onClick={onToggleGraph}>그래프 닫기</GraphPanelButton>
-          ) : null}
-          <GraphPanelButton onClick={onOpenRelationGraph}>전체 관계도 열기</GraphPanelButton>
-        </>
-      }
-    />
-  );
-}
-
-function GraphRefreshOverlay() {
-  return (
-    <div className="graph-refresh-overlay" role="status" aria-live="polite" aria-label="그래프 전환 중">
-      <div className="graph-refresh-chip">
-        <Loader2 size={16} className="graph-spin" strokeWidth={2} aria-hidden />
-        <span>이벤트 반영 중</span>
-      </div>
-    </div>
-  );
-}
-
-function GraphFilteredEmptyNotice({ className, onReset }) {
-  return (
-    <div className={className}>
-      <GraphNoticePanel
-        variant="empty"
-        title="조건에 맞는 인물이 없습니다"
-        description="현재 필터에 해당하는 핵심 인물이 이 챕터에는 없습니다. 필터를 해제하면 전체 인물을 볼 수 있습니다."
-        icon={<Filter size={24} strokeWidth={1.75} aria-hidden />}
-        actions={<GraphPanelButton onClick={onReset}>필터 해제</GraphPanelButton>}
-      />
-    </div>
-  );
-}
-
-function GraphLoadingNotice({ className, notice }) {
-  return (
-    <div className={className}>
-      <GraphNoticePanel
-        variant="loading"
-        title={notice.title}
-        description={notice.description}
-        icon={<Loader2 size={20} className="graph-spin" strokeWidth={2} aria-hidden />}
-      />
-    </div>
-  );
-}
-
-function GraphErrorNotice({ className, error }) {
-  return (
-    <div className={`${className} graph-fill-overlay--error`}>
-      <GraphNoticePanel
-        variant="error"
-        title={error.message || '문제가 발생했습니다'}
-        description={error.details || '잠시 후 다시 시도해 주세요.'}
-        icon={<AlertCircle size={24} strokeWidth={2} aria-hidden />}
-        actions={error.retry ? <GraphPanelButton onClick={error.retry}>다시 시도</GraphPanelButton> : null}
-      />
-    </div>
+    <>
+      {panel.shouldShowLoading ? <GraphLoadingNotice className={overlayClass} notice={panel.loadingNotice} /> : null}
+      {panel.resolvedApiError ? <GraphErrorNotice className={overlayClass} error={panel.resolvedApiError} /> : null}
+    </>
   );
 }
 
@@ -466,145 +219,37 @@ const GraphSplitArea = memo(function GraphSplitArea({
   graphState,
   graphActions,
   viewerState,
-  searchState = {},
+  searchState,
   searchActions,
   tooltipProps,
   transitionState,
   apiError,
-  cachedLocation = null,
-  resumeAnchor = null,
-  onToggleGraph = null,
+  cachedLocation,
+  resumeAnchor,
+  onToggleGraph,
 }) {
-  const navigate = useNavigate();
-  const { filename: routeFilename } = useParams();
-  const { activeTooltip, onClearTooltip, onSetActiveTooltip, graphClearRef } = tooltipProps;
-  const {
-    searchTerm = '',
-    isSearchActive = false,
-    filteredElements = [],
-    fitNodeIds = [],
-  } = searchState;
-
-  const { graphPhase, isDataReady, isDataEmpty, appliedGraphKey, book, bookKey, routeBookId } = viewerState;
-  const topBarBookId = useMemo(() => toPositiveNumberOrNull(book?.id), [book?.id]);
-  const {
-    elements,
-    currentEvent,
-    currentChapter,
-    prevValidEvent,
-    edgeLabelVisible,
-  } = graphState;
+  const { appliedSearchTerm, isSearchActive, filteredElements, fitNodeIds } = searchState;
+  const { book, bookKey, routeBookId } = viewerState;
+  const { currentChapter, edgeLabelVisible } = graphState;
   const { filterStage, setFilterStage } = graphActions;
-  const cyRef = useRef(null);
+  const topBarBookId = useMemo(() => toPositiveNumberOrNull(book?.id), [book?.id]);
 
-  const topBarSearchState = useMemo(
-    () => ({
-      searchTerm,
-      isSearchActive,
-      suggestions: searchState.suggestions ?? [],
-      showSuggestions: searchState.showSuggestions ?? false,
-      selectedIndex: searchState.selectedIndex ?? -1,
-    }),
-    [
-      searchTerm,
-      isSearchActive,
-      searchState.suggestions,
-      searchState.showSuggestions,
-      searchState.selectedIndex,
-    ]
-  );
-
-  const topBarSearchActions = useMemo(
-    () => ({
-      onSearchSubmit: searchActions?.onSearchSubmit,
-      onClearSearch: searchActions?.clearSearch,
-      onGenerateSuggestions: searchActions?.onGenerateSuggestions,
-      onKeyDown: searchActions?.handleKeyDown,
-      onCloseSuggestions: searchActions?.closeSuggestions,
-      onSelectedIndexChange: searchActions?.onSelectedIndexChange,
-    }),
-    [searchActions]
-  );
-
-  const hasResolvedEvent = eventUtils.resolveEventNum(currentEvent) > 0;
-  const targetGraphKey = useMemo(
-    () => resolveTargetGraphKey({ book, currentChapter, currentEvent, hasResolvedEvent }),
-    [book, currentChapter, currentEvent, hasResolvedEvent],
-  );
-  const graphMatchesTarget = Boolean(targetGraphKey) && appliedGraphKey === targetGraphKey;
-
-  const hasLocationHint =
-    hasGraphPanelLocationHint(cachedLocation, { requireEventNum: true }) ||
-    hasGraphPanelLocationHint(resumeAnchor);
-  const isLocationDetermined = (currentChapter >= 1 && Boolean(currentEvent)) || hasLocationHint;
-
-  const { finalElements } = useGraphElementPipeline({
-    elements,
+  const panel = useGraphPanelState({
+    viewerState,
+    graphState,
     filterStage,
     isSearchActive,
     filteredElements,
+    transitionState,
+    apiError,
+    cachedLocation,
+    resumeAnchor,
   });
+  const { canvasMeta } = panel;
 
-  const hasElements = Array.isArray(elements) && elements.length > 0;
-  const isEventTransition =
-    transitionState.type === 'event' && transitionState.inProgress;
-  // 검색 결과 0건은 CytoscapeGraphUnified 내부 no-results 오버레이가 처리하지만,
-  // 인물 필터(filterStage)로 인한 0건은 여기서 별도 안내가 필요함 — 그렇지 않으면 빈 캔버스만 노출됨
-  const isFilteredToEmpty =
-    hasElements && !isSearchActive && filterStage > 0 && finalElements.length === 0;
-  const resetFilterStage = useCallback(() => {
-    setFilterStage?.(0);
-  }, [setFilterStage]);
-
-  const {
-    canShowGraph,
-    isDataLoadCompleteAndEmpty,
-    resolvedApiError,
-    shouldShowLoading,
-    showRefreshOverlay,
-    loadingNotice,
-  } = useMemo(
-    () => resolveGraphPanelStatus({
-      graphPhase,
-      isEventTransition,
-      isDataReady,
-      hasResolvedEvent,
-      hasElements,
-      graphMatchesTarget,
-      isDataEmpty,
-      apiError,
-      isLocationDetermined,
-      transitionType: transitionState.type,
-    }),
-    [
-      graphPhase,
-      isEventTransition,
-      isDataReady,
-      hasResolvedEvent,
-      hasElements,
-      graphMatchesTarget,
-      isDataEmpty,
-      apiError,
-      isLocationDetermined,
-      transitionState.type,
-    ],
-  );
-
-  const canvasMeta = useMountedGraphMeta(canShowGraph, currentEvent, currentChapter, prevValidEvent);
-
-  const openRelationGraphPage = useCallback(() => {
-    const id = resolvePositiveBookId(routeBookId, book?.id, bookKey, routeFilename);
-    if (id == null) return;
-    navigate(userGraphPath(id), {
-      state: {
-        book,
-        selectedChapter: Number(currentChapter) || 1,
-      },
-    });
-  }, [book, bookKey, currentChapter, navigate, routeBookId, routeFilename]);
-
-  const fillOverlayClass = hasElements ? 'graph-fill-overlay' : 'graph-fill-overlay graph-fill-overlay--bare';
-  const showFilteredEmpty = isFilteredToEmpty && !resolvedApiError && !shouldShowLoading && !showRefreshOverlay;
+  const resetFilterStage = useCallback(() => setFilterStage?.(0), [setFilterStage]);
+  const openRelationGraphPage = useOpenGraphPage(currentChapter);
+  const noticeProps = { panel, onResetFilter: resetFilterStage };
 
   return (
     <div className="graph-page-shell graph-page-shell--fill">
@@ -612,49 +257,39 @@ const GraphSplitArea = memo(function GraphSplitArea({
         graphState={graphState}
         graphActions={graphActions}
         bookId={topBarBookId}
-        searchState={topBarSearchState}
-        searchActions={topBarSearchActions}
+        searchState={searchState}
+        searchActions={searchActions}
       />
 
       <div className="graph-page-inner">
-        {isDataLoadCompleteAndEmpty ? (
+        {panel.isDataLoadCompleteAndEmpty ? (
           <GraphEmptyEventsNotice onToggleGraph={onToggleGraph} onOpenRelationGraph={openRelationGraphPage} />
         ) : (
           <>
             {/* 기존 elements를 유지한 채 Cytoscape id diff로 추가·삭제만 반영 */}
-            {hasElements ? (
+            {panel.hasElements ? (
               <div className="graph-canvas-area">
                 <GraphContainer
                   currentEvent={canvasMeta.currentEvent}
                   currentChapter={canvasMeta.currentChapter}
-                  chapterDisplayLabel={formatChapterOrdinalLabel(canvasMeta.currentChapter)}
+                  chapterLabel={formatChapterOrdinalLabel(canvasMeta.currentChapter)}
                   edgeLabelVisible={edgeLabelVisible}
                   filename={routeBookId ?? bookKey ?? ''}
-                  elements={finalElements}
-                  searchTerm={searchTerm}
+                  elements={panel.finalElements}
+                  searchTerm={appliedSearchTerm}
                   isSearchActive={isSearchActive}
                   filteredElements={filteredElements}
                   fitNodeIds={fitNodeIds}
                   filterStage={filterStage}
                   prevValidEvent={canvasMeta.prevValidEvent ?? null}
-                  activeTooltip={activeTooltip}
-                  onClearTooltip={onClearTooltip}
-                  onSetActiveTooltip={onSetActiveTooltip}
-                  graphClearRef={graphClearRef}
-                  isEventTransition={isEventTransition || !canShowGraph}
+                  tooltip={tooltipProps}
+                  isEventTransition={panel.isEventTransition || !panel.canShowGraph}
                   bookId={book?.id ?? bookKey}
-                  cyRef={cyRef}
-                  showZoomControls
                 />
-                {showRefreshOverlay ? <GraphRefreshOverlay /> : null}
-                {showFilteredEmpty ? (
-                  <GraphFilteredEmptyNotice className={fillOverlayClass} onReset={resetFilterStage} />
-                ) : null}
+                <GraphPanelNotices {...noticeProps} inCanvas />
               </div>
             ) : null}
-
-            {shouldShowLoading ? <GraphLoadingNotice className={fillOverlayClass} notice={loadingNotice} /> : null}
-            {resolvedApiError ? <GraphErrorNotice className={fillOverlayClass} error={resolvedApiError} /> : null}
+            <GraphPanelNotices {...noticeProps} />
           </>
         )}
       </div>

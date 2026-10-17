@@ -62,7 +62,6 @@
   --bd-shadow-deep: rgba(46, 58, 46, 0.12);
 
   --bd-focus: var(--brand-focus);
-  --bd-focus-soft: var(--brand-alpha-35);
   --bd-focus-danger: var(--brand-danger-focus);
 
   --bd-shimmer: linear-gradient(90deg, #ebece8 0%, #f4f5f2 45%, #ebece8 100%);

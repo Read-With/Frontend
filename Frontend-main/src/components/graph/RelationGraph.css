@@ -1,6 +1,0 @@
-/* RelationGraph — 섹션 조립. 규칙은 relation-graph/ 에 둠 */
-@import './relation-graph/tokens.css';
-@import './relation-graph/canvas.css';
-@import './relation-graph/tooltip.css';
-@import './relation-graph/sidebar.css';
-@import './relation-graph/modal.css';

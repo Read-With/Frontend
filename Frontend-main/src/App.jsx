@@ -5,17 +5,17 @@ import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import HomePage from './pages/HomePage';
 import OAuthCallback from './components/auth/OAuthCallback';
-import useAuth, { AuthProvider } from './hooks/auth/useAuth';
-import { prefetchBooks } from './hooks/books/bookHooks';
-import { GRAPH_COLORS } from './utils/styles/graphStyles.js';
+import useAuth, { AuthProvider } from './hooks/useAuth';
+import { prefetchBooks } from './hooks/bookHooks';
+import { GRAPH_COLORS } from './utils/graph/graphStyles';
 import { errorUtils } from './utils/common/valueUtils';
 import { rememberPostLoginPath } from './utils/common/urlUtils';
 
 const AdminPage = lazy(() => import('./pages/AdminPage'));
 const MyPage = lazy(() => import('./pages/MyPage'));
-const ViewerPage = lazy(() => import('./components/viewer/ViewerPage'));
+const ViewerPage = lazy(() => import('./pages/ViewerPage'));
 const BookmarksPage = lazy(() => import('./pages/BookmarksPage'));
-const RelationGraphWrapper = lazy(() => import('./components/graph/RelationGraphWrapper'));
+const GraphPage = lazy(() => import('./pages/GraphPage'));
 
 const PageLoader = ({ fullScreen = false }) => (
   <div
@@ -121,7 +121,7 @@ class AppErrorBoundary extends Component {
 const ProtectedRoute = () => {
   const { isAuthenticated, isLoading } = useAuth();
   const queryClient = useQueryClient();
-  const ready = !isLoading && isAuthenticated();
+  const ready = !isLoading && isAuthenticated;
 
   useEffect(() => {
     if (!ready) return;
@@ -153,7 +153,7 @@ const AppContent = () => {
             <Route path="/user/viewer/bookmarks" element={<Navigate to="/mypage" replace />} />
             <Route path="/user/viewer/:filename/bookmarks" element={<BookmarksPage />} />
             <Route path="/user/viewer/:filename/*" element={<ViewerPage />} />
-            <Route path="/user/graph/:filename" element={<RelationGraphWrapper />} />
+            <Route path="/user/graph/:filename" element={<GraphPage />} />
           </Route>
 
           <Route path="*" element={<NotFoundPage />} />

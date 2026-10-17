@@ -4,24 +4,25 @@ import { PanelsTopLeft, FileText } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { loadFromStorage, saveToStorage, readRaw, writeRaw } from '../common/cache/cacheManager';
 import {
+  resolveChapterIndex,
+  toPositiveNumberOrNull,
+  toNumberOrNull,
+  errorUtils,
+  resolveEventNum,
+  resolveEventChapterIndex,
+  resolveEventId,
+} from '../common/valueUtils';
+import {
   toLocator,
   progressResultToViewerAnchor,
   locatorsEqual,
   toViewerResumeAnchor,
   anchorToLocators,
-  resolveChapterIndex,
-  toPositiveNumberOrNull,
-  toNumberOrNull,
-  errorUtils,
-} from '../common/valueUtils';
-import {
-  findManifestEventInChapter,
-  getLastManifestEventInChapter,
-  resolveLocatorToEventParams,
-  resolveProgressMetricsFromLocator,
-} from '../common/cache/manifestCache';
+} from '../common/locator';
+import { findManifestEventInChapter, getLastManifestEventInChapter } from '../common/cache/manifestCache';
+import { resolveLocatorToEventParams, resolveProgressMetricsFromLocator } from '../common/readingProgress';
 import { getProgressFromCache, resolveProgressEventName } from '../common/cache/progressCache';
-import { eventUtils, resolveServerBookId } from './viewerCore';
+import { resolveServerBookId } from '../common/bookNormalize';
 
 export const VIEWER_MODE_OPTIONS = [
   { showGraph: false, Icon: FileText, label: '본문만' },
@@ -68,7 +69,8 @@ export function loadSettings() {
   try {
     return normalizeSettings(loadFromStorage(SETTINGS_STORAGE_KEY) ?? defaultSettings);
   } catch (error) {
-    return errorUtils.handleError('loadSettings', error, defaultSettings);
+    errorUtils.logError('loadSettings', error);
+    return defaultSettings;
   }
 }
 
@@ -83,14 +85,14 @@ export function saveSettings(settings) {
 }
 
 function positiveEventNum(source) {
-  return toPositiveNumberOrNull(eventUtils.resolveEventNum(source));
+  return toPositiveNumberOrNull(resolveEventNum(source));
 }
 
 // --- 이벤트 매칭·manifest ---
 
 export function eventMatchesChapter(event, chapter) {
   if (!event || typeof event !== 'object') return false;
-  const eventChapter = Number(eventUtils.resolveChapterIdx(event));
+  const eventChapter = Number(resolveEventChapterIndex(event));
   const currentChapter = Number(chapter);
   if (!Number.isFinite(currentChapter)) return true;
   // 챕터가 지정됐으면 event.chapterIdx 없는 progressTopBar 등으로 이전 eventNum이 새지 않게 막음
@@ -112,7 +114,7 @@ export function resolveEventOrdinalForDisplay({
   progressTopBar,
   fallback = 0,
 }) {
-  const fromReading = eventUtils.resolveEventNum(
+  const fromReading = resolveEventNum(
     pickReadingEventForChapter(currentEvent, prevValidEvent, currentChapter)
   );
   if (fromReading > 0) return fromReading;
@@ -134,7 +136,7 @@ export function getUnifiedEventInfoForTooltip({
   const eventToShow = pickReadingEventForChapter(currentEvent, prevValidEvent, currentChapter);
   if (!eventToShow) return { eventNum: eventNum || 0 };
   return {
-    eventNum: eventUtils.resolveEventNum(eventToShow),
+    eventNum: resolveEventNum(eventToShow),
     name: resolveProgressEventName(eventToShow),
   };
 }
@@ -148,7 +150,7 @@ function pickEventIdentityPayload(event) {
   if (inner && typeof inner === 'object' && (hasChapter(inner) || hasIdentity(inner))) {
     return inner;
   }
-  if (eventUtils.resolveChapterIdx(event) != null && hasIdentity(event)) {
+  if (resolveEventChapterIndex(event) != null && hasIdentity(event)) {
     return event;
   }
   return null;
@@ -156,8 +158,8 @@ function pickEventIdentityPayload(event) {
 
 function resolveManifestEventMatch(event, bookId) {
   const identity = pickEventIdentityPayload(event);
-  const eventId = eventUtils.resolveEventId(identity);
-  const chapterIdx = eventUtils.resolveChapterIdx(identity) ?? eventUtils.resolveChapterIdx(event);
+  const eventId = resolveEventId(identity);
+  const chapterIdx = resolveEventChapterIndex(identity) ?? resolveEventChapterIndex(event);
   const normalizedEventId = eventId == null ? '' : String(eventId).trim();
   const normalizedBookId = toPositiveNumberOrNull(bookId);
   if (!normalizedBookId || !chapterIdx || !normalizedEventId) {
@@ -168,7 +170,7 @@ function resolveManifestEventMatch(event, bookId) {
     eventId: normalizedEventId,
   });
   return {
-    eventNum: eventUtils.resolveEventNum(manifestEvent),
+    eventNum: resolveEventNum(manifestEvent),
     chapterIdx,
     manifestEvent,
   };
@@ -197,7 +199,7 @@ export function resolveServerEventMatch({
   const locator = toLocator(atLocator) ?? anchorLocators.startLocator;
   const endLocator = atLocator ? locator : anchorLocators.endLocator;
   const rawEventIdx = positiveEventNum(event);
-  const rawChapter = eventUtils.resolveChapterIdx(event) ?? toPositiveNumberOrNull(currentChapter);
+  const rawChapter = resolveEventChapterIndex(event) ?? toPositiveNumberOrNull(currentChapter);
   const locatorChapter = toPositiveNumberOrNull(resolveChapterIndex(locator));
   const endChapter = toPositiveNumberOrNull(resolveChapterIndex(endLocator));
   const spansFromPreviousChapter =
@@ -218,7 +220,7 @@ export function resolveServerEventMatch({
 
   if (spansFromPreviousChapter) {
     const boundaryLastEvent = getLastManifestEventInChapter(bookId, locatorChapter);
-    const boundaryLastEventIdx = eventUtils.resolveEventNum(boundaryLastEvent);
+    const boundaryLastEventIdx = resolveEventNum(boundaryLastEvent);
     if (boundaryLastEventIdx) {
       return eventMatchResult({
         bookId,
@@ -263,7 +265,7 @@ export function resolveServerEventMatch({
 function applyChapterEventIndex(eventObj, eventIdx) {
   const normalizedEventIdx = toPositiveNumberOrNull(eventIdx);
   if (!normalizedEventIdx || !eventObj || typeof eventObj !== 'object') return eventObj;
-  const previousEventIdx = eventUtils.resolveEventNum(eventObj);
+  const previousEventIdx = resolveEventNum(eventObj);
   const eventChanged = previousEventIdx > 0 && previousEventIdx !== normalizedEventIdx;
   return {
     ...eventObj,
@@ -276,7 +278,7 @@ function applyChapterEventIndex(eventObj, eventIdx) {
 
 function applyResolvedEventMetadata(eventObj, manifestEvent) {
   if (!eventObj || !manifestEvent) return eventObj;
-  const eventId = eventUtils.resolveEventId(manifestEvent);
+  const eventId = resolveEventId(manifestEvent);
   const eventName = resolveProgressEventName(manifestEvent);
   return {
     ...eventObj,
@@ -311,7 +313,7 @@ export function resolveViewerLineEvent({ receivedEvent, book, bookKey }) {
     match.manifestEvent ??
     findManifestEventInChapter(
       resolvedBookId,
-      resolvedChapter || eventUtils.resolveChapterIdx(nextEvent),
+      resolvedChapter || resolveEventChapterIndex(nextEvent),
       { eventIdx: resolvedEventIdx }
     );
   nextEvent = applyResolvedEventMetadata(nextEvent, manifestEvent);
@@ -365,12 +367,12 @@ export function resolveMetricsFromReadingLocatorKey(bookKey, readingLocatorKey, 
 function progressRowToTopBar(row, bookId = null) {
   if (!row || typeof row !== 'object') return emptyTopBar();
 
-  const eventNum = eventUtils.resolveEventNum(row, null);
+  const eventNum = resolveEventNum(row, null);
 
   const loc = toLocator(row.startLocator ?? row.locator ?? row.anchor?.startLocator);
   const metrics = resolveProgressMetricsFromLocator(bookId, loc);
   const chapterIdx =
-    eventUtils.resolveChapterIdx(row) ?? toPositiveNumberOrNull(row.chapterNum) ?? toPositiveNumberOrNull(loc?.chapterIndex);
+    resolveEventChapterIndex(row) ?? toPositiveNumberOrNull(row.chapterNum) ?? toPositiveNumberOrNull(loc?.chapterIndex);
 
   return {
     eventNum,
@@ -383,9 +385,9 @@ function progressRowToTopBar(row, bookId = null) {
 
 export function patchTopBarFromLineEvent(prev, nextEvent, lineLocator = null) {
   const previous = prev != null && typeof prev === 'object' ? prev : emptyTopBar();
-  const eventNum = eventUtils.resolveEventNum(nextEvent);
+  const eventNum = resolveEventNum(nextEvent);
   const chapterIdx =
-    eventUtils.resolveChapterIdx(nextEvent) ?? toPositiveNumberOrNull(resolveChapterIndex(lineLocator));
+    resolveEventChapterIndex(nextEvent) ?? toPositiveNumberOrNull(resolveChapterIndex(lineLocator));
 
   return {
     ...previous,
@@ -480,10 +482,20 @@ function buildLocatorPayloadBase(bookId, startLocator, endLocator, currentEvent,
   };
 }
 
-export function buildProgressPayload(bookId, startLocator, endLocator, currentEvent, metrics = null) {
+/**
+ * 같은 위치에서 두 저장용 payload를 한 번에 (locator·진행률·이벤트 해석은 1회):
+ * progress = 서버 진도 저장, location = 이 기기의 마지막 위치 캐시. 위치가 없으면 null
+ */
+export function buildProgressPayloads(bookId, startLocator, endLocator, currentEvent, metrics = null) {
   const base = buildLocatorPayloadBase(bookId, startLocator, endLocator, currentEvent, metrics);
   if (!base) return null;
+  return {
+    progress: toProgressPayload(bookId, base),
+    location: toSaveLocationPayload(bookId, base, currentEvent),
+  };
+}
 
+function toProgressPayload(bookId, base) {
   const { resolvedMetrics, eventName, eventNum, ...locs } = base;
   return {
     bookId: String(bookId),
@@ -499,10 +511,7 @@ export function buildProgressPayload(bookId, startLocator, endLocator, currentEv
   };
 }
 
-export function buildSaveLocationPayload(bookId, startLocator, endLocator, currentEvent, metrics = null) {
-  const base = buildLocatorPayloadBase(bookId, startLocator, endLocator, currentEvent, metrics);
-  if (!base) return null;
-
+function toSaveLocationPayload(bookId, base, currentEvent) {
   return {
     bookId: toPositiveNumberOrNull(bookId),
     startLocator: base.startLocator,
@@ -511,7 +520,7 @@ export function buildSaveLocationPayload(bookId, startLocator, endLocator, curre
     chapterIdx: base.startLocator.chapterIndex,
     eventIdx: base.eventNum,
     eventNum: base.eventNum,
-    eventId: eventUtils.resolveEventId(currentEvent),
+    eventId: resolveEventId(currentEvent),
     eventName: base.eventName || null,
     chapterProgress: base.resolvedMetrics?.chapterProgress ?? null,
     source: 'runtime',

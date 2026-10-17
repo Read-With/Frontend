@@ -1,1181 +1,47 @@
-/** Cytoscape 뷰포트·인터랙션·검색·타임라인 차트 UX */
+/** Cytoscape: 인스턴스·레이아웃 실행·elements 동기화 + 강조·검색 + 키보드 탐색 */
 
-import cytoscape from 'cytoscape';
-import coseBilkent from 'cytoscape-cose-bilkent';
-import { estimateNodeSizePx } from '../styles/graphStyles.js';
-import { asArray, clampPositivity, compareKo, cycleIndex, errorUtils, toNumberOrNull, toPositiveNumberOrNull } from '../common/valueUtils';
+import { errorUtils, compareKo, cycleIndex } from '../common/valueUtils';
 import {
   undirectedPairKey,
-  GRAPH_ZOOM,
-  normalizeRelationArray,
   uniqueStrings,
+  normalizeElementId,
   isGraphEdgeElement,
   isGraphNodeElement,
-  normalizeElementId,
+  GRAPH_ZOOM,
+  pickCharacterDisplayName,
+  normalizeRelationArray,
 } from './graphCore';
-import { expandConnectedSubgraph, OVERLAP_RESOLVE, readNodeRadius } from './graphModel';
-
-let coseBilkentRegistered = false;
-function ensureCoseBilkentRegistered() {
-  if (coseBilkentRegistered) return;
-  cytoscape.use(coseBilkent);
-  coseBilkentRegistered = true;
-}
-
-/** cy 파괴·컨테이너 detach 중 호출해도 throw 하지 않음 */
-export function safeCyCall(cy, operation, context = 'cy') {
-  if (!cy || cy.destroyed?.()) return null;
-  try {
-    return operation();
-  } catch (error) {
-    errorUtils.logDebug(context, 'cy operation failed', {
-      message: error?.message,
-    });
-    return null;
-  }
-}
-
-/** element 정의 배열의 data를 기존 cy 노드/엣지에 동기화 */
-export function syncCyElementData(cy, defs) {
-  if (!cy || !defs?.length) return;
-  for (const def of defs) {
-    const rawId = def?.data?.id;
-    if (rawId == null || rawId === '') continue;
-    const el = cy.getElementById(String(rawId));
-    if (!el || el.length === 0) continue;
-    try {
-      el.data(def.data);
-    } catch {
-      /* ignore */
-    }
-  }
-}
-
-/** props 정의에서 id Set */
-export function elementDefIdSet(defs) {
-  return new Set(
-    (defs || [])
-      .map((d) => (d?.data?.id != null ? String(d.data.id) : ''))
-      .filter(Boolean),
-  );
-}
-
-/**
- * 다음 그래프에도 남는 기존 노드의 위치·반지름·weight (증분 배치 시드)
- * @param {Set<string>} prevNodeIds
- * @param {Set<string>} nextNodeIds
- */
-export function collectContinuingNodeLayoutSeed(cy, prevNodeIds, nextNodeIds) {
-  const placedPositions = [];
-  const placedWeights = [];
-  if (!cy || !prevNodeIds?.size) return { placedPositions, placedWeights };
-  prevNodeIds.forEach((id) => {
-    if (!nextNodeIds.has(id)) return;
-    const n = cy.getElementById(id);
-    if (!n || n.length === 0) return;
-    try {
-      const pos = n.position();
-      placedPositions.push({
-        id,
-        x: pos.x,
-        y: pos.y,
-        radius: readNodeRadius(n, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE),
-        label: n.data('label') || '',
-      });
-      const w = n.data('weight');
-      if (w != null) placedWeights.push(w);
-    } catch {
-      /* ignore */
-    }
-  });
-  return { placedPositions, placedWeights };
-}
-
-/** id 목록을 안정적인 비교 키로 */
-export function stableIdListKey(ids) {
-  if (!ids?.length) return '';
-  return [...ids].map(String).filter(Boolean).sort().join('\x1f');
-}
-
-export const PRESET_LAYOUT = Object.freeze({
-  name: 'preset',
-  fit: false,
-  animate: false,
-});
-
-/** 최초 로딩·전체 재배치용. animate:false로 동기 완료
- *  노드 반지름이 최대 40px(graphStyles NODE_SIZE_MAX/2)까지 나오므로, 인접 노드가 맞닿아 보이지 않도록
- *  idealEdgeLength·nodeRepulsion·tilingPadding을 노드 크기 대비 여유 있게 잡는다. */
-const COSE_BILKENT_LAYOUT = Object.freeze({
-  name: 'cose-bilkent',
-  fit: false,
-  animate: false,
-  randomize: false,
-  nodeDimensionsIncludeLabels: true,
-  nodeRepulsion: 5500,
-  idealEdgeLength: 130,
-  edgeElasticity: 0.45,
-  nestingFactor: 0.1,
-  gravity: 0.25,
-  numIter: 2500,
-  tile: true,
-  tilingPaddingVertical: 32,
-  tilingPaddingHorizontal: 32,
-});
-
-/** 노드가 몇 개뿐인 그래프에 COSE_BILKENT_LAYOUT 기본값(넓은 그래프 기준)을 그대로 쓰면
- *  서로 당겨줄 간선·중력이 약해 과도하게 퍼진다. 노드 수가 적을수록 간선 길이·반발력을
- *  줄이고 중력을 높여 촘촘하게 모은다. */
-const LAYOUT_DENSITY_RANGE = {
-  MIN_NODES: 3,
-  MAX_NODES: 20,
-  SPARSE: { idealEdgeLength: 70, nodeRepulsion: 2200, gravity: 0.5 },
-};
-
-function lerp(a, b, t) {
-  return a + (b - a) * t;
-}
-
-/** 노드 수에 맞춰 idealEdgeLength·nodeRepulsion·gravity를 보간한 cose-bilkent 레이아웃 옵션 */
-function resolveCoseBilkentLayout(nodeCount) {
-  const { MIN_NODES, MAX_NODES, SPARSE } = LAYOUT_DENSITY_RANGE;
-  const count = Number(nodeCount);
-
-  if (!Number.isFinite(count) || count <= MIN_NODES) {
-    return { ...COSE_BILKENT_LAYOUT, ...SPARSE };
-  }
-  if (count >= MAX_NODES) {
-    return { ...COSE_BILKENT_LAYOUT };
-  }
-
-  const t = (count - MIN_NODES) / (MAX_NODES - MIN_NODES);
-  return {
-    ...COSE_BILKENT_LAYOUT,
-    idealEdgeLength: lerp(SPARSE.idealEdgeLength, COSE_BILKENT_LAYOUT.idealEdgeLength, t),
-    nodeRepulsion: lerp(SPARSE.nodeRepulsion, COSE_BILKENT_LAYOUT.nodeRepulsion, t),
-    gravity: lerp(SPARSE.gravity, COSE_BILKENT_LAYOUT.gravity, t),
-  };
-}
-
-/** preset 레이아웃 (eles 지정 시 해당 컬렉션만) */
-export function runPresetLayout(cy, eles) {
-  if (!cy) return;
-  if (eles?.length > 0) {
-    try {
-      cy.layout({ ...PRESET_LAYOUT, eles }).run();
-      return;
-    } catch {
-      /* fall through */
-    }
-  }
-  try {
-    cy.layout({ ...PRESET_LAYOUT }).run();
-  } catch {
-    /* ignore */
-  }
-}
-
-/** 최초/전체 재배치용 cose-bilkent (실패 시 preset). 노드 수가 적으면 간격을 촘촘하게 스케일. */
-export function runCoseBilkentLayout(cy) {
-  if (!cy) return;
-  ensureCoseBilkentRegistered();
-  try {
-    cy.layout(resolveCoseBilkentLayout(cy.nodes().length)).run();
-  } catch {
-    runPresetLayout(cy);
-  }
-}
-
-const parseJsonSafely = (value) => {
-  if (typeof value !== 'string') {
-    return value;
-  }
-  try {
-    return JSON.parse(value);
-  } catch {
-    return value;
-  }
-};
-
-/* ─── 툴팁 좌표 · 캔버스 배치 ─── */
-
-/** 플로팅 툴팁 추정 크기 (.graph-node-tooltip / .edge-tooltip-container ≈ 26.25rem) */
-const FLOATING_TOOLTIP_ESTIMATE = { width: 420, height: 400 };
-const TOOLTIP_CANVAS_PAD = 8;
-const TOOLTIP_FOCUS_GAP = 20;
-
-function rectOverlapArea(a, b) {
-  const left = Math.max(a.left, b.left);
-  const right = Math.min(a.right, b.right);
-  const top = Math.max(a.top, b.top);
-  const bottom = Math.min(a.bottom, b.bottom);
-  if (right <= left || bottom <= top) return 0;
-  return (right - left) * (bottom - top);
-}
-
-/** fixed 좌표를 브라우저 viewport 안으로 클램프 */
-export function constrainToWindow(x, y, elementWidth, elementHeight) {
-  if (typeof window === 'undefined') return { x: 0, y: 0 };
-  if (typeof x !== 'number' || typeof y !== 'number') {
-    return { x: 0, y: 0 };
-  }
-  const maxX = Math.max(0, window.innerWidth - elementWidth);
-  const maxY = Math.max(0, window.innerHeight - elementHeight);
-  return {
-    x: Math.min(Math.max(0, x), maxX),
-    y: Math.min(Math.max(0, y), maxY),
-  };
-}
-
-/** 가장 넓은 .graph-canvas-area (중첩 시 패널 기준) */
-function getPrimaryGraphCanvasRect() {
-  if (typeof document === 'undefined') return null;
-  const nodes = document.querySelectorAll('.graph-canvas-area');
-  let best = null;
-  for (const node of nodes) {
-    const r = node.getBoundingClientRect();
-    if (r.width <= 0 || r.height <= 0) continue;
-    if (!best || r.width * r.height > best.width * best.height) {
-      best = r;
-    }
-  }
-  return best;
-}
-
-function getCyClientRect(cy) {
-  try {
-    const el = typeof cy?.container === 'function' ? cy.container() : null;
-    if (el) {
-      const r = el.getBoundingClientRect();
-      if (r.width > 0 && r.height > 0) return r;
-    }
-  } catch {
-    /* fall through */
-  }
-  return getPrimaryGraphCanvasRect();
-}
-
-/** cy collection → client(fixed) 좌표 bbox */
-function getElesClientBoundingRect(cy, eles) {
-  if (!cy || !eles?.length) return null;
-  const containerRect = getCyClientRect(cy);
-  if (!containerRect) return null;
-  try {
-    const bb = eles.renderedBoundingBox({ includeLabels: true, includeOverlays: false });
-    if (!bb || !Number.isFinite(bb.x1) || !Number.isFinite(bb.y1)) return null;
-    return {
-      left: containerRect.left + bb.x1,
-      top: containerRect.top + bb.y1,
-      right: containerRect.left + bb.x2,
-      bottom: containerRect.top + bb.y2,
-      width: bb.x2 - bb.x1,
-      height: bb.y2 - bb.y1,
-    };
-  } catch {
-    return null;
-  }
-}
-
-/** fixed 좌표를 그래프 캔버스 안으로 클램프 */
-export function constrainToGraphCanvas(
-  x,
-  y,
-  elementWidth = 0,
-  elementHeight = 0,
-  canvasRect = null,
-  pad = TOOLTIP_CANVAS_PAD,
-) {
-  if (typeof x !== 'number' || typeof y !== 'number') {
-    return { x: 0, y: 0 };
-  }
-  const canvas = canvasRect || getPrimaryGraphCanvasRect();
-  if (!canvas) {
-    return constrainToWindow(x, y, elementWidth, elementHeight);
-  }
-  const minX = canvas.left + pad;
-  const minY = canvas.top + pad;
-  const maxX = Math.max(minX, canvas.right - elementWidth - pad);
-  const maxY = Math.max(minY, canvas.bottom - elementHeight - pad);
-  return {
-    x: Math.min(Math.max(x, minX), maxX),
-    y: Math.min(Math.max(y, minY), maxY),
-  };
-}
-
-/**
- * focus(간선+노드)를 최대한 가리지 않으면서 캔버스 안에 툴팁 배치.
- * 반환값은 position:fixed 용 client 좌표.
- */
-function placeTooltipInCanvasAwayFromFocus({
-  cy,
-  focusEles,
-  width = FLOATING_TOOLTIP_ESTIMATE.width,
-  height = FLOATING_TOOLTIP_ESTIMATE.height,
-  gap = TOOLTIP_FOCUS_GAP,
-} = {}) {
-  const canvas = getCyClientRect(cy);
-  if (!canvas) {
-    return { x: 200, y: 200 };
-  }
-
-  let focus = getElesClientBoundingRect(cy, focusEles);
-  if (!focus) {
-    const cx = (canvas.left + canvas.right) / 2;
-    const cyMid = (canvas.top + canvas.bottom) / 2;
-    focus = { left: cx, top: cyMid, right: cx, bottom: cyMid, width: 0, height: 0 };
-  }
-
-  const midY = focus.top + focus.height / 2 - height / 2;
-  const midX = focus.left + focus.width / 2 - width / 2;
-  const candidates = [
-    { x: focus.right + gap, y: midY },
-    { x: focus.left - gap - width, y: midY },
-    { x: midX, y: focus.bottom + gap },
-    { x: midX, y: focus.top - gap - height },
-    { x: focus.right + gap, y: focus.top },
-    { x: focus.left - gap - width, y: focus.top },
-    { x: canvas.right - width - TOOLTIP_CANVAS_PAD, y: canvas.top + TOOLTIP_CANVAS_PAD },
-    { x: canvas.left + TOOLTIP_CANVAS_PAD, y: canvas.top + TOOLTIP_CANVAS_PAD },
-    { x: canvas.right - width - TOOLTIP_CANVAS_PAD, y: canvas.bottom - height - TOOLTIP_CANVAS_PAD },
-    { x: canvas.left + TOOLTIP_CANVAS_PAD, y: canvas.bottom - height - TOOLTIP_CANVAS_PAD },
-  ];
-
-  const canvasBox = {
-    left: canvas.left,
-    top: canvas.top,
-    right: canvas.right,
-    bottom: canvas.bottom,
-  };
-  const focusArea = Math.max(focus.width * focus.height, 1);
-  let best = null;
-  let bestScore = -Infinity;
-
-  for (const c of candidates) {
-    const p = constrainToGraphCanvas(c.x, c.y, width, height, canvas);
-    const tip = { left: p.x, top: p.y, right: p.x + width, bottom: p.y + height };
-    const overlap = rectOverlapArea(tip, focus) / focusArea;
-    const inside = rectOverlapArea(tip, canvasBox) / (width * height);
-    const drift = Math.abs(p.x - c.x) + Math.abs(p.y - c.y);
-    const score = inside * 1000 - overlap * 500 - drift;
-    if (score > bestScore) {
-      bestScore = score;
-      best = p;
-    }
-  }
-
-  return best || constrainToGraphCanvas(
-    focus.right + gap,
-    focus.top,
-    width,
-    height,
-    canvas,
-  );
-}
-
-/** cy 뷰포트 픽셀 크기 (메서드 없으면 0) */
-const readViewportSize = (cy) => ({
-  viewW: typeof cy.width === 'function' ? cy.width() : 0,
-  viewH: typeof cy.height === 'function' ? cy.height() : 0,
-});
-
-/** 지금 보이는 영역의 model 좌표. cy.extent() 우선, 없으면 pan·zoom으로 역산. 크기 0이면 null */
-function resolveVisibleModelExtent(cy, container, zoom) {
-  try {
-    const e = typeof cy.extent === 'function' ? cy.extent() : null;
-    if (e && [e.x1, e.x2, e.y1, e.y2].every(Number.isFinite)) {
-      return { x1: e.x1, x2: e.x2, y1: e.y1, y2: e.y2 };
-    }
-  } catch {
-    /* fall through */
-  }
-
-  const { viewW: cyW, viewH: cyH } = readViewportSize(cy);
-  const viewW = (container?.clientWidth > 0 ? container.clientWidth : cyW) || 0;
-  const viewH = (container?.clientHeight > 0 ? container.clientHeight : cyH) || 0;
-  if (!(viewW > 0) || !(viewH > 0)) return null;
-  const pan = typeof cy.pan === 'function' ? cy.pan() : { x: 0, y: 0 };
-  const panX = Number.isFinite(pan?.x) ? pan.x : 0;
-  const panY = Number.isFinite(pan?.y) ? pan.y : 0;
-  // rendered = model * zoom + pan → model = (rendered - pan) / zoom
-  return {
-    x1: (0 - panX) / zoom,
-    x2: (viewW - panX) / zoom,
-    y1: (0 - panY) / zoom,
-    y2: (viewH - panY) / zoom,
-  };
-}
-
-/**
- * 노드를 현재 보이는 캔버스(뷰포트) 안으로만 제한.
- * model 좌표의 원점±container/2로 자르면 줌·팬 후 실제 보이는 영역보다 훨씬 좁아져
- * 사용자가 화면 안에서도 자유롭게 배치하지 못한다.
- *
- * @returns {boolean} 좌표를 바꾼 노드가 있으면 true
- */
-export const ensureElementsInBounds = (cy, container, options = {}) => {
-  if (!cy || cy.destroyed?.()) return false;
-
-  const safeZoom = toPositiveNumberOrNull(typeof cy.zoom === 'function' ? cy.zoom() : 1) ?? 1;
-
-  const extent = resolveVisibleModelExtent(cy, container, safeZoom);
-  if (!extent) return false;
-  const { x1, x2, y1, y2 } = extent;
-
-  const viewWModel = Math.max(x2 - x1, 1);
-  const viewHModel = Math.max(y2 - y1, 1);
-  const paddingPx = Math.min(
-    48,
-    Math.max(8, Math.min(viewWModel, viewHModel) * safeZoom * 0.04),
-  );
-  const pad = paddingPx / safeZoom;
-
-  const bounds = {
-    left: x1 + pad,
-    right: x2 - pad,
-    top: y1 + pad,
-    bottom: y2 - pad,
-  };
-
-  let needsAdjustment = false;
-  const nodes = options.nodes || cy.nodes();
-  const nodeCount = nodes.length;
-  const maxNodes = Number.isFinite(options.maxNodes) ? options.maxNodes : 2000;
-
-  cy.batch(() => {
-    const nodesToProcess = nodeCount > maxNodes ? nodes.slice(0, maxNodes) : nodes;
-
-    nodesToProcess.forEach((node) => {
-      const pos = node.position();
-      const radius = readNodeRadius(node, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE);
-      const minX = Math.min(bounds.left + radius, bounds.right - radius);
-      const maxX = Math.max(bounds.left + radius, bounds.right - radius);
-      const minY = Math.min(bounds.top + radius, bounds.bottom - radius);
-      const maxY = Math.max(bounds.top + radius, bounds.bottom - radius);
-      const constrainedX = Math.max(minX, Math.min(pos.x, maxX));
-      const constrainedY = Math.max(minY, Math.min(pos.y, maxY));
-
-      if (constrainedX !== pos.x || constrainedY !== pos.y) {
-        needsAdjustment = true;
-        node.position({ x: constrainedX, y: constrainedY });
-      }
-    });
-  });
-
-  return needsAdjustment;
-};
-
-/* ─── 뷰포트 · 선택 포커스 ─── */
-
-/**
- * 주어진 요소(노드+간선, 라벨 포함)가 현재 팬·줌 뷰포트 안에 padding 여유를 두고
- * 모두 들어와 있는지. 이벤트 확정 등으로 노드·간선이 늘어난 뒤, 뷰포트 재조정(fit)이
- * 필요한지 판단하는 데 쓴다 — 배치 자체는 건드리지 않는 순수 판별 함수.
- * @returns {boolean} 판단 불가(요소·extent 없음 등)한 경우도 true(재조정 불필요로 간주)
- */
-export function isElementsFitInViewport(cy, eles, paddingPx = 0) {
-  if (!cy || cy.destroyed?.() || !eles || eles.length === 0) return true;
-
-  let bb;
-  try {
-    bb = eles.boundingBox({ includeLabels: true, includeOverlays: false });
-  } catch {
-    return true;
-  }
-  if (!bb || ![bb.x1, bb.x2, bb.y1, bb.y2].every(Number.isFinite)) return true;
-
-  let extent;
-  try {
-    extent = typeof cy.extent === 'function' ? cy.extent() : null;
-  } catch {
-    extent = null;
-  }
-  if (!extent || ![extent.x1, extent.x2, extent.y1, extent.y2].every(Number.isFinite)) {
-    return true;
-  }
-
-  const safeZoom = toPositiveNumberOrNull(typeof cy.zoom === 'function' ? cy.zoom() : 1) ?? 1;
-  const pad = Math.max(0, paddingPx) / safeZoom;
-
-  return (
-    bb.x1 >= extent.x1 + pad &&
-    bb.x2 <= extent.x2 - pad &&
-    bb.y1 >= extent.y1 + pad &&
-    bb.y2 <= extent.y2 - pad
-  );
-}
-
-/** fit에 쓸 요소: 노드+간선(+라벨 BB). 지정 eles가 있으면 그대로. */
-function resolveFitElements(cy, eles) {
-  if (eles?.length) return eles;
-  const visible = cy.elements(':visible');
-  if (visible.length > 0) return visible;
-  return cy.elements();
-}
-
-/** 초기 뷰포트용: 노드(+이름 라벨)만 — 간선 라벨 BB로 과도하게 줌아웃되지 않게 */
-function resolveInitialFitElements(cy) {
-  try {
-    const nodes = cy.nodes(':visible');
-    if (nodes.length > 0) return nodes;
-  } catch {
-    /* fall through */
-  }
-  return resolveFitElements(cy);
-}
-
-/**
- * 뷰포트 fit (즉시 또는 애니메이션).
- * 기본은 visible 노드·간선 전체 — 최초 등장 시 캔버스 안에 그래프가 들어오도록.
- * @param {object} cy
- * @param {{ padding?: number, duration?: number, eles?: object, fill?: number } | number} [opts]
- *   number면 padding으로 처리. eles 없으면 visible(없으면 전체) elements.
- *   fill > 1 이면 fit 후 중심 기준 추가 줌인.
- */
-export function fitGraphToNodes(cy, opts = {}) {
-  if (!cy || cy.destroyed?.()) return false;
-  const options = typeof opts === 'number' ? { padding: opts } : (opts || {});
-  const padding = options.padding ?? GRAPH_ZOOM.FIT_PADDING;
-  const duration = options.duration ?? 0;
-  const fill = Number.isFinite(options.fill) ? options.fill : 1;
-  const applyFill = () => {
-    if (fill > 1) applyFitFillZoom(cy, fill);
-  };
-  try {
-    if (typeof cy.resize === 'function') cy.resize();
-
-    const { viewW, viewH } = readViewportSize(cy);
-    if (!(viewW > 0) || !(viewH > 0)) return false;
-
-    const fitEles = resolveFitElements(cy, options.eles);
-    if (!fitEles.length) return false;
-
-    lowerMinZoomToFit(cy, fitEles, viewW, viewH, padding);
-
-    cy.stop();
-    if (duration <= 0) {
-      cy.fit(fitEles, padding);
-      applyFill();
-      return true;
-    }
-    cy.animate({
-      fit: { eles: fitEles, padding },
-      duration,
-      easing: 'ease-in-out',
-      complete: applyFill,
-    });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/** 큰 그래프는 minZoom 때문에 잘릴 수 있음 → 전부 들어오는 줌이 minZoom보다 작으면 한시적으로 낮춤 */
-function lowerMinZoomToFit(cy, fitEles, viewW, viewH, padding) {
-  try {
-    const bb = fitEles.boundingBox({ includeLabels: true, includeOverlays: false });
-    if (!bb || !Number.isFinite(bb.w) || !Number.isFinite(bb.h)) return;
-    const modelW = Math.max(bb.w, bb.x2 - bb.x1, 1);
-    const modelH = Math.max(bb.h, bb.y2 - bb.y1, 1);
-    const pad = Math.max(0, padding) * 2;
-    const needZoom = Math.min(
-      Math.max(viewW - pad, 1) / modelW,
-      Math.max(viewH - pad, 1) / modelH,
-    );
-    const currentMin = typeof cy.minZoom === 'function' ? cy.minZoom() : GRAPH_ZOOM.MIN;
-    if (Number.isFinite(needZoom) && needZoom > 0 && needZoom < currentMin) {
-      cy.minZoom(Math.max(0.05, needZoom * 0.98));
-    }
-  } catch {
-    /* ignore bb probe */
-  }
-}
-
-/** fit 직후 중심 기준 추가 줌인 (소규모 그래프가 멀리 보이지 않게) */
-function applyFitFillZoom(cy, fill) {
-  if (!cy || cy.destroyed?.() || !(fill > 1)) return;
-  try {
-    const current = cy.zoom();
-    const next = Math.min(cy.maxZoom(), current * fill);
-    if (!(next > current)) return;
-    cy.zoom({
-      level: next,
-      renderedPosition: {
-        x: cy.width() / 2,
-        y: cy.height() / 2,
-      },
-    });
-  } catch {
-    /* ignore */
-  }
-}
-
-/**
- * 컨테이너 크기가 준비된 뒤 전체 요소를 fit하고 경계 안으로 재제약.
- * 초기/챕터 전환용 — 노드 기준 + 약간 더 가까운 줌.
- * @returns {boolean}
- */
-export function fitGraphViewportInContainer(cy, container, opts = {}) {
-  if (!isGraphContainerSizeReady(container)) return false;
-  const eles = opts.eles ?? resolveInitialFitElements(cy);
-  const padding = opts.padding ?? GRAPH_ZOOM.FIT_PADDING_INITIAL ?? GRAPH_ZOOM.FIT_PADDING;
-  const fill = opts.fill ?? GRAPH_ZOOM.FIT_FILL ?? 1;
-  if (!fitGraphToNodes(cy, { duration: 0, ...opts, eles, padding, fill })) return false;
-  // fill로 살짝 잘린 노드를 레이아웃을 깨며 끌어오지 않음 — 패닝만으로 충분
-  if (!(fill > 1)) {
-    ensureElementsInBounds(cy, container);
-  }
-  return true;
-}
-
-/** 뷰포트 중심 기준 비율 줌 */
-export function zoomGraphByFactor(cy, factor) {
-  if (!cy || cy.destroyed?.()) return false;
-  try {
-    const current = cy.zoom();
-    const next = Math.min(cy.maxZoom(), Math.max(cy.minZoom(), current * factor));
-    if (next === current) return false;
-
-    cy.zoom({
-      level: next,
-      renderedPosition: {
-        x: cy.width() / 2,
-        y: cy.height() / 2,
-      },
-    });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/** 현재 zoom/pan 스냅샷 (선택 포커스 전 복원용) */
-export function captureCyViewport(cy) {
-  if (!cy || cy.destroyed?.()) return null;
-  try {
-    const zoom = cy.zoom();
-    const pan = cy.pan();
-    if (!Number.isFinite(zoom) || !Number.isFinite(pan?.x) || !Number.isFinite(pan?.y)) {
-      return null;
-    }
-    return { zoom, pan: { x: pan.x, y: pan.y } };
-  } catch {
-    return null;
-  }
-}
-
-/**
- * 저장된 zoom/pan으로 뷰포트 복원.
- * @param {{ duration?: number }} [opts]
- */
-export function restoreCyViewport(cy, snapshot, opts = {}) {
-  if (!cy || cy.destroyed?.() || !snapshot) return false;
-  const zoom = snapshot.zoom;
-  const pan = snapshot.pan;
-  if (!Number.isFinite(zoom) || !Number.isFinite(pan?.x) || !Number.isFinite(pan?.y)) {
-    return false;
-  }
-  const duration = Number.isFinite(opts.duration) ? Math.max(0, opts.duration) : 0;
-  try {
-    if (typeof cy.stop === 'function') cy.stop();
-    if (duration > 0 && typeof cy.animate === 'function') {
-      cy.animate({ zoom, pan, duration, easing: 'ease-in-out' });
-    } else if (typeof cy.viewport === 'function') {
-      cy.viewport({ zoom, pan });
-    } else {
-      cy.zoom(zoom);
-      cy.pan(pan);
-    }
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function graphElementLabel(ele) {
-  if (!ele?.length) return '';
-  const data = ele.data?.() || {};
-  if (typeof ele.isNode === 'function' && ele.isNode()) {
-    return data.common_name || data.label || data.name || String(data.id || '이름 없음');
-  }
-  const src = ele.source?.()?.data?.() || {};
-  const tgt = ele.target?.()?.data?.() || {};
-  const sn = src.common_name || src.label || src.name || '인물';
-  const tn = tgt.common_name || tgt.label || tgt.name || '인물';
-  return `${sn}와 ${tn}의 관계`;
-}
-
-function isNavigableGraphElement(ele) {
-  if (!ele?.length) return false;
-  if (typeof ele.visible === 'function' && !ele.visible()) return false;
-  if (typeof ele.hasClass === 'function' && ele.hasClass('faded')) return false;
-  return true;
-}
-
-function compareByGraphLabelKo(a, b) {
-  return compareKo(graphElementLabel(a), graphElementLabel(b));
-}
-
-function listNavigableGraphNodes(cy) {
-  if (!cy || cy.destroyed?.()) return [];
-  try {
-    return cy
-      .nodes()
-      .filter((n) => isNavigableGraphElement(n))
-      .sort(compareByGraphLabelKo)
-      .toArray();
-  } catch {
-    return [];
-  }
-}
-
-function listNavigableGraphEdgesForNode(node) {
-  if (!node?.length) return [];
-  try {
-    return node
-      .connectedEdges()
-      .filter((e) => isNavigableGraphElement(e))
-      .sort(compareByGraphLabelKo)
-      .toArray();
-  } catch {
-    return [];
-  }
-}
-
-function setKeyboardFocusElement(cy, element) {
-  if (!cy || cy.destroyed?.()) return;
-  try {
-    cy.batch(() => {
-      cy.nodes('.kb-focus').removeClass('kb-focus');
-      cy.edges('.kb-focus').removeClass('kb-focus');
-      if (element?.length) element.addClass('kb-focus');
-    });
-  } catch {
-    /* ignore */
-  }
-}
-
-function commitKeyboardFocus(cy, focusRef, kind, ele) {
-  setKeyboardFocusElement(cy, ele);
-  if (!focusRef) return;
-  focusRef.current = ele?.length ? { kind, id: String(ele.id()) } : null;
-}
-
-function announceFocus(kind, ele, index, total) {
-  const pos = `${index + 1}/${total}`;
-  const label = graphElementLabel(ele);
-  return kind === 'edge'
-    ? `${label} 포커스. ${pos}. Enter로 상세.`
-    : `인물 ${label} 포커스. ${pos}. Enter로 상세, 선택 후 좌우로 관계.`;
-}
-
-function moveKeyboardFocus(cy, {
-  list,
-  kind,
-  delta,
-  focusRef,
-  currentId,
-  fallbackId = null,
-  onAnnounce,
-  center = false,
-}) {
-  if (!list.length) {
-    onAnnounce?.(kind === 'edge' ? '연결된 관계가 없습니다.' : '탐색할 인물이 없습니다.');
-    return true;
-  }
-  let idx = list.findIndex((el) => String(el.id()) === String(currentId));
-  if (idx < 0 && fallbackId != null) {
-    idx = list.findIndex((el) => String(el.id()) === String(fallbackId));
-  }
-  idx = cycleIndex(idx, list.length, delta);
-  const ele = list[idx];
-  commitKeyboardFocus(cy, focusRef, kind, ele);
-  if (center) {
-    try {
-      centerSelectionOnElementId(cy, ele.id(), {
-        duration: 220,
-        padding: 48,
-        reserveRight: 24,
-      });
-    } catch {
-      /* ignore */
-    }
-  }
-  onAnnounce?.(announceFocus(kind, ele, idx, list.length));
-  return true;
-}
-
-const ZOOM_KEY_FACTORS = new Map([
-  ['+', GRAPH_ZOOM.STEP],
-  ['=', GRAPH_ZOOM.STEP],
-  ['-', 1 / GRAPH_ZOOM.STEP],
-  ['_', 1 / GRAPH_ZOOM.STEP],
-]);
-const ARROW_KEYS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
-
-function isTypingTarget(target) {
-  const tag = target?.tagName;
-  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || Boolean(target?.isContentEditable);
-}
-
-function clearGraphKeyboardFocus(cy, { onClearSelection, keyboardFocusRef, onAnnounce }) {
-  onClearSelection?.();
-  setKeyboardFocusElement(cy, null);
-  if (keyboardFocusRef) keyboardFocusRef.current = null;
-  onAnnounce?.('선택과 포커스를 해제했습니다.');
-  return true;
-}
-
-/** 화살표: 인물 순환. 노드 선택 중 좌우는 그 인물의 연결 관계 순환 */
-function moveFocusByArrow(cy, key, { keyboardFocusRef, onAnnounce, selectedKind, selectedId }) {
-  const focus = keyboardFocusRef?.current;
-  const delta = key === 'ArrowDown' || key === 'ArrowRight' ? 1 : -1;
-  const isHorizontal = key === 'ArrowLeft' || key === 'ArrowRight';
-
-  if (selectedKind === 'node' && selectedId && isHorizontal) {
-    return moveKeyboardFocus(cy, {
-      list: listNavigableGraphEdgesForNode(cy.getElementById(String(selectedId))),
-      kind: 'edge',
-      delta,
-      focusRef: keyboardFocusRef,
-      currentId: focus?.kind === 'edge' ? focus.id : null,
-      onAnnounce,
-    });
-  }
-
-  return moveKeyboardFocus(cy, {
-    list: listNavigableGraphNodes(cy),
-    kind: 'node',
-    delta,
-    focusRef: keyboardFocusRef,
-    currentId: focus?.kind === 'node' ? focus.id : null,
-    fallbackId: selectedId,
-    onAnnounce,
-    center: true,
-  });
-}
-
-/** Enter/Space: 포커스 요소 선택 (포커스가 없으면 첫 인물) */
-function activateKeyboardFocus(cy, { keyboardFocusRef, onSelectById, onAnnounce }) {
-  let kind = keyboardFocusRef?.current?.kind;
-  let id = keyboardFocusRef?.current?.id;
-  if (!id) {
-    const nodes = listNavigableGraphNodes(cy);
-    if (!nodes.length) {
-      onAnnounce?.('선택할 인물이 없습니다.');
-      return true;
-    }
-    kind = 'node';
-    id = String(nodes[0].id());
-    commitKeyboardFocus(cy, keyboardFocusRef, 'node', nodes[0]);
-  }
-
-  if (!onSelectById?.(kind, id)) {
-    onAnnounce?.('선택을 적용하지 못했습니다.');
-    return true;
-  }
-  const label = graphElementLabel(cy.getElementById(String(id)));
-  onAnnounce?.(kind === 'edge' ? `${label} 상세를 열었습니다.` : `인물 ${label} 상세를 열었습니다.`);
-  return true;
-}
-
-/**
- * 그래프 캔버스 region 포커스 단축키.
- * +/= 확대, - 축소, 0 맞춤, Escape 선택·포커스 해제.
- * 화살표: 인물 순환(선택 중 좌우는 연결 관계). Enter/Space: 포커스 선택.
- * @returns {boolean} 처리 여부
- */
-export function handleGraphCanvasHotkeys(event, options = {}) {
-  if (!event || event.defaultPrevented) return false;
-  if (event.metaKey || event.ctrlKey || event.altKey) return false;
-  if (isTypingTarget(event.target)) return false;
-
-  const { cy } = options;
-  const { key } = event;
-
-  if (key === 'Escape') {
-    event.preventDefault();
-    return clearGraphKeyboardFocus(cy, options);
-  }
-
-  if (!cy || cy.destroyed?.()) return false;
-
-  if (ZOOM_KEY_FACTORS.has(key)) {
-    event.preventDefault();
-    return zoomGraphByFactor(cy, ZOOM_KEY_FACTORS.get(key));
-  }
-  if (key === '0') {
-    event.preventDefault();
-    return fitGraphToNodes(cy, { duration: GRAPH_ZOOM.FIT_DURATION_MS });
-  }
-  if (ARROW_KEYS.has(key)) {
-    event.preventDefault();
-    return moveFocusByArrow(cy, key, options);
-  }
-  if (key === 'Enter' || key === ' ') {
-    event.preventDefault();
-    return activateKeyboardFocus(cy, options);
-  }
-  return false;
-}
-
-/**
- * 클릭 focus(하이라이트)에 포함되는 노드·간선 컬렉션.
- * 노드: 자신 + 직접 연결 간선 + 그 상대 노드
- * 간선: 자신 + 양끝 노드
- */
-function getSelectionFocusElements(cy, element) {
-  if (!cy || !element?.length) return cy?.collection?.() ?? null;
-
-  if (typeof element.isEdge === 'function' && element.isEdge()) {
-    return element.union(element.connectedNodes());
-  }
-
-  const nodeId = String(element.id());
-  const connectedEdges = element.connectedEdges();
-  // 이 노드에서 나가는 간선의 target id — 역방향 존재 여부를 O(1)로
-  const outgoingTargets = new Set();
-  connectedEdges.forEach((edge) => {
-    if (String(edge.source().id()) === nodeId) outgoingTargets.add(String(edge.target().id()));
-  });
-  const directEdges = connectedEdges.filter((edge) => {
-    const sourceId = String(edge.source().id());
-    if (sourceId === nodeId) return true;
-    if (String(edge.target().id()) === nodeId) return !outgoingTargets.has(sourceId);
-    return false;
-  });
-
-  return element.union(directEdges).union(directEdges.connectedNodes());
-}
-
-/** focus 요소들의 모델 좌표 중심점 */
-function getFocusElementsModelCenter(focusEles) {
-  if (!focusEles?.length) return null;
-  try {
-    const bb = focusEles.boundingBox({ includeLabels: false, includeOverlays: false });
-    if (!bb || !Number.isFinite(bb.x1) || !Number.isFinite(bb.x2)) return null;
-    return {
-      x: (bb.x1 + bb.x2) / 2,
-      y: (bb.y1 + bb.y2) / 2,
-    };
-  } catch {
-    return null;
-  }
-}
-
-/**
- * focus 묶음이 가용 뷰포트 안에 모두 들어오도록 pan(+필요 시 zoom out).
- * @param {{
- *   duration?: number,
- *   padding?: number,
- *   reserveRight?: number,
- *   reserveLeft?: number,
- *   reserveTop?: number,
- *   reserveBottom?: number,
- * }} [options]
- */
-function animateCenterOnFocusElements(cy, focusEles, options = {}) {
-  if (!cy || !focusEles?.length) return false;
-  const duration = options.duration ?? 500;
-
-  try {
-    cy.stop();
-
-    const padding = Number.isFinite(options.padding) ? options.padding : 28;
-    const reserveRight = Math.max(0, Number(options.reserveRight) || 0);
-    const reserveLeft = Math.max(0, Number(options.reserveLeft) || 0);
-    const reserveTop = Math.max(0, Number(options.reserveTop) || 0);
-    const reserveBottom = Math.max(0, Number(options.reserveBottom) || 0);
-
-    const { viewW, viewH } = readViewportSize(cy);
-    if (!(viewW > 0) || !(viewH > 0)) return false;
-
-    const usable = {
-      x1: padding + reserveLeft,
-      y1: padding + reserveTop,
-      x2: viewW - padding - reserveRight,
-      y2: viewH - padding - reserveBottom,
-    };
-    const usableW = Math.max(usable.x2 - usable.x1, 1);
-    const usableH = Math.max(usable.y2 - usable.y1, 1);
-    const targetCx = (usable.x1 + usable.x2) / 2;
-    const targetCy = (usable.y1 + usable.y2) / 2;
-
-    let bb;
-    try {
-      bb = focusEles.boundingBox({ includeLabels: true, includeOverlays: false });
-    } catch {
-      bb = null;
-    }
-    if (!bb || !Number.isFinite(bb.x1) || !Number.isFinite(bb.x2)) {
-      const center = getFocusElementsModelCenter(focusEles);
-      if (!center) return false;
-      const zoom = cy.zoom();
-      cy.animate({
-        pan: {
-          x: targetCx - center.x * zoom,
-          y: targetCy - center.y * zoom,
-        },
-        duration,
-        easing: 'ease-in-out',
-      });
-      return true;
-    }
-
-    const modelW = Math.max(bb.w, bb.x2 - bb.x1, 1);
-    const modelH = Math.max(bb.h, bb.y2 - bb.y1, 1);
-    const center = {
-      x: (bb.x1 + bb.x2) / 2,
-      y: (bb.y1 + bb.y2) / 2,
-    };
-
-    const currentZoom = cy.zoom();
-    const minZoom = typeof cy.minZoom === 'function' ? cy.minZoom() : GRAPH_ZOOM.MIN;
-    const maxZoom = typeof cy.maxZoom === 'function' ? cy.maxZoom() : GRAPH_ZOOM.MAX;
-    const renderedW = modelW * currentZoom;
-    const renderedH = modelH * currentZoom;
-
-    let nextZoom = currentZoom;
-    if (renderedW > usableW || renderedH > usableH) {
-      const fitZoom = Math.min(usableW / modelW, usableH / modelH);
-      nextZoom = Math.min(Math.max(fitZoom, minZoom), maxZoom);
-    }
-
-    cy.animate({
-      zoom: nextZoom,
-      pan: {
-        x: targetCx - center.x * nextZoom,
-        y: targetCy - center.y * nextZoom,
-      },
-      duration,
-      easing: 'ease-in-out',
-    });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * elementId로 focus를 구한 뒤 animateCenterOnFocusElements 실행.
- * @returns {boolean}
- */
-export function centerSelectionOnElementId(cy, elementId, animateOptions = {}) {
-  if (!cy || elementId == null || elementId === '') return false;
-  try {
-    const element = cy.getElementById(String(elementId));
-    if (!element.length) return false;
-    const focusEles = getSelectionFocusElements(cy, element);
-    if (!focusEles?.length) return false;
-    return animateCenterOnFocusElements(cy, focusEles, animateOptions);
-  } catch {
-    return false;
-  }
-}
-
-
-export const isGraphContainerSizeReady = (container) => {
-  if (!container) return false;
-  const w = Number(container.clientWidth ?? 0);
-  const h = Number(container.clientHeight ?? 0);
-  return w > 0 && h > 0;
-};
-
-/* ─── 툴팁 payload ─── */
-
-function tooltipEndpointInfo(cyNode) {
-  if (!cyNode || typeof cyNode.data !== 'function') {
-    return { id: null, label: '', image: '' };
-  }
-  const d = cyNode.data() || {};
-  return {
-    id: d.id ?? (typeof cyNode.id === 'function' ? cyNode.id() : null),
-    label: d.common_name || d.name || d.label || '',
-    image: d.image || '',
-  };
-}
-
-function buildNodeTooltip(base, center) {
-  const fields = base.data ?? {};
-  return {
-    ...base,
-    ...fields,
-    nodeCenter: center,
-    names: parseJsonSafely(fields.names),
-    isMainCharacter: !!fields.isMainCharacter,
-    common_name: fields.common_name || fields.name || fields.label,
-    description: fields.description || '',
-    personalityText: fields.personalityText || '',
-    image: fields.image || '',
-    weight: fields.weight || 1,
-  };
-}
-
-/** labelHistory는 객체({라벨: 메타})만 허용 */
-function parseLabelHistory(value) {
-  const parsed = parseJsonSafely(value);
-  return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
-}
-
-function buildEdgeTooltip(base, element, center) {
-  const data = base.data ?? {};
-  const relation = normalizeRelationArray(parseJsonSafely(data.relation));
-  return {
-    ...base,
-    sourceEndpoint: tooltipEndpointInfo(element.source()),
-    targetEndpoint: tooltipEndpointInfo(element.target()),
-    edgeCenter: center,
-    data: {
-      ...base.data,
-      relation,
-      latestLabels: normalizeRelationArray(parseJsonSafely(data.latestLabels)),
-      labelHistory: parseLabelHistory(data.labelHistory),
-      label: data.label || relation[relation.length - 1] || '',
-      // positivity는 서버/그래프 값만 유지 — 없으면 null (0과 '없음' 구분)
-      positivity: data.positivity == null || data.positivity === '' ? null : data.positivity,
-      count: data.count ?? 1,
-    },
-  };
-}
-
-/** 탭 이벤트 → 툴팁용 payload */
-export function openTooltipFromTap(tapPayload, type) {
-  if (!tapPayload) return null;
-  const isNode = type === 'node';
-  const element = isNode ? tapPayload.node : tapPayload.edge;
-  if (!element) return null;
-
-  try {
-    const center = isNode ? tapPayload.nodeCenter : tapPayload.edgeCenter;
-    const base = {
-      type,
-      id: element.id(),
-      x: tapPayload.mouseX ?? center?.x ?? 0,
-      y: tapPayload.mouseY ?? center?.y ?? 0,
-      data: element.data(),
-    };
-    return isNode ? buildNodeTooltip(base, center) : buildEdgeTooltip(base, element, center);
-  } catch {
-    return tapPayload;
-  }
-}
-
-
-export const isSidebarElement = (event) => {
-  const target = event?.target;
-  if (!target || typeof target.closest !== 'function') return false;
-  return Boolean(
-    target.closest('[data-testid="graph-sidebar"]') ||
-    target.closest('[data-testid="chapter-sidebar"]') ||
-    target.closest('.graph-sidebar')
-  );
-};
-
-export function isGraphDragEndEvent(event) {
-  const type = event?.detail?.type;
-  return type === 'graphDragEnd' || type === 'dragend';
-}
-
-/* ─── reciprocal junction · 하이라이트 ─── */
+import {
+  expandConnectedSubgraph,
+  buildElementsStructureFingerprint,
+  visualElementSignature,
+  visualSignatureImagePart,
+} from './graphElements';
+import {
+  FLOATING_TOOLTIP_ESTIMATE,
+  getCyClientRect,
+  getSelectionFocusElements,
+  placeTooltipInCanvasAwayFromFocus,
+  centerSelectionOnElementId,
+  fitGraphToNodes,
+  zoomGraphByFactor,
+  hasOverlappingNodes,
+  collectNeighborhoodNodeIds,
+  OVERLAP_RESOLVE,
+  OVERLAP_PROFILES,
+  readNodeRadius,
+  detectAndResolveOverlap,
+  calculateAnchorAwarePlacement,
+  ensureElementsInBounds,
+  isGraphContainerSizeReady,
+  isElementsFitInViewport,
+  fitGraphViewportInContainer,
+} from './graphLayout';
+import { isTypingTarget } from '../common/domUtils';
+import cytoscape from 'cytoscape';
+import coseBilkent from 'cytoscape-cose-bilkent';
+
+/* ─── 그래프 강조: reciprocal junction·선택 하이라이트·검색(필터·제안·페이드) ─── */
 
 /** reciprocalPair junction: target-endpoint bypass로 중점 고정. highlighted면 bypass 제거(일반 0→0). */
 const pendingJunctionSyncRaf = new WeakMap();
@@ -1424,422 +290,7 @@ export function resolveGraphTooltipAnchor(cy, element) {
   });
 }
 
-/* ─── 신규 노드 앵커 기반 배치 ─── */
-
-/** 앵커 주변 1차 탐색 상한 = idealSep × 이 배수 */
-const PLACEMENT_MAX_RING = 2.5;
-const PLACEMENT_RING_MULTS = [1.0, 1.2, 1.45, 1.75, 2.1, 2.5];
-/** 빈자리 없을 때 확장 탐색 (신규끼리 충돌 방지 우선) */
-const PLACEMENT_EXPAND_RING_MULTS = [3.0, 3.5, 4.0, 5.0, 6.0, 8.0];
-const PLACEMENT_SPIRAL_MAX = 360;
-const PLACEMENT_SPIRAL_STEP = 6;
-const PLACEMENT_GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
-/** COSE_BILKENT_LAYOUT.idealEdgeLength와 맞춰, 전체 재배치와 증분 배치의 여유 간격을 일치시킨다 */
-const PLACEMENT_IDEAL_EDGE = 130;
-const PLACEMENT_LABEL_GAP = 10;
-const PLACEMENT_BOUNDS_PAD = 80;
-/** 라벨 겹침은 soft penalty (body-body만 hard reject) */
-const PLACEMENT_LABEL_PENALTY = 28;
-
-function placementLabelRadius(label) {
-  const len = String(label || '').length;
-  return Math.min(72, Math.max(14, len * 5.5));
-}
-
-function placementBodyDisc(x, y, radius) {
-  return { x, y, radius };
-}
-
-function placementLabelDisc(x, y, radius, label) {
-  return {
-    x,
-    y: y + radius + PLACEMENT_LABEL_GAP,
-    radius: placementLabelRadius(label),
-  };
-}
-
-function discsOverlap(a, b, padding) {
-  const minDist = a.radius + b.radius + padding;
-  const dx = a.x - b.x;
-  const dy = a.y - b.y;
-  return dx * dx + dy * dy < minDist * minDist;
-}
-
-function buildOccupiedDiscs(placedList) {
-  const bodies = [];
-  const labels = [];
-  for (const p of placedList) {
-    bodies.push(placementBodyDisc(p.x, p.y, p.radius));
-    labels.push(placementLabelDisc(p.x, p.y, p.radius, p.label));
-  }
-  return { bodies, labels };
-}
-
-/** body-body만 hard collision */
-function candidateBodyCollides(cx, cy, newR, occupied, padding) {
-  const body = placementBodyDisc(cx, cy, newR);
-  for (const o of occupied.bodies) {
-    if (discsOverlap(body, o, padding)) return true;
-  }
-  return false;
-}
-
-/** body↔label / label↔label soft penalty */
-function candidateLabelPenalty(cx, cy, newR, label, occupied, padding) {
-  const body = placementBodyDisc(cx, cy, newR);
-  const lab = placementLabelDisc(cx, cy, newR, label);
-  const softPad = padding * 0.5;
-  let hits = 0;
-  for (const o of occupied.labels) {
-    if (discsOverlap(body, o, softPad)) hits += 1;
-  }
-  for (const o of occupied.bodies) {
-    if (discsOverlap(lab, o, softPad)) hits += 1;
-  }
-  for (const o of occupied.labels) {
-    if (discsOverlap(lab, o, softPad)) hits += 0.5;
-  }
-  return hits * PLACEMENT_LABEL_PENALTY;
-}
-
-function edgeWeightOf(edge) {
-  return toPositiveNumberOrNull(edge?.data?.weight ?? edge?.data?.count) ?? 1;
-}
-
-/** @returns {Map<string, Map<string, number>>} */
-function buildAdjacencyFromEdges(edges) {
-  const adj = new Map();
-  const bump = (from, to, weight) => {
-    if (!from || !to || from === to) return;
-    if (!adj.has(from)) adj.set(from, new Map());
-    const m = adj.get(from);
-    m.set(to, Math.max(m.get(to) || 0, weight));
-  };
-  (asArray(edges)).forEach((edge) => {
-    const s = edge?.data?.source != null ? String(edge.data.source) : '';
-    const t = edge?.data?.target != null ? String(edge.data.target) : '';
-    if (!s || !t) return;
-    const w = edgeWeightOf(edge);
-    bump(s, t, w);
-    bump(t, s, w);
-  });
-  return adj;
-}
-
-function neighborsOf(adj, id) {
-  const m = adj.get(id);
-  if (!m || m.size === 0) return [];
-  return [...m.entries()].map(([nid, weight]) => ({ id: nid, weight }));
-}
-
-function centroidOf(points) {
-  if (!points.length) return { x: 0, y: 0 };
-  let sx = 0;
-  let sy = 0;
-  for (const p of points) {
-    sx += p.x;
-    sy += p.y;
-  }
-  return { x: sx / points.length, y: sy / points.length };
-}
-
-function isInsideSoftBounds(x, y, bounds) {
-  if (!bounds) return true;
-  return x >= bounds.minX && x <= bounds.maxX && y >= bounds.minY && y <= bounds.maxY;
-}
-
-function buildSoftBounds(placedList, containerWidth, containerHeight) {
-  if (!placedList.length) {
-    const hw = Math.max(120, containerWidth / 2 - PLACEMENT_BOUNDS_PAD);
-    const hh = Math.max(120, containerHeight / 2 - PLACEMENT_BOUNDS_PAD);
-    return { minX: -hw, maxX: hw, minY: -hh, maxY: hh };
-  }
-  let minX = Infinity;
-  let maxX = -Infinity;
-  let minY = Infinity;
-  let maxY = -Infinity;
-  for (const p of placedList) {
-    minX = Math.min(minX, p.x - p.radius);
-    maxX = Math.max(maxX, p.x + p.radius);
-    minY = Math.min(minY, p.y - p.radius);
-    maxY = Math.max(maxY, p.y + p.radius);
-  }
-  const pad = Math.max(PLACEMENT_BOUNDS_PAD, PLACEMENT_IDEAL_EDGE * PLACEMENT_MAX_RING);
-  return {
-    minX: minX - pad,
-    maxX: maxX + pad,
-    minY: minY - pad,
-    maxY: maxY + pad,
-  };
-}
-
-function generateRingCandidates(centers, preferredDist, phase, bounds, ringMults = PLACEMENT_RING_MULTS, respectBounds = true) {
-  const out = [];
-  const seen = new Set();
-  const push = (x0, y0) => {
-    if (respectBounds && !isInsideSoftBounds(x0, y0, bounds)) return;
-    const key = `${Math.round(x0 * 2)}_${Math.round(y0 * 2)}`;
-    if (seen.has(key)) return;
-    seen.add(key);
-    out.push({ x: x0, y: y0 });
-  };
-
-  for (const c of centers) {
-    for (const mul of ringMults) {
-      const r = preferredDist * mul;
-      const nAngles = Math.max(8, Math.round(10 + mul * 8));
-      for (let k = 0; k < nAngles; k += 1) {
-        const angle = phase + (Math.PI * 2 * k) / nAngles;
-        push(c.x + Math.cos(angle) * r, c.y + Math.sin(angle) * r);
-      }
-    }
-  }
-  return out;
-}
-
-/** soft bounds·링 실패 시: 본체 비겹침 좌표를 스파이럴로 보장 */
-function findFreeSpiralPosition(centers, preferredDist, phase, newR, occupied, padding) {
-  const origins = centers.length ? centers : [{ x: 0, y: 0 }];
-  for (let attempt = 0; attempt < PLACEMENT_SPIRAL_MAX; attempt += 1) {
-    const origin = origins[attempt % origins.length];
-    const angle = phase + attempt * PLACEMENT_GOLDEN_ANGLE;
-    const radius = preferredDist + attempt * PLACEMENT_SPIRAL_STEP;
-    const x = origin.x + Math.cos(angle) * radius;
-    const y = origin.y + Math.sin(angle) * radius;
-    if (!candidateBodyCollides(x, y, newR, occupied, padding)) {
-      return { x, y };
-    }
-  }
-  return null;
-}
-
-function pickBestFreeCandidate(candidates, newR, label, occupied, padding, anchors, graphCentroid, preferredDist) {
-  let bestFree = null;
-  let bestFreeScore = Infinity;
-  let bestAny = null;
-  let bestAnyScore = Infinity;
-
-  for (const cand of candidates) {
-    const bodyHit = candidateBodyCollides(cand.x, cand.y, newR, occupied, padding);
-    const labelPen = candidateLabelPenalty(cand.x, cand.y, newR, label, occupied, padding);
-    const score =
-      scoreCandidate(cand.x, cand.y, anchors, newR, padding, graphCentroid) + labelPen;
-    if (!bodyHit && score < bestFreeScore) {
-      bestFreeScore = score;
-      bestFree = cand;
-    }
-    const anyScore = score + (bodyHit ? preferredDist * 3 : 0);
-    if (anyScore < bestAnyScore) {
-      bestAnyScore = anyScore;
-      bestAny = cand;
-    }
-  }
-  return { bestFree, bestAny };
-}
-
-function scoreCandidate(x, y, anchors, newR, padding, fallbackCenter = null) {
-  if (!anchors.length) {
-    const c = fallbackCenter || { x: 0, y: 0 };
-    return Math.hypot(x - c.x, y - c.y);
-  }
-  let score = 0;
-  let weightSum = 0;
-  for (const a of anchors) {
-    const dist = Math.hypot(x - a.x, y - a.y);
-    const ideal = Math.max(
-      PLACEMENT_IDEAL_EDGE,
-      newR + a.radius + padding + OVERLAP_RESOLVE.PUSH_EXTRA,
-    );
-    const w = a.weight || 1;
-    score += Math.abs(dist - ideal) * w;
-    score += Math.max(0, dist - ideal * PLACEMENT_MAX_RING) * 4 * w;
-    weightSum += w;
-  }
-  return score / Math.max(1, weightSum);
-}
-
-const nodeIdOf = (node) => (node?.data?.id != null ? String(node.data.id) : '');
-
-/** 이웃 중 배치된 노드를 앵커로 (같은 id는 가중치 큰 쪽) */
-function collectAnchors(neighbors, placedById) {
-  const anchorById = new Map();
-  for (const n of neighbors) {
-    const p = placedById.get(n.id);
-    if (!p) continue;
-    const prev = anchorById.get(n.id);
-    if (!prev || n.weight > prev.weight) {
-      anchorById.set(n.id, { ...p, weight: n.weight });
-    }
-  }
-  return [...anchorById.values()];
-}
-
-function preferredDistanceFor(anchors, newR, padding, fallbackRadius) {
-  const gap = padding + OVERLAP_RESOLVE.PUSH_EXTRA;
-  if (!anchors.length) return Math.max(PLACEMENT_IDEAL_EDGE, newR + fallbackRadius + gap);
-  return Math.max(PLACEMENT_IDEAL_EDGE, ...anchors.map((a) => newR + a.radius + gap));
-}
-
-/**
- * 신규 노드 한 개 좌표. 1) soft bounds 안 링 → 2) 외곽 링 → 3) 스파이럴 → 4) 최후 분리 배치.
- * crowded: 1)에서 빈자리를 못 찾음 (주변 재배치 필요)
- */
-function findPlacementPosition({
-  centers,
-  preferredDist,
-  phase,
-  bounds,
-  newR,
-  label,
-  occupied,
-  padding,
-  anchors,
-  graphCentroid,
-  placeIndex,
-}) {
-  const pickFree = (candidates) => pickBestFreeCandidate(
-    candidates,
-    newR,
-    label,
-    occupied,
-    padding,
-    anchors,
-    graphCentroid,
-    preferredDist,
-  ).bestFree;
-
-  const inBounds = pickFree(
-    generateRingCandidates(centers, preferredDist, phase, bounds, PLACEMENT_RING_MULTS, true),
-  );
-  if (inBounds) return { x: inBounds.x, y: inBounds.y, crowded: false };
-
-  // 빈자리 없으면 외곽 링 (bounds 밖 허용) — 신규끼리 겹침 방지
-  const outer = pickFree(
-    generateRingCandidates(
-      centers,
-      preferredDist,
-      phase,
-      bounds,
-      [...PLACEMENT_RING_MULTS, ...PLACEMENT_EXPAND_RING_MULTS],
-      false,
-    ),
-  );
-  if (outer) return { x: outer.x, y: outer.y, crowded: true };
-
-  // 그래도 없으면 스파이럴로 비겹침 좌표 보장
-  const spiral = findFreeSpiralPosition(centers, preferredDist, phase, newR, occupied, padding);
-  if (spiral) return { x: spiral.x, y: spiral.y, crowded: true };
-
-  // 최후: 기존 노드와는 겹칠 수 있으나, 방금 배치한 신규끼리만이라도 분리
-  const a = anchors[0] || graphCentroid;
-  const angle = phase + placeIndex * PLACEMENT_GOLDEN_ANGLE;
-  const sep = preferredDist + placeIndex * (newR * 2 + padding + OVERLAP_RESOLVE.PUSH_EXTRA);
-  return { x: a.x + Math.cos(angle) * sep, y: a.y + Math.sin(angle) * sep, crowded: true };
-}
-
-/**
- * 앵커(연결 기존 노드) 주변 제한 반경 후보로 신규 노드만 배치.
- * 본체 비겹침(신규끼리 포함)을 우선 보장하고, 밀집 시에만 외곽/스파이럴로 확장한다.
- *
- * placedPositions: { id, x, y, radius?, label? }
- * edges: cytoscape element defs (source/target)
- *
- * @returns {{ nodes: Array, needsLocalReorder: boolean }}
- */
-export function calculateAnchorAwarePlacement(
-  newNodes,
-  placedPositions,
-  edges,
-  containerWidth,
-  containerHeight,
-  options = {},
-) {
-  if (!newNodes?.length) {
-    return { nodes: newNodes || [], needsLocalReorder: false };
-  }
-
-  const padding =
-    typeof options.padding === 'number' && options.padding >= 0
-      ? options.padding
-      : OVERLAP_RESOLVE.PADDING;
-  const fallbackRadius = OVERLAP_RESOLVE.FALLBACK_NODE_SIZE / 2;
-  const weightsForRange = [
-    ...(asArray(options.weightsForRange)),
-    ...newNodes.map((n) => n?.data?.weight),
-  ];
-
-  const newNodeRadius = (node) =>
-    (typeof node?.placementRadius === 'number' && node.placementRadius > 0
-      ? node.placementRadius
-      : estimateNodeSizePx(node?.data?.weight, weightsForRange) / 2);
-
-  const placed = placedPositions.map((pos) => ({
-    id: pos?.id != null ? String(pos.id) : '',
-    x: pos.x,
-    y: pos.y,
-    radius: typeof pos?.radius === 'number' && pos.radius > 0 ? pos.radius : fallbackRadius,
-    label: pos?.label != null ? String(pos.label) : '',
-  }));
-  const placedById = new Map(placed.filter((p) => p.id).map((p) => [p.id, p]));
-  const adj = buildAdjacencyFromEdges(edges);
-  const bounds = buildSoftBounds(placed, containerWidth || 800, containerHeight || 600);
-  const graphCentroid = centroidOf(placed.length ? placed : [{ x: 0, y: 0, radius: fallbackRadius }]);
-
-  // 기존 그래프와 연결이 많은 노드부터 배치
-  // 점수는 정렬 전 1회만 계산 (비교마다 이웃 순회하지 않음)
-  const anchorScore = (id) =>
-    neighborsOf(adj, id).reduce((sum, n) => sum + (placedById.has(n.id) ? n.weight : 0), 0);
-  const scoreByNode = new Map(newNodes.map((node) => [node, anchorScore(nodeIdOf(node))]));
-  const pending = [...newNodes].sort((a, b) => scoreByNode.get(b) - scoreByNode.get(a));
-
-  // 배치된 이웃이 있는 노드 id — 배치할 때마다 이웃만 증분 갱신 (라운드마다 이웃 재순회 없음)
-  const connected = new Set();
-  const markNeighborsConnected = (id) => adj.get(id)?.forEach((_w, nid) => connected.add(nid));
-  placedById.forEach((_p, id) => markNeighborsConnected(id));
-
-  let needsLocalReorder = false;
-  let placeIndex = 0;
-
-  while (pending.length > 0) {
-    // 매 라운드: 이미 배치된 쪽에 연결이 있는 노드 우선, 없으면 맨 앞
-    const nextIdx = pending.findIndex((n) => connected.has(nodeIdOf(n)));
-    const [node] = pending.splice(nextIdx < 0 ? 0 : nextIdx, 1);
-    const nodeId = nodeIdOf(node);
-    const newR = newNodeRadius(node);
-    const label = node?.data?.label != null ? String(node.data.label) : '';
-    const anchors = collectAnchors(neighborsOf(adj, nodeId), placedById);
-    const preferredDist = preferredDistanceFor(anchors, newR, padding, fallbackRadius);
-
-    const { x, y, crowded } = findPlacementPosition({
-      centers: anchors.length ? [...anchors, centroidOf(anchors)] : [graphCentroid],
-      preferredDist,
-      phase: placeIndex * 0.7,
-      bounds,
-      newR,
-      label,
-      occupied: buildOccupiedDiscs(placed),
-      padding,
-      anchors,
-      graphCentroid,
-      placeIndex,
-    });
-    if (crowded) needsLocalReorder = true;
-
-    node.position = { x, y };
-    const placedEntry = { id: nodeId, x, y, radius: newR, label };
-    placed.push(placedEntry);
-    if (nodeId) {
-      placedById.set(nodeId, placedEntry);
-      markNeighborsConnected(nodeId);
-    }
-    placeIndex += 1;
-  }
-
-  return { nodes: newNodes, needsLocalReorder };
-}
-
 const MIN_GRAPH_SEARCH_LENGTH = 2;
-
 
 export function normalizeGraphSearchTerm(term) {
   const trimmed = typeof term === 'string' ? term.trim() : '';
@@ -2083,14 +534,18 @@ function createFilteredElementIds(filteredElements) {
  * @param {Object} cy - Cytoscape 인스턴스
  * @param {Array} filteredElements - 검색 결과 요소들
  */
-export function applySearchFadeEffect(cy, filteredElements) {
+/**
+ * 검색 결과 밖 요소를 흐리게. 기존 하이라이트 클래스를 먼저 지운다.
+ * alreadyCleared: 호출 직전에 clearHighlightClassesOn을 이미 했으면 true (같은 정리를 두 번 하지 않음)
+ */
+export function applySearchFadeEffect(cy, filteredElements, { alreadyCleared = false } = {}) {
   if (!cy || typeof cy.elements !== 'function') {
     errorUtils.logDebug('applySearchFadeEffect', '유효하지 않은 Cytoscape 인스턴스');
     return;
   }
   
   try {
-    clearHighlightClassesOn(cy);
+    if (!alreadyCleared) clearHighlightClassesOn(cy);
 
     // 검색 활성 + 결과 없음 → 전체 페이드 (결과 없음 UI와 맞춤)
     if (!filteredElements || filteredElements.length === 0) {
@@ -2167,366 +622,839 @@ export function getNoSearchResultsMessage(searchTerm) {
   };
 }
 
+/* ─── 그래프 캔버스 키보드 탐색: 화살표로 노드·간선 이동, Enter로 선택, Escape로 해제, +/-/0 줌 ─── */
 
-/* ─── 차트 데이터 (레이더·관계 타임라인) ─── */
 
-export const extractRadarChartData = (nodeId, relations, elements, maxDisplay = 8) => {
-  if (!nodeId || !relations || !Array.isArray(relations)) return [];
-
-  const targetNodeId = String(nodeId);
-  const radarDataMap = new Map();
-  const nodeById = new Map();
-  for (const el of asArray(elements)) {
-    // find()와 같게 첫 번째 일치 유지
-    if (isGraphNodeElement(el) && !nodeById.has(String(el.data.id))) nodeById.set(String(el.data.id), el);
+function graphElementLabel(ele) {
+  if (!ele?.length) return '';
+  const data = ele.data?.() || {};
+  if (isCyNode(ele)) {
+    return pickCharacterDisplayName(data) || String(data.id || '이름 없음');
   }
-
-  relations.forEach((rel) => {
-    const id1 = String(rel.id1);
-    const id2 = String(rel.id2);
-    let connectedNodeId = null;
-    if (id1 === targetNodeId) connectedNodeId = id2;
-    else if (id2 === targetNodeId) connectedNodeId = id1;
-
-    if (!connectedNodeId) return;
-
-    const existingData = radarDataMap.get(connectedNodeId);
-    const positivity = toNumberOrNull(rel.positivity);
-    if (!existingData || Math.abs(positivity) > Math.abs(existingData.positivity)) {
-      const connectedNode = nodeById.get(connectedNodeId);
-      if (connectedNode && Number.isFinite(positivity)) {
-        const name =
-          connectedNode.data.label || connectedNode.data.common_name || `인물 ${connectedNodeId}`;
-        radarDataMap.set(connectedNodeId, {
-          id: connectedNodeId,
-          name,
-          positivity,
-          normalizedValue: ((positivity + 1) / 2) * 100,
-          relationTags: rel.relation || [],
-        });
-      }
-    }
-  });
-
-  const radarData = Array.from(radarDataMap.values());
-  radarData.sort((a, b) => Math.abs(b.positivity) - Math.abs(a.positivity));
-  return radarData.slice(0, maxDisplay);
-};
-
-export function padSingleEvent(points, labels) {
-  if (!Array.isArray(points) || !Array.isArray(labels) || points.length !== 1) {
-    return { points, labels };
-  }
-
-  return {
-    points: Array.from({ length: 11 }, (_, index) => (index === 5 ? points[0] : null)),
-    labels: Array.from({ length: 11 }, (_, index) => (index === 5 ? labels[0] : '')),
-  };
+  const sn = pickCharacterDisplayName(ele.source?.()?.data?.()) || '인물';
+  const tn = pickCharacterDisplayName(ele.target?.()?.data?.()) || '인물';
+  return `${sn}와 ${tn}의 관계`;
 }
 
-/** 간선 관계 타임라인 차트 UX */
-const EDGE_CHART_UX = {
-  LONG_THRESHOLD: 12,
-  /** positivity -1~1 기준 유의미 변화 */
-  SIGNIFICANT_DELTA: 0.15,
-};
-
-export function isLongEdgeTimeline(pointCount) {
-  return pointCount >= EDGE_CHART_UX.LONG_THRESHOLD;
+function isNavigableGraphElement(ele) {
+  if (!ele?.length) return false;
+  if (typeof ele.visible === 'function' && !ele.visible()) return false;
+  if (typeof ele.hasClass === 'function' && ele.hasClass('faded')) return false;
+  return true;
 }
 
-/** 변곡·시작점에 isSignificant 표시 */
-function annotateSignificantEdgePoints(pairs, delta = EDGE_CHART_UX.SIGNIFICANT_DELTA) {
-  if (!Array.isArray(pairs)) return [];
-  return pairs.map((pair, i) => {
-    if (i === 0 || i === pairs.length - 1) {
-      return { ...pair, isSignificant: true };
-    }
-    const prev = pairs[i - 1]?.value;
-    const cur = pair?.value;
-    if (typeof prev !== 'number' || typeof cur !== 'number') {
-      return { ...pair, isSignificant: false };
-    }
-    return {
-      ...pair,
-      isSignificant: Math.abs(cur - prev) >= delta,
-    };
-  });
+function compareByGraphLabelKo(a, b) {
+  return compareKo(graphElementLabel(a), graphElementLabel(b));
 }
 
-/**
- * X축 라벨용 tick.
- * 챕터가 많아도 겹치지 않도록 개수를 제한하고 간격을 유지한다.
- * (항상: 첫·끝·현재 / 챕터는 균등 샘플)
- */
-export function getSparseEdgeTickValues(lineData, { maxTicks = 6 } = {}) {
-  if (!Array.isArray(lineData) || lineData.length === 0) return [];
-  if (lineData.length <= maxTicks) {
-    return lineData.map((d) => d.x);
+function listNavigableGraphNodes(cy) {
+  if (!cy || cy.destroyed?.()) return [];
+  try {
+    return cy
+      .nodes()
+      .filter((n) => isNavigableGraphElement(n))
+      .sort(compareByGraphLabelKo)
+      .toArray();
+  } catch {
+    return [];
   }
-
-  const byX = new Map(lineData.map((d) => [d.x, d]));
-  const chosen = new Set();
-
-  chosen.add(lineData[0].x);
-  chosen.add(lineData[lineData.length - 1].x);
-  lineData.forEach((d) => {
-    if (d.isCurrent) chosen.add(d.x);
-  });
-
-  const chapters = lineData.filter((d) => d.isChapter);
-  if (chapters.length > 0) {
-    const chapterBudget = Math.max(2, maxTicks - chosen.size);
-    if (chapters.length <= chapterBudget) {
-      chapters.forEach((d) => chosen.add(d.x));
-    } else {
-      chosen.add(chapters[0].x);
-      chosen.add(chapters[chapters.length - 1].x);
-      const innerSlots = Math.max(0, chapterBudget - 2);
-      for (let i = 1; i <= innerSlots; i += 1) {
-        const idx = Math.round((i * (chapters.length - 1)) / (innerSlots + 1));
-        chosen.add(chapters[idx].x);
-      }
-    }
-  }
-
-  if (chosen.size < 3) {
-    chosen.add(lineData[Math.floor(lineData.length / 2)].x);
-  }
-
-  const sorted = [...chosen].sort((a, b) => a - b);
-  const minGap = Math.max(1, Math.floor(lineData.length / maxTicks));
-  const thinned = [];
-
-  sorted.forEach((x) => {
-    const point = byX.get(x);
-    if (thinned.length === 0) {
-      thinned.push(x);
-      return;
-    }
-    const prevX = thinned[thinned.length - 1];
-    if (x - prevX >= minGap) {
-      thinned.push(x);
-      return;
-    }
-    const prev = byX.get(prevX);
-    const preferCurrent = point?.isCurrent && !prev?.isCurrent;
-    const preferEnd =
-      x === lineData[lineData.length - 1].x && prevX !== lineData[lineData.length - 1].x;
-    if (preferCurrent || preferEnd) {
-      thinned[thinned.length - 1] = x;
-    }
-  });
-
-  if (thinned[0] !== lineData[0].x) thinned.unshift(lineData[0].x);
-  const lastX = lineData[lineData.length - 1].x;
-  if (thinned[thinned.length - 1] !== lastX) thinned.push(lastX);
-
-  return [...new Set(thinned)].sort((a, b) => a - b);
 }
 
-/**
- * 차트 표시용 라벨. E12 → event 12, Ch는 유지.
- */
-function formatEdgeTimelineDisplayLabel(label, numericLabel, fallbackIndex = 0) {
-  if (typeof label === 'string') {
-    const trimmed = label.trim();
-    if (isEdgeChapterLabel(trimmed)) return trimmed;
-    const eventMatch = trimmed.match(/^E(\d+)$/i);
-    if (eventMatch) return `event ${eventMatch[1]}`;
+function listNavigableGraphEdgesForNode(node) {
+  if (!node?.length) return [];
+  try {
+    return node
+      .connectedEdges()
+      .filter((e) => isNavigableGraphElement(e))
+      .sort(compareByGraphLabelKo)
+      .toArray();
+  } catch {
+    return [];
   }
-  if (Number.isFinite(numericLabel) && numericLabel > 0) {
-    return `event ${numericLabel}`;
-  }
-  return `event ${fallbackIndex + 1}`;
 }
 
-function extractEdgeTimelineNumericLabel(label) {
-  if (typeof label === 'number' && Number.isFinite(label)) {
-    return label;
+function setKeyboardFocusElement(cy, element) {
+  if (!cy || cy.destroyed?.()) return;
+  try {
+    cy.batch(() => {
+      cy.nodes('.kb-focus').removeClass('kb-focus');
+      cy.edges('.kb-focus').removeClass('kb-focus');
+      if (element?.length) element.addClass('kb-focus');
+    });
+  } catch {
+    /* ignore */
   }
-  if (typeof label === 'string') {
-    const match = label.match(/\d+/g);
-    if (match?.length > 0) {
-      const parsed = Number(match[match.length - 1]);
-      if (Number.isFinite(parsed)) return parsed;
-    }
-  }
-  return null;
 }
 
-function isEdgeChapterLabel(label) {
-  return typeof label === 'string' && /^Ch\d+/i.test(label.trim());
+function commitKeyboardFocus(cy, focusRef, kind, ele) {
+  setKeyboardFocusElement(cy, ele);
+  if (!focusRef) return;
+  focusRef.current = ele?.length ? { kind, id: String(ele.id()) } : null;
 }
 
-function isEdgePairCurrentEvent(pair, eventIdx) {
-  if (!pair || pair.isChapterAggregate) return false;
-  if (!Number.isFinite(eventIdx) || eventIdx <= 0) return false;
-  return Number.isFinite(pair.numericLabel) && pair.numericLabel === eventIdx;
+function announceFocus(kind, ele, index, total) {
+  const pos = `${index + 1}/${total}`;
+  const label = graphElementLabel(ele);
+  return kind === 'edge'
+    ? `${label} 포커스. ${pos}. Enter로 상세.`
+    : `인물 ${label} 포커스. ${pos}. Enter로 상세, 선택 후 좌우로 관계.`;
 }
 
-/** 클릭한 간선의 현재 긍정도를 타임라인의 현재 이벤트 점에 맞춤 (gap/미존재 점은 만들지 않음) */
-function alignPairsWithEdgePositivity(pairs, edgePositivity, displayEventNum) {
-  if (edgePositivity == null || !Number.isFinite(displayEventNum) || displayEventNum <= 0) {
-    return pairs;
-  }
-
-  const currentIdx = pairs.findIndex(
-    (pair) =>
-      !pair.isChapterAggregate &&
-      Number.isFinite(pair.numericLabel) &&
-      pair.numericLabel === displayEventNum,
-  );
-  if (currentIdx < 0) return pairs;
-
-  const current = pairs[currentIdx];
-  // 관계 공백(gap)은 이력 그대로 유지 — 간선 값으로 채우지 않음
-  if (current.isGap || typeof current.value !== 'number') return pairs;
-
-  const next = pairs.map((pair) => ({ ...pair }));
-  next[currentIdx] = {
-    ...next[currentIdx],
-    value: edgePositivity,
-  };
-  return next;
-}
-
-/**
- * 관계 타임라인 → Recharts line data
- * @returns {{ rechartsLineData: object[], hasChartData: boolean, numericPointCount: number }}
- */
-export function buildEdgeRechartsLineData({
-  timeline,
-  labels,
-  edgePositivity,
-  displayEventNum,
-  isViewer,
-  effectiveEventColumns,
-  relationError,
+function moveKeyboardFocus(cy, {
+  list,
+  kind,
+  delta,
+  focusRef,
+  currentId,
+  fallbackId = null,
+  onAnnounce,
+  center = false,
 }) {
-  if (relationError) {
-    return { rechartsLineData: [], hasChartData: false, numericPointCount: 0 };
+  if (!list.length) {
+    onAnnounce?.(kind === 'edge' ? '연결된 관계가 없습니다.' : '탐색할 인물이 없습니다.');
+    return true;
   }
-
-  const pairs = [];
-  const timelineHasValues =
-    Array.isArray(timeline) &&
-    timeline.some((value) => value === null || (typeof value === 'number' && !Number.isNaN(value)));
-
-  if (timelineHasValues && Array.isArray(labels) && labels.length > 0) {
-    const length = Math.min(labels.length, timeline.length);
-
-    for (let i = 0; i < length; i += 1) {
-      const label = labels[i];
-      const value = timeline[i];
-      const isChapter = isEdgeChapterLabel(label);
-      const numericLabel = extractEdgeTimelineNumericLabel(label);
-
-      if (
-        isViewer &&
-        Number.isFinite(effectiveEventColumns) &&
-        Number.isFinite(numericLabel) &&
-        numericLabel > effectiveEventColumns
-      ) {
-        continue;
-      }
-
-      // 관계 공백(null) — 축은 유지하고 선은 끊음
-      if (value === null) {
-        if (!Number.isFinite(numericLabel) && !isChapter) continue;
-        pairs.push({
-          value: null,
-          label,
-          numericLabel: Number.isFinite(numericLabel) ? numericLabel : null,
-          isChapterAggregate: false,
-          isGap: true,
-        });
-        continue;
-      }
-
-      if (typeof value !== 'number' || Number.isNaN(value)) {
-        continue;
-      }
-
-      const normalizedValue = clampPositivity(value);
-
-      if (
-        isChapter &&
-        timeline[i + 1] !== undefined &&
-        typeof timeline[i + 1] === 'number' &&
-        !Number.isNaN(timeline[i + 1])
-      ) {
-        pairs.push({
-          value: normalizedValue,
-          label,
-          numericLabel: null,
-          isChapterAggregate: true,
-        });
-        continue;
-      }
-
-      if (!Number.isFinite(numericLabel)) {
-        continue;
-      }
-
-      pairs.push({
-        value: normalizedValue,
-        label,
-        numericLabel,
-        isChapterAggregate: false,
+  let idx = list.findIndex((el) => String(el.id()) === String(currentId));
+  if (idx < 0 && fallbackId != null) {
+    idx = list.findIndex((el) => String(el.id()) === String(fallbackId));
+  }
+  idx = cycleIndex(idx, list.length, delta);
+  const ele = list[idx];
+  commitKeyboardFocus(cy, focusRef, kind, ele);
+  if (center) {
+    try {
+      centerSelectionOnElementId(cy, ele.id(), {
+        duration: 220,
+        padding: 48,
+        reserveRight: 24,
       });
+    } catch {
+      /* ignore */
     }
   }
+  onAnnounce?.(announceFocus(kind, ele, idx, list.length));
+  return true;
+}
 
-  // 타임라인 없고 로드 에러가 아닐 때만 현재 간선 positivity로 단점 보조
-  if (pairs.length === 0 && edgePositivity !== null) {
-    pairs.push({
-      value: edgePositivity,
-      label: `E${displayEventNum || 1}`,
-      numericLabel: displayEventNum || 1,
-      isChapterAggregate: false,
+const ZOOM_KEY_FACTORS = new Map([
+  ['+', GRAPH_ZOOM.STEP],
+  ['=', GRAPH_ZOOM.STEP],
+  ['-', 1 / GRAPH_ZOOM.STEP],
+  ['_', 1 / GRAPH_ZOOM.STEP],
+]);
+
+const ARROW_KEYS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
+
+
+function clearGraphKeyboardFocus(cy, { onClearSelection, keyboardFocusRef, onAnnounce }) {
+  onClearSelection?.();
+  setKeyboardFocusElement(cy, null);
+  if (keyboardFocusRef) keyboardFocusRef.current = null;
+  onAnnounce?.('선택과 포커스를 해제했습니다.');
+  return true;
+}
+
+/** 화살표: 인물 순환. 노드 선택 중 좌우는 그 인물의 연결 관계 순환 */
+function moveFocusByArrow(cy, key, { keyboardFocusRef, onAnnounce, selectedKind, selectedId }) {
+  const focus = keyboardFocusRef?.current;
+  const delta = key === 'ArrowDown' || key === 'ArrowRight' ? 1 : -1;
+  const isHorizontal = key === 'ArrowLeft' || key === 'ArrowRight';
+
+  if (selectedKind === 'node' && selectedId && isHorizontal) {
+    return moveKeyboardFocus(cy, {
+      list: listNavigableGraphEdgesForNode(cy.getElementById(String(selectedId))),
+      kind: 'edge',
+      delta,
+      focusRef: keyboardFocusRef,
+      currentId: focus?.kind === 'edge' ? focus.id : null,
+      onAnnounce,
     });
   }
 
-  const alignedPairs = alignPairsWithEdgePositivity(pairs, edgePositivity, displayEventNum);
+  return moveKeyboardFocus(cy, {
+    list: listNavigableGraphNodes(cy),
+    kind: 'node',
+    delta,
+    focusRef: keyboardFocusRef,
+    currentId: focus?.kind === 'node' ? focus.id : null,
+    fallbackId: selectedId,
+    onAnnounce,
+    center: true,
+  });
+}
 
-  let active = alignedPairs.some((pair) => typeof pair.value === 'number');
-  if (active && isViewer && Number.isFinite(displayEventNum) && displayEventNum > 0) {
-    const hasCurrent = alignedPairs.some((pair) => isEdgePairCurrentEvent(pair, displayEventNum));
-    if (!hasCurrent) {
-      active = alignedPairs.some(
-        (pair) =>
-          !pair.isChapterAggregate &&
-          Number.isFinite(pair.numericLabel) &&
-          pair.numericLabel <= displayEventNum &&
-          typeof pair.value === 'number',
+/** Enter/Space: 포커스 요소 선택 (포커스가 없으면 첫 인물) */
+function activateKeyboardFocus(cy, { keyboardFocusRef, onSelectById, onAnnounce }) {
+  let kind = keyboardFocusRef?.current?.kind;
+  let id = keyboardFocusRef?.current?.id;
+  if (!id) {
+    const nodes = listNavigableGraphNodes(cy);
+    if (!nodes.length) {
+      onAnnounce?.('선택할 인물이 없습니다.');
+      return true;
+    }
+    kind = 'node';
+    id = String(nodes[0].id());
+    commitKeyboardFocus(cy, keyboardFocusRef, 'node', nodes[0]);
+  }
+
+  if (!onSelectById?.(kind, id)) {
+    onAnnounce?.('선택을 적용하지 못했습니다.');
+    return true;
+  }
+  const label = graphElementLabel(cy.getElementById(String(id)));
+  onAnnounce?.(kind === 'edge' ? `${label} 상세를 열었습니다.` : `인물 ${label} 상세를 열었습니다.`);
+  return true;
+}
+
+/**
+ * 그래프 캔버스 region 포커스 단축키.
+ * +/= 확대, - 축소, 0 맞춤, Escape 선택·포커스 해제.
+ * 화살표: 인물 순환(선택 중 좌우는 연결 관계). Enter/Space: 포커스 선택.
+ * @returns {boolean} 처리 여부
+ */
+export function handleGraphCanvasHotkeys(event, options = {}) {
+  if (!event || event.defaultPrevented) return false;
+  if (event.metaKey || event.ctrlKey || event.altKey) return false;
+  if (isTypingTarget(event.target)) return false;
+
+  const { cy } = options;
+  const { key } = event;
+
+  if (key === 'Escape') {
+    event.preventDefault();
+    return clearGraphKeyboardFocus(cy, options);
+  }
+
+  if (!cy || cy.destroyed?.()) return false;
+
+  if (ZOOM_KEY_FACTORS.has(key)) {
+    event.preventDefault();
+    return zoomGraphByFactor(cy, ZOOM_KEY_FACTORS.get(key));
+  }
+  if (key === '0') {
+    event.preventDefault();
+    return fitGraphToNodes(cy, { duration: GRAPH_ZOOM.FIT_DURATION_MS });
+  }
+  if (ARROW_KEYS.has(key)) {
+    event.preventDefault();
+    return moveFocusByArrow(cy, key, options);
+  }
+  if (key === 'Enter' || key === ' ') {
+    event.preventDefault();
+    return activateKeyboardFocus(cy, options);
+  }
+  return false;
+}
+
+/* ─── Cytoscape 인스턴스·레이아웃 실행·elements 동기화·툴팁 payload ─── */
+
+
+let coseBilkentRegistered = false;
+
+function ensureCoseBilkentRegistered() {
+  if (coseBilkentRegistered) return;
+  cytoscape.use(coseBilkent);
+  coseBilkentRegistered = true;
+}
+
+/** cy 파괴·컨테이너 detach 중 호출해도 throw 하지 않음 */
+export function safeCyCall(cy, operation, context = 'cy') {
+  if (!cy || cy.destroyed?.()) return null;
+  try {
+    return operation();
+  } catch (error) {
+    errorUtils.logDebug(context, 'cy operation failed', {
+      message: error?.message,
+    });
+    return null;
+  }
+}
+
+/** element 정의 배열의 data를 기존 cy 노드/엣지에 동기화 */
+function syncCyElementData(cy, defs) {
+  if (!cy || !defs?.length) return;
+  for (const def of defs) {
+    const rawId = def?.data?.id;
+    if (rawId == null || rawId === '') continue;
+    const el = cy.getElementById(String(rawId));
+    if (!el || el.length === 0) continue;
+    try {
+      el.data(def.data);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+/** props 정의에서 id Set */
+function elementDefIdSet(defs) {
+  return new Set(
+    (defs || [])
+      .map((d) => (d?.data?.id != null ? String(d.data.id) : ''))
+      .filter(Boolean),
+  );
+}
+
+/**
+ * 다음 그래프에도 남는 기존 노드의 위치·반지름·weight (증분 배치 시드)
+ * @param {Set<string>} prevNodeIds
+ * @param {Set<string>} nextNodeIds
+ */
+function collectContinuingNodeLayoutSeed(cy, prevNodeIds, nextNodeIds) {
+  const placedPositions = [];
+  const placedWeights = [];
+  if (!cy || !prevNodeIds?.size) return { placedPositions, placedWeights };
+  prevNodeIds.forEach((id) => {
+    if (!nextNodeIds.has(id)) return;
+    const n = cy.getElementById(id);
+    if (!n || n.length === 0) return;
+    try {
+      const pos = n.position();
+      placedPositions.push({
+        id,
+        x: pos.x,
+        y: pos.y,
+        radius: readNodeRadius(n, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE),
+        label: n.data('label') || '',
+      });
+      const w = n.data('weight');
+      if (w != null) placedWeights.push(w);
+    } catch {
+      /* ignore */
+    }
+  });
+  return { placedPositions, placedWeights };
+}
+
+/** id 목록을 안정적인 비교 키로 */
+export function stableIdListKey(ids) {
+  if (!ids?.length) return '';
+  return [...ids].map(String).filter(Boolean).sort().join('\x1f');
+}
+
+const PRESET_LAYOUT = Object.freeze({
+  name: 'preset',
+  fit: false,
+  animate: false,
+});
+
+/** 최초 로딩·전체 재배치용. animate:false로 동기 완료
+ *  노드 반지름이 최대 40px(graphStyles NODE_SIZE_MAX/2)까지 나오므로, 인접 노드가 맞닿아 보이지 않도록
+ *  idealEdgeLength·nodeRepulsion·tilingPadding을 노드 크기 대비 여유 있게 잡는다. */
+const COSE_BILKENT_LAYOUT = Object.freeze({
+  name: 'cose-bilkent',
+  fit: false,
+  animate: false,
+  randomize: false,
+  nodeDimensionsIncludeLabels: true,
+  nodeRepulsion: 5500,
+  idealEdgeLength: 130,
+  edgeElasticity: 0.45,
+  nestingFactor: 0.1,
+  gravity: 0.25,
+  numIter: 2500,
+  tile: true,
+  tilingPaddingVertical: 32,
+  tilingPaddingHorizontal: 32,
+});
+
+/** 노드가 몇 개뿐인 그래프에 COSE_BILKENT_LAYOUT 기본값(넓은 그래프 기준)을 그대로 쓰면
+ *  서로 당겨줄 간선·중력이 약해 과도하게 퍼진다. 노드 수가 적을수록 간선 길이·반발력을
+ *  줄이고 중력을 높여 촘촘하게 모은다. */
+const LAYOUT_DENSITY_RANGE = {
+  MIN_NODES: 3,
+  MAX_NODES: 20,
+  SPARSE: { idealEdgeLength: 70, nodeRepulsion: 2200, gravity: 0.5 },
+};
+
+function lerp(a, b, t) {
+  return a + (b - a) * t;
+}
+
+/** 노드 수에 맞춰 idealEdgeLength·nodeRepulsion·gravity를 보간한 cose-bilkent 레이아웃 옵션 */
+function resolveCoseBilkentLayout(nodeCount) {
+  const { MIN_NODES, MAX_NODES, SPARSE } = LAYOUT_DENSITY_RANGE;
+  const count = Number(nodeCount);
+
+  if (!Number.isFinite(count) || count <= MIN_NODES) {
+    return { ...COSE_BILKENT_LAYOUT, ...SPARSE };
+  }
+  if (count >= MAX_NODES) {
+    return { ...COSE_BILKENT_LAYOUT };
+  }
+
+  const t = (count - MIN_NODES) / (MAX_NODES - MIN_NODES);
+  return {
+    ...COSE_BILKENT_LAYOUT,
+    idealEdgeLength: lerp(SPARSE.idealEdgeLength, COSE_BILKENT_LAYOUT.idealEdgeLength, t),
+    nodeRepulsion: lerp(SPARSE.nodeRepulsion, COSE_BILKENT_LAYOUT.nodeRepulsion, t),
+    gravity: lerp(SPARSE.gravity, COSE_BILKENT_LAYOUT.gravity, t),
+  };
+}
+
+/** preset 레이아웃 (eles 지정 시 해당 컬렉션만) */
+export function runPresetLayout(cy, eles) {
+  if (!cy) return;
+  if (eles?.length > 0) {
+    try {
+      cy.layout({ ...PRESET_LAYOUT, eles }).run();
+      return;
+    } catch {
+      /* fall through */
+    }
+  }
+  try {
+    cy.layout({ ...PRESET_LAYOUT }).run();
+  } catch {
+    /* ignore */
+  }
+}
+
+/** 최초/전체 재배치용 cose-bilkent (실패 시 preset). 노드 수가 적으면 간격을 촘촘하게 스케일. */
+export function runCoseBilkentLayout(cy) {
+  if (!cy) return;
+  ensureCoseBilkentRegistered();
+  try {
+    cy.layout(resolveCoseBilkentLayout(cy.nodes().length)).run();
+  } catch {
+    runPresetLayout(cy);
+  }
+}
+
+const parseJsonSafely = (value) => {
+  if (typeof value !== 'string') {
+    return value;
+  }
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+};
+
+function tooltipEndpointInfo(cyNode) {
+  if (!cyNode || typeof cyNode.data !== 'function') {
+    return { id: null, label: '', image: '' };
+  }
+  const d = cyNode.data() || {};
+  return {
+    id: d.id ?? (typeof cyNode.id === 'function' ? cyNode.id() : null),
+    label: pickCharacterDisplayName(d),
+    image: d.image || '',
+  };
+}
+
+function buildNodeTooltip(base, center) {
+  const fields = base.data ?? {};
+  return {
+    ...base,
+    ...fields,
+    nodeCenter: center,
+    names: parseJsonSafely(fields.names),
+    isMainCharacter: !!fields.isMainCharacter,
+    common_name: pickCharacterDisplayName(fields),
+    description: fields.description || '',
+    personalityText: fields.personalityText || '',
+    image: fields.image || '',
+    weight: fields.weight || 1,
+  };
+}
+
+/** labelHistory는 객체({라벨: 메타})만 허용 */
+function parseLabelHistory(value) {
+  const parsed = parseJsonSafely(value);
+  return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+}
+
+function buildEdgeTooltip(base, element, center) {
+  const data = base.data ?? {};
+  const relation = normalizeRelationArray(parseJsonSafely(data.relation));
+  return {
+    ...base,
+    sourceEndpoint: tooltipEndpointInfo(element.source()),
+    targetEndpoint: tooltipEndpointInfo(element.target()),
+    edgeCenter: center,
+    data: {
+      ...base.data,
+      relation,
+      latestLabels: normalizeRelationArray(parseJsonSafely(data.latestLabels)),
+      labelHistory: parseLabelHistory(data.labelHistory),
+      label: data.label || relation[relation.length - 1] || '',
+      // positivity는 서버/그래프 값만 유지 — 없으면 null (0과 '없음' 구분)
+      positivity: data.positivity == null || data.positivity === '' ? null : data.positivity,
+      count: data.count ?? 1,
+    },
+  };
+}
+
+/** 탭 이벤트 → 툴팁용 payload */
+export function openTooltipFromTap(tapPayload, type) {
+  if (!tapPayload) return null;
+  const isNode = type === 'node';
+  const element = isNode ? tapPayload.node : tapPayload.edge;
+  if (!element) return null;
+
+  try {
+    const center = isNode ? tapPayload.nodeCenter : tapPayload.edgeCenter;
+    const base = {
+      type,
+      id: element.id(),
+      x: tapPayload.mouseX ?? center?.x ?? 0,
+      y: tapPayload.mouseY ?? center?.y ?? 0,
+      data: element.data(),
+    };
+    return isNode ? buildNodeTooltip(base, center) : buildEdgeTooltip(base, element, center);
+  } catch {
+    return tapPayload;
+  }
+}
+
+export const isSidebarElement = (event) => {
+  const target = event?.target;
+  if (!target || typeof target.closest !== 'function') return false;
+  return Boolean(
+    target.closest('[data-testid="graph-sidebar"]') ||
+    target.closest('[data-testid="chapter-sidebar"]') ||
+    target.closest('.graph-sidebar')
+  );
+};
+
+/** 드래그 노드 좌표는 고정, 겹친 주변만 밀어냄 (앵커 배치 로직 미적용) */
+export function resolveUserDragCollisions(cyInstance, container, draggedNode, { clampBounds = false } = {}) {
+  if (!draggedNode || draggedNode.length === 0) return;
+  if (clampBounds && isGraphContainerSizeReady(container)) {
+    ensureElementsInBounds(cyInstance, container, { nodes: draggedNode });
+  }
+  const profile = OVERLAP_PROFILES.USER_DRAG;
+  const draggedPos = draggedNode.position();
+  const draggedRadius = readNodeRadius(draggedNode, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE);
+  const proximity = Math.max(0, (profile.padding ?? 0) - (profile.tolerance ?? 0));
+  const movableIds = [];
+  cyInstance.nodes(':visible').forEach((node) => {
+    if (node.id() === draggedNode.id()) return;
+    const pos = node.position();
+    const radius = readNodeRadius(node, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE);
+    const activationDistance = draggedRadius + radius + proximity;
+    if (Math.hypot(pos.x - draggedPos.x, pos.y - draggedPos.y) < activationDistance) {
+      movableIds.push(node.id());
+    }
+  });
+  if (movableIds.length === 0) return;
+  detectAndResolveOverlap(cyInstance, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE, {
+    ...profile,
+    movableIds,
+  });
+  syncReciprocalPairJunctionOffsets(cyInstance, { immediate: true });
+}
+
+/** 기존 인스턴스가 살아 있으면 재마운트, 아니면 생성. 실패 시 null */
+export function mountCytoscape(container, externalCyRef, initialStylesheet) {
+  try {
+    const existing = externalCyRef?.current;
+    const isLive =
+      existing &&
+      typeof existing.container === "function" &&
+      !existing.destroyed?.();
+    if (isLive) {
+      if (existing.container() !== container) existing.mount(container);
+      return { cyInstance: existing, didCreateInstance: false };
+    }
+    const cyInstance = cytoscape({
+      container,
+      elements: [],
+      style: initialStylesheet,
+      layout: PRESET_LAYOUT,
+      pixelRatio: 'auto',
+      userZoomingEnabled: true,
+      userPanningEnabled: true,
+      wheelSensitivity: GRAPH_ZOOM.WHEEL_SENSITIVITY,
+      minZoom: GRAPH_ZOOM.MIN,
+      maxZoom: GRAPH_ZOOM.MAX,
+      autoungrabify: false,
+      autolock: false,
+      autounselectify: false,
+      selectionType: "single",
+      touchTapThreshold: 8,
+      desktopTapThreshold: 4,
+    });
+    if (externalCyRef) externalCyRef.current = cyInstance;
+    return { cyInstance, didCreateInstance: true };
+  } catch (err) {
+    errorUtils.logDebug('graphCy', 'cy init failed', {
+      message: err?.message,
+    });
+    return null;
+  }
+}
+
+/**
+ * 시각 시그니처 diff. 신규 요소는 제외하고,
+ * 골격(structure)이 이전과 같고 추가가 없으면 이미지 변경만 남긴다 (라벨 등 변경은 펄스 생략).
+ */
+function diffVisualSignatures(elements, prevSig, newIdSet, { sameStructureNoAdds }) {
+  const nextSig = new Map();
+  const changed = [];
+  for (const el of elements) {
+    const rawId = el?.data?.id;
+    if (rawId == null || rawId === "") continue;
+    const sid = String(rawId);
+    const sig = visualElementSignature(el);
+    nextSig.set(sid, sig);
+    if (prevSig.size > 0 && prevSig.has(sid) && prevSig.get(sid) !== sig && !newIdSet.has(sid)) {
+      changed.push(sid);
+    }
+  }
+  const dataChangedIds = sameStructureNoAdds
+    ? changed.filter(
+        (sid) => visualSignatureImagePart(prevSig.get(sid)) !== visualSignatureImagePart(nextSig.get(sid)),
+      )
+    : changed;
+  return { nextSig, dataChangedIds };
+}
+
+/**
+ * props elements를 cy에 반영 (cy.batch 안에서 호출).
+ * 사라진 요소 제거 → 유지 요소 data 동기화(좌표 보존) → 신규 노드 앵커 배치 후 추가.
+ * @returns {{ update: object, nextSig: Map, structureFp: string }} update는 useGraphLayout이 소비
+ */
+export function syncElementsIntoCy(cy, elements, { prevSig, prevStructureFp, containerWidth, containerHeight }) {
+  const nodes = elements.filter((el) => el?.data && !isGraphEdgeElement(el));
+  const edges = elements.filter(isGraphEdgeElement);
+  const prevNodeIds = new Set(cy.nodes().map((n) => String(n.id())));
+  const prevEdgeIds = new Set(cy.edges().map((e) => String(e.id())));
+  const hadExistingGraph = prevNodeIds.size > 0;
+  const nextNodeIds = elementDefIdSet(nodes);
+  const nextEdgeIds = elementDefIdSet(edges);
+
+  // 이미 그려진 id가 다음 props에도 모두 있으면 "순증가"만 → 제거 루프 생략(전체 깜빡임·불필요한 재구성 방지)
+  const pureAdditive =
+    prevNodeIds.size > 0 &&
+    [...prevNodeIds].every((id) => nextNodeIds.has(id)) &&
+    [...prevEdgeIds].every((id) => nextEdgeIds.has(id));
+
+  let removedNodeCount = 0;
+  if (!pureAdditive) {
+    cy.nodes().forEach((n) => {
+      if (nextNodeIds.has(String(n.id()))) return;
+      n.remove();
+      removedNodeCount += 1;
+    });
+    cy.edges().forEach((e) => {
+      if (!nextEdgeIds.has(String(e.id()))) e.remove();
+    });
+  }
+
+  // 유지되는 요소는 data만 동기화. 좌표는 Cytoscape에 유지(이벤트 전환 시 기존 배치 보존)
+  syncCyElementData(cy, nodes);
+  syncCyElementData(cy, edges);
+
+  const { placedPositions, placedWeights } = collectContinuingNodeLayoutSeed(
+    cy,
+    prevNodeIds,
+    nextNodeIds,
+  );
+  const nodesToAdd = nodes.filter(
+    (node) => node?.data?.id != null && !prevNodeIds.has(String(node.data.id))
+  );
+  const edgesToAdd = edges.filter(
+    (edge) => edge?.data?.id != null && !prevEdgeIds.has(String(edge.data.id))
+  );
+
+  let needsLocalReorder = false;
+  // 유지되는 기존 노드가 있을 때만 증분 앵커 배치. 전부 교체면 cose 시드 유지
+  const canIncrementalPlace = hadExistingGraph && placedPositions.length > 0;
+  if (nodesToAdd.length > 0) {
+    if (canIncrementalPlace) {
+      const placed = calculateAnchorAwarePlacement(
+        nodesToAdd,
+        placedPositions,
+        edges,
+        containerWidth,
+        containerHeight,
+        {
+          padding: OVERLAP_RESOLVE.PADDING,
+          weightsForRange: placedWeights,
+        },
       );
+      needsLocalReorder = Boolean(placed?.needsLocalReorder);
+    }
+    cy.add(nodesToAdd);
+  }
+  if (edgesToAdd.length > 0) {
+    cy.add(edgesToAdd);
+  }
+
+  const newIdSet = new Set(
+    [...nodesToAdd.map((n) => n?.data?.id), ...edgesToAdd.map((e) => e?.data?.id)]
+      .filter((id) => id != null && id !== "")
+      .map((id) => String(id)),
+  );
+  const structureFp = buildElementsStructureFingerprint(elements);
+  const hasAdds = nodesToAdd.length > 0 || edgesToAdd.length > 0;
+  const { nextSig, dataChangedIds } = diffVisualSignatures(elements, prevSig, newIdSet, {
+    sameStructureNoAdds: Boolean(structureFp) && structureFp === prevStructureFp && !hasAdds,
+  });
+
+  return {
+    update: {
+      nodesToAdd,
+      edgesToAdd,
+      hasChanges: hasAdds,
+      dataChangedIds,
+      incrementalLayoutScope: canIncrementalPlace && nodesToAdd.length > 0,
+      needsLocalReorder,
+      // 노드 제거만 있어도 가중치 범위가 바뀔 수 있음 → 레이아웃에서 크기 재정규화
+      nodesRemoved: removedNodeCount > 0,
+    },
+    nextSig,
+    structureFp: structureFp || "",
+  };
+}
+
+// ── 레이아웃 마무리 (useGraphLayout에서 호출) ──
+
+/**
+ * 레이아웃 직후 마무리: (증분인데 뷰포트를 벗어나면 refit) → 경계 제약 → 겹침 해소 → (fitViewport면 전체 fit) → junction 동기화.
+ * movableIds가 있으면 그 노드만 경계·겹침 처리 대상으로 삼아 기존 배치를 보존한다.
+ * @returns {boolean} 전체 fit을 적용했으면 true
+ */
+export function finalizeGraphLayout(cy, container, {
+  fitViewport = false,
+  skipOverlap = false,
+  skipEnsureBounds = false,
+  movableIds = null,
+  canFit = () => true,
+} = {}) {
+  if (!cy) return false;
+
+  // 전체 재배치(초기·챕터 전환)가 아닌 증분 갱신(이벤트 확정 등)에서는 기존 배치를
+  // 흔들지 않는 게 원칙이지만, 늘어난 노드·간선(라벨 포함)이 현재 팬·줌 뷰포트를
+  // 벗어나면 좁은 화면 안으로 욱여넣어(cramping) 겹치는 대신 카메라를 재조정한다.
+  if (!fitViewport && isGraphContainerSizeReady(container)) {
+    const visible = cy.elements(':visible');
+    if (
+      visible.length > 0 &&
+      !isElementsFitInViewport(cy, visible, GRAPH_ZOOM.FIT_PADDING)
+    ) {
+      // fitGraphViewportInContainer는 fit 직후 동기적으로 ensureElementsInBounds를
+      // 돌리므로(애니메이션 중 팬·줌 값을 기준으로 하면 어긋남) duration 0(즉시)을 유지한다.
+      const refit = fitGraphViewportInContainer(cy, container, {
+        eles: visible,
+      });
+      if (refit) {
+        syncReciprocalPairJunctionOffsets(cy);
+        return false;
+      }
     }
   }
 
-  if (!active) {
-    return { rechartsLineData: [], hasChartData: false, numericPointCount: 0 };
+  const runBounds = () => {
+    if (skipEnsureBounds || !isGraphContainerSizeReady(container)) return;
+    if (!movableIds) {
+      ensureElementsInBounds(cy, container);
+      return;
+    }
+    // 전체 fit이 없는 증분 추가: 새로 들어온 노드만 캔버스 안으로 제약하고
+    // 기존 노드는 사용자가 기억한 배치를 그대로 유지한다.
+    const idSet = movableIds instanceof Set ? movableIds : new Set([...movableIds].map(String));
+    if (idSet.size === 0) return;
+    const scopedNodes = cy.nodes().filter((n) => idSet.has(String(n.id())));
+    if (scopedNodes.length > 0) {
+      ensureElementsInBounds(cy, container, { nodes: scopedNodes });
+    }
+  };
+
+  runBounds();
+  if (!skipOverlap) {
+    const profile = fitViewport
+      ? OVERLAP_PROFILES.INITIAL
+      : OVERLAP_PROFILES.INCREMENTAL;
+    detectAndResolveOverlap(cy, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE, {
+      ...(movableIds ? { movableIds } : {}),
+      ...profile,
+    });
+    // 밀어내기 후 화면 밖 노드 재제약 → 경계에서 생긴 겹침 경량 재해결
+    runBounds();
+    if (!skipEnsureBounds && isGraphContainerSizeReady(container)) {
+      detectAndResolveOverlap(cy, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE, {
+        ...(movableIds ? { movableIds } : {}),
+        ...OVERLAP_PROFILES.RESIZE,
+      });
+    }
+    // 최초 로딩: bounds/resize 후에도 본체 겹침이 남으면 제거
+    if (
+      fitViewport &&
+      hasOverlappingNodes(cy, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE, {
+        ...OVERLAP_PROFILES.APPEAR,
+      })
+    ) {
+      detectAndResolveOverlap(cy, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE, {
+        ...OVERLAP_PROFILES.APPEAR,
+      });
+      runBounds();
+    }
+  }
+  // 컨테이너 미준비거나 canFit()이 false면 fit 생략 → 호출부가 pending 유지 후 resize에서 재시도
+  const fitted = fitViewport && canFit() && fitGraphViewportInContainer(cy, container);
+  syncReciprocalPairJunctionOffsets(cy);
+  return Boolean(fitted);
+}
+
+/**
+ * 증분 추가 후 겹침 해소: 신규끼리 본체 분리 → 기존과의 겹침을 신규만 → 1-hop → 2-hop 순으로 범위를 넓혀 해결.
+ * 전체 그래프·cose로는 확대하지 않아 사용자가 기억한 배치를 보존한다.
+ */
+export function resolveIncrementalOverlap(cy, seedIds, forceExpand = false) {
+  const appearOpts = { ...OVERLAP_PROFILES.APPEAR };
+  const incrementalOpts = { ...OVERLAP_PROFILES.INCREMENTAL };
+
+  const stillAppearsOverlapping = (movableIds) =>
+    hasOverlappingNodes(cy, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE, {
+      movableIds,
+      ...appearOpts,
+    });
+
+  const resolveAppear = (movableIds) => {
+    detectAndResolveOverlap(cy, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE, {
+      ...appearOpts,
+      movableIds,
+    });
+    return stillAppearsOverlapping(movableIds);
+  };
+
+  const resolveIncremental = (movableIds) => {
+    detectAndResolveOverlap(cy, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE, {
+      ...incrementalOpts,
+      movableIds,
+    });
+    return hasOverlappingNodes(cy, OVERLAP_RESOLVE.FALLBACK_NODE_SIZE, {
+      movableIds,
+      ...incrementalOpts,
+    });
+  };
+
+  // 1) 신규 등장 노드끼리: tolerance 0으로 본체 겹침 제거
+  if (seedIds.length >= 2) {
+    let remain = resolveAppear(seedIds);
+    for (let i = 0; remain && i < 2; i += 1) {
+      remain = resolveAppear(seedIds);
+    }
   }
 
-  const annotated = annotateSignificantEdgePoints(alignedPairs);
-  const lineData = annotated.map((pair, i) => {
-    const isChapter = pair.isChapterAggregate || isEdgeChapterLabel(pair.label);
-    return {
-      x: i + 1,
-      y: typeof pair.value === 'number' ? pair.value : null,
-      label: formatEdgeTimelineDisplayLabel(pair.label, pair.numericLabel, i),
-      numericLabel: pair.numericLabel,
-      isChapter,
-      isCurrent: isEdgePairCurrentEvent(pair, displayEventNum),
-      isSignificant: !!pair.isSignificant,
-      isGap: !!pair.isGap,
-    };
-  });
+  // 2) 기존과의 겹침: 신규만 → 필요 시 1·2-hop
+  if (!forceExpand && seedIds.length > 0 && !resolveIncremental(seedIds)) return;
 
-  const numericPointCount = lineData.filter((d) => typeof d.y === 'number').length;
-  return {
-    rechartsLineData: lineData,
-    hasChartData: numericPointCount > 0,
-    numericPointCount,
-  };
+  const hop1 = [...collectNeighborhoodNodeIds(cy, seedIds, 1)];
+  if (!resolveIncremental(hop1)) return;
+
+  const hop2 = [...collectNeighborhoodNodeIds(cy, seedIds, 2)];
+  resolveIncremental(hop2);
+
+  // 신규끼리 잔여가 있으면 마지막으로 한 번 더 분리 (이웃 이동 후 재겹침 방지)
+  if (seedIds.length >= 2 && stillAppearsOverlapping(seedIds)) {
+    resolveAppear(seedIds);
+  }
+  // 중간 갱신에서는 사용자가 기억한 전체 배치를 보존한다.
+  // 잔여 경미 겹침 때문에 전체 그래프 또는 cose로 확대하지 않는다.
 }
