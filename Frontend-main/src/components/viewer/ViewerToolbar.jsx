@@ -1,5 +1,4 @@
-import { createElement, useState, useEffect, useMemo, useCallback } from 'react';
-import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import { createElement, useState, useEffect, useMemo } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
@@ -14,8 +13,8 @@ import {
   X,
 } from 'lucide-react';
 import { findViewerModeOption } from '../../utils/viewer/viewerSession';
-import { userViewerPath, userGraphPath } from '../../utils/common/urlUtils';
 import { useIsNarrowViewport } from '../../hooks/common/hooksShared';
+import { useOpenGraphPage } from '../../hooks/viewer/useOpenGraphPage';
 import './ViewerToolbar.css';
 
 const ICON_SM = 18;
@@ -89,6 +88,206 @@ function ScreenModeToggle({
   );
 }
 
+const BTN = 'xhtml-toolbar-btn';
+const COMPACT_BTN = `${BTN} ${BTN}--compact`;
+const MENU_BTN = `${BTN} ${BTN}--menu`;
+const EXIT_TITLE = '마이페이지로 돌아가기';
+const GRAPH_PAGE_TITLE = '챕터별 전체 관계도 페이지로 이동';
+
+function MobileToolbar({ onPrev, onNext, modeLabel, menuOpen, onToggleMenu }) {
+  const menuLabel = menuOpen ? '메뉴 닫기' : '메뉴 열기';
+  return (
+    <div className="viewer-toolbar-mobile">
+      <div className="viewer-toolbar-mobile-nav">
+        <ToolbarButton onClick={onPrev} title="이전 페이지 (←)" className={COMPACT_BTN}>
+          <ArrowLeft size={ICON_SM} aria-hidden />
+        </ToolbarButton>
+        <ToolbarButton onClick={onNext} title="다음 페이지 (→)" className={COMPACT_BTN}>
+          <ArrowRight size={ICON_SM} aria-hidden />
+        </ToolbarButton>
+      </div>
+      <div className="viewer-toolbar-mobile-mode">{modeLabel}</div>
+      <ToolbarButton onClick={onToggleMenu} title={menuLabel} ariaLabel={menuLabel} className={COMPACT_BTN}>
+        {menuOpen ? <X size={ICON_SM} aria-hidden /> : <Menu size={ICON_SM} aria-hidden />}
+      </ToolbarButton>
+    </div>
+  );
+}
+
+function DesktopToolbar({
+  onPrev,
+  onNext,
+  isBookmarked,
+  bookmarkTitle,
+  onAddBookmark,
+  onToggleBookmarkList,
+  onOpenGraphPage,
+  showGraph,
+  onToggleGraph,
+  graphToggleTitle,
+  viewMode,
+  onOpenSettings,
+  onExitToMypage,
+}) {
+  const ModeIcon = viewMode.Icon;
+  return (
+    <div className="viewer-toolbar-group-wrap">
+      <div className="viewer-toolbar-group-left">
+        <div className="toolbar-group toolbar-group--nav">
+          <ToolbarButton onClick={onPrev} title="이전 페이지로 이동 (←)" ariaLabel="이전 페이지">
+            <IconLabel icon={ArrowLeft} label="이전" />
+          </ToolbarButton>
+          <ToolbarButton onClick={onNext} title="다음 페이지로 이동 (→)" ariaLabel="다음 페이지">
+            <span className="viewer-toolbar-label">
+              다음
+              <ArrowRight size={ICON_SM} aria-hidden />
+            </span>
+          </ToolbarButton>
+        </div>
+
+        <div className="toolbar-group toolbar-group--bookmark">
+          <ToolbarButton
+            onClick={onAddBookmark}
+            title={bookmarkTitle}
+            ariaLabel="북마크"
+            className={`${BTN} ${BTN}--w-md`}
+          >
+            <IconLabel
+              icon={isBookmarked ? Bookmark : BookmarkPlus}
+              label="북마크"
+              center
+              strokeWidth={isBookmarked ? 2.5 : 2}
+            />
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={onToggleBookmarkList}
+            title="북마크 목록 열기"
+            ariaLabel="북마크 목록"
+            className={`${BTN} ${BTN}--w-lg`}
+          >
+            <IconLabel icon={BookMarked} label="북마크 목록" center />
+          </ToolbarButton>
+        </div>
+
+        <div className="toolbar-group toolbar-group--mode">
+          <ToolbarButton
+            onClick={onOpenGraphPage}
+            title={GRAPH_PAGE_TITLE}
+            ariaLabel="전체 관계도"
+            className={`${BTN} ${BTN}--w-lg`}
+          >
+            <IconLabel icon={Network} label="전체 관계도" center />
+          </ToolbarButton>
+          <ScreenModeToggle
+            showGraph={showGraph}
+            onToggleGraph={onToggleGraph}
+            title={graphToggleTitle}
+            className={`${BTN} ${BTN}--graph-toggle${showGraph ? ' is-active' : ''}`}
+          />
+          <div
+            className={`viewer-view-mode-badge${showGraph ? ' is-graph-on' : ''}`}
+            title={viewMode.label}
+          >
+            <ModeIcon size={ICON_SM} strokeWidth={2.5} aria-hidden />
+            <span className="viewer-view-mode-badge-label">{viewMode.label}</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="toolbar-group-right">
+        <div className="toolbar-group-right-inner">
+          <ToolbarButton
+            onClick={onOpenSettings}
+            title="뷰어 설정 열기"
+            ariaLabel="설정"
+            className={`${BTN} ${BTN}--w-sm`}
+          >
+            <span className="viewer-toolbar-settings-label">
+              <Settings size={ICON_SM} aria-hidden />
+              <span className="viewer-toolbar-settings-text">설정</span>
+            </span>
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={onExitToMypage}
+            title={EXIT_TITLE}
+            ariaLabel="닫기"
+            className={`${BTN} ${BTN}--icon`}
+          >
+            <X size={ICON_SM} aria-hidden />
+          </ToolbarButton>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MenuItem({ icon: Icon, label, title, onClick }) {
+  return (
+    <ToolbarButton onClick={onClick} title={title} className={MENU_BTN}>
+      <Icon size={ICON_SM} aria-hidden />
+      <span className="viewer-mobile-menu-label">{label}</span>
+    </ToolbarButton>
+  );
+}
+
+/** 모바일 메뉴. 북마크 추가·보기 전환은 메뉴를 열어둔 채 연속 조작, 나머지는 닫고 실행 */
+function MobileMenu({
+  onClose,
+  isBookmarked,
+  bookmarkTitle,
+  onAddBookmark,
+  onToggleBookmarkList,
+  onOpenGraphPage,
+  showGraph,
+  onToggleGraph,
+  graphToggleTitle,
+  onOpenSettings,
+  onExitToMypage,
+}) {
+  const closeThen = (action) => () => {
+    onClose();
+    action?.();
+  };
+
+  return (
+    <div className="viewer-mobile-menu" role="menu" aria-label="뷰어 메뉴">
+      <div className="viewer-mobile-menu-grid">
+        <MenuItem
+          icon={isBookmarked ? Bookmark : BookmarkPlus}
+          label="북마크"
+          title={bookmarkTitle}
+          onClick={onAddBookmark}
+        />
+        <MenuItem
+          icon={BookMarked}
+          label="북마크 목록"
+          title="북마크 목록 보기"
+          onClick={closeThen(onToggleBookmarkList)}
+        />
+        <MenuItem icon={Network} label="전체 관계도" title={GRAPH_PAGE_TITLE} onClick={closeThen(onOpenGraphPage)} />
+        <ScreenModeToggle
+          menu
+          showGraph={showGraph}
+          onToggleGraph={onToggleGraph}
+          title={graphToggleTitle}
+          className={`${MENU_BTN}${showGraph ? ' is-active' : ''}`}
+        />
+        <MenuItem icon={Settings} label="설정" title="뷰어 설정 열기" onClick={closeThen(onOpenSettings)} />
+        <button
+          type="button"
+          onClick={closeThen(onExitToMypage)}
+          className="viewer-mobile-menu-exit"
+          title={EXIT_TITLE}
+          aria-label="닫기"
+        >
+          <X size={ICON_SM} aria-hidden />
+          <span className="viewer-mobile-menu-label">닫기</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function ViewerToolbar({
   showToolbar,
   currentChapter = 1,
@@ -100,267 +299,45 @@ function ViewerToolbar({
   onOpenSettings,
   onToggleGraph,
   showGraph,
-  isFromLibrary = false,
-  previousPage = null,
   onExitToMypage,
 }) {
-  const navigate = useNavigate();
-  const { filename: bookId } = useParams();
-  const location = useLocation();
-  const book = location.state?.book;
   const isMobile = useIsNarrowViewport();
   const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const openGraphPage = useOpenGraphPage(currentChapter);
 
   useEffect(() => {
     if (!isMobile) setShowMobileMenu(false);
   }, [isMobile]);
 
   const viewMode = useMemo(() => findViewerModeOption(showGraph), [showGraph]);
-  const ModeIcon = viewMode.Icon;
-  const bookmarkTitle = isBookmarked
-    ? '현재 위치 북마크 제거'
-    : '현재 위치에 북마크 추가';
-  const graphToggleTitle = showGraph
-    ? '본문만 보기로 전환'
-    : '본문+그래프로 전환';
-
-  const handleGraphClick = useCallback(() => {
-    const bookData =
-      book || {
-        title: String(bookId || '')
-          .replace(/\.(xhtml|html|htm)$/i, '')
-          .replace(/([A-Z])/g, ' $1')
-          .trim(),
-        author: '알 수 없음',
-        path: `/${bookId}`,
-        filename: bookId,
-      };
-
-    const currentPathname = location.pathname || userViewerPath(bookId);
-    navigate(userGraphPath(bookId), {
-      state: {
-        book: bookData,
-        selectedChapter: Number(currentChapter) || 1,
-        fromLibrary: isFromLibrary,
-        from: previousPage || { pathname: currentPathname, search: '' },
-      },
-      replace: false,
-    });
-  }, [book, bookId, currentChapter, isFromLibrary, location.pathname, navigate, previousPage]);
-
-  const closeMobileMenu = useCallback(() => setShowMobileMenu(false), []);
-  const toggleMobileMenu = useCallback(() => setShowMobileMenu((v) => !v), []);
-
-  /** 메뉴는 햄버거로만 닫힘. 항목 클릭 시 바로 닫지 않아 연속 조작 가능 */
-  const runMobileAction = useCallback(
-    (action) => () => {
-      action?.();
-    },
-    []
-  );
-
-  const graphToggleClass = `xhtml-toolbar-btn xhtml-toolbar-btn--graph-toggle${
-    showGraph ? ' is-active' : ''
-  }`;
-  const mobileGraphToggleClass = `xhtml-toolbar-btn xhtml-toolbar-btn--menu${
-    showGraph ? ' is-active' : ''
-  }`;
+  const shared = {
+    isBookmarked,
+    bookmarkTitle: isBookmarked ? '현재 위치 북마크 제거' : '현재 위치에 북마크 추가',
+    onAddBookmark,
+    onToggleBookmarkList,
+    onOpenGraphPage: openGraphPage,
+    showGraph,
+    onToggleGraph,
+    graphToggleTitle: showGraph ? '본문만 보기로 전환' : '본문+그래프로 전환',
+    onOpenSettings,
+    onExitToMypage,
+  };
 
   return (
     <div className={`viewer-toolbar${showToolbar ? '' : ' is-hidden'}`}>
       {isMobile ? (
-        <div className="viewer-toolbar-mobile">
-          <div className="viewer-toolbar-mobile-nav">
-            <ToolbarButton
-              onClick={onPrev}
-              title="이전 페이지 (←)"
-              className="xhtml-toolbar-btn xhtml-toolbar-btn--compact"
-            >
-              <ArrowLeft size={ICON_SM} aria-hidden />
-            </ToolbarButton>
-            <ToolbarButton
-              onClick={onNext}
-              title="다음 페이지 (→)"
-              className="xhtml-toolbar-btn xhtml-toolbar-btn--compact"
-            >
-              <ArrowRight size={ICON_SM} aria-hidden />
-            </ToolbarButton>
-          </div>
-          <div className="viewer-toolbar-mobile-mode">{viewMode.label}</div>
-          <ToolbarButton
-            onClick={toggleMobileMenu}
-            title={showMobileMenu ? '메뉴 닫기' : '메뉴 열기'}
-            ariaLabel={showMobileMenu ? '메뉴 닫기' : '메뉴 열기'}
-            className="xhtml-toolbar-btn xhtml-toolbar-btn--compact"
-          >
-            {showMobileMenu ? (
-              <X size={ICON_SM} aria-hidden />
-            ) : (
-              <Menu size={ICON_SM} aria-hidden />
-            )}
-          </ToolbarButton>
-        </div>
+        <MobileToolbar
+          onPrev={onPrev}
+          onNext={onNext}
+          modeLabel={viewMode.label}
+          menuOpen={showMobileMenu}
+          onToggleMenu={() => setShowMobileMenu((v) => !v)}
+        />
       ) : (
-        <div className="viewer-toolbar-group-wrap">
-          <div className="viewer-toolbar-group-left">
-            <div className="toolbar-group toolbar-group--nav">
-              <ToolbarButton onClick={onPrev} title="이전 페이지로 이동 (←)" ariaLabel="이전 페이지">
-                <IconLabel icon={ArrowLeft} label="이전" />
-              </ToolbarButton>
-              <ToolbarButton onClick={onNext} title="다음 페이지로 이동 (→)" ariaLabel="다음 페이지">
-                <span className="viewer-toolbar-label">
-                  다음
-                  <ArrowRight size={ICON_SM} aria-hidden />
-                </span>
-              </ToolbarButton>
-            </div>
-
-            <div className="toolbar-group toolbar-group--bookmark">
-              <ToolbarButton
-                onClick={onAddBookmark}
-                title={bookmarkTitle}
-                ariaLabel="북마크"
-                className="xhtml-toolbar-btn xhtml-toolbar-btn--w-md"
-              >
-                <IconLabel
-                  icon={isBookmarked ? Bookmark : BookmarkPlus}
-                  label="북마크"
-                  center
-                  strokeWidth={isBookmarked ? 2.5 : 2}
-                />
-              </ToolbarButton>
-              <ToolbarButton
-                onClick={onToggleBookmarkList}
-                title="북마크 목록 열기"
-                ariaLabel="북마크 목록"
-                className="xhtml-toolbar-btn xhtml-toolbar-btn--w-lg"
-              >
-                <IconLabel icon={BookMarked} label="북마크 목록" center />
-              </ToolbarButton>
-            </div>
-
-            <div className="toolbar-group toolbar-group--mode">
-              <ToolbarButton
-                onClick={handleGraphClick}
-                title="챕터별 전체 관계도 페이지로 이동"
-                ariaLabel="전체 관계도"
-                className="xhtml-toolbar-btn xhtml-toolbar-btn--w-lg"
-              >
-                <IconLabel icon={Network} label="전체 관계도" center />
-              </ToolbarButton>
-              <ScreenModeToggle
-                showGraph={showGraph}
-                onToggleGraph={onToggleGraph}
-                title={graphToggleTitle}
-                className={graphToggleClass}
-              />
-              <div
-                className={`viewer-view-mode-badge${showGraph ? ' is-graph-on' : ''}`}
-                title={viewMode.label}
-              >
-                <ModeIcon size={ICON_SM} strokeWidth={2.5} aria-hidden />
-                <span className="viewer-view-mode-badge-label">{viewMode.label}</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="toolbar-group-right">
-            <div className="toolbar-group-right-inner">
-              <ToolbarButton
-                onClick={onOpenSettings}
-                title="뷰어 설정 열기"
-                ariaLabel="설정"
-                className="xhtml-toolbar-btn xhtml-toolbar-btn--w-sm"
-              >
-                <span className="viewer-toolbar-settings-label">
-                  <Settings size={ICON_SM} aria-hidden />
-                  <span className="viewer-toolbar-settings-text">설정</span>
-                </span>
-              </ToolbarButton>
-              <ToolbarButton
-                onClick={onExitToMypage}
-                title="마이페이지로 돌아가기"
-                ariaLabel="닫기"
-                className="xhtml-toolbar-btn xhtml-toolbar-btn--icon"
-              >
-                <X size={ICON_SM} aria-hidden />
-              </ToolbarButton>
-            </div>
-          </div>
-        </div>
+        <DesktopToolbar onPrev={onPrev} onNext={onNext} viewMode={viewMode} {...shared} />
       )}
 
-      {showMobileMenu ? (
-        <div className="viewer-mobile-menu" role="menu" aria-label="뷰어 메뉴">
-          <div className="viewer-mobile-menu-grid">
-            <ToolbarButton
-              onClick={runMobileAction(onAddBookmark)}
-              title={bookmarkTitle}
-              className="xhtml-toolbar-btn xhtml-toolbar-btn--menu"
-            >
-              {isBookmarked ? (
-                <Bookmark size={ICON_SM} aria-hidden />
-              ) : (
-                <BookmarkPlus size={ICON_SM} aria-hidden />
-              )}
-              <span className="viewer-mobile-menu-label">북마크</span>
-            </ToolbarButton>
-            <ToolbarButton
-              onClick={runMobileAction(() => {
-                closeMobileMenu();
-                onToggleBookmarkList?.();
-              })}
-              title="북마크 목록 보기"
-              className="xhtml-toolbar-btn xhtml-toolbar-btn--menu"
-            >
-              <BookMarked size={ICON_SM} aria-hidden />
-              <span className="viewer-mobile-menu-label">북마크 목록</span>
-            </ToolbarButton>
-            <ToolbarButton
-              onClick={runMobileAction(() => {
-                closeMobileMenu();
-                handleGraphClick();
-              })}
-              title="챕터별 전체 관계도 페이지로 이동"
-              className="xhtml-toolbar-btn xhtml-toolbar-btn--menu"
-            >
-              <Network size={ICON_SM} aria-hidden />
-              <span className="viewer-mobile-menu-label">전체 관계도</span>
-            </ToolbarButton>
-            <ScreenModeToggle
-              menu
-              showGraph={showGraph}
-              onToggleGraph={onToggleGraph}
-              title={graphToggleTitle}
-              className={mobileGraphToggleClass}
-            />
-            <ToolbarButton
-              onClick={runMobileAction(() => {
-                closeMobileMenu();
-                onOpenSettings?.();
-              })}
-              title="뷰어 설정 열기"
-              className="xhtml-toolbar-btn xhtml-toolbar-btn--menu"
-            >
-              <Settings size={ICON_SM} aria-hidden />
-              <span className="viewer-mobile-menu-label">설정</span>
-            </ToolbarButton>
-            <button
-              type="button"
-              onClick={runMobileAction(() => {
-                closeMobileMenu();
-                onExitToMypage?.();
-              })}
-              className="viewer-mobile-menu-exit"
-              title="마이페이지로 돌아가기"
-              aria-label="닫기"
-            >
-              <X size={ICON_SM} aria-hidden />
-              <span className="viewer-mobile-menu-label">닫기</span>
-            </button>
-          </div>
-        </div>
-      ) : null}
+      {showMobileMenu ? <MobileMenu onClose={() => setShowMobileMenu(false)} {...shared} /> : null}
     </div>
   );
 }

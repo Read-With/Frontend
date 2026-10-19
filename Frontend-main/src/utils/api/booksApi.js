@@ -2,26 +2,24 @@
 
 import {
   authenticatedRequest,
+  authenticatedFetch,
   makeSilentError,
-  isTokenValid,
   mapSoftFailResponse,
   SOFT_FAIL_403_404,
   requireBookId,
   pickResponseResult,
   toUnifiedApiResponse,
-  authenticatedFetch,
-} from './authApi';
+} from './client';
+import { isTokenValid, getStoredAccessToken, AUTH_CLEARED_EVENT } from './authApi';
 import {
   asArray,
   toOneBasedChapterIndexOrNull,
   toPositiveNumberOrNull,
-  progressPayloadFromData,
-  resolveProgressLocator,
-  locatorsEqual,
   errorUtils,
   sleep,
   stringOrEmpty,
 } from '../common/valueUtils';
+import { progressPayloadFromData, resolveProgressLocator, locatorsEqual } from '../common/locator';
 import {
   getApiBaseUrl,
   sanitizeAssetUrl,
@@ -39,12 +37,11 @@ import {
 } from '../common/cache/progressCache';
 import { setManifestData, getManifestFromCache } from '../common/cache/manifestCache';
 import { withInflight } from '../common/cache/cacheManager';
-import { normalizeBookCore } from '../common/bookNormalize';
-import { getStoredAccessToken, AUTH_CLEARED_EVENT } from '../security/authTokenStorage';
-import {
-  DEFAULT_BOOKMARK_COLOR,
-  BOOKMARK_UPDATABLE_FIELDS,
-} from '../bookmarks/bookmarkUtils';
+import { normalizeV2Book } from '../common/bookNormalize';
+import { normalizeBookmarkColor } from '../bookmarkUtils';
+
+/** PATCH /v2/bookmarks 로 수정 가능한 필드 */
+const BOOKMARK_UPDATABLE_FIELDS = Object.freeze(['color', 'memo']);
 
 const BOOK_LIST_SORT_VALUES = new Set(['updatedAt', 'title']);
 
@@ -54,15 +51,10 @@ const withNormalizedResult = (data, normalize) => {
   return data;
 };
 
-/** v2 books 응답 정규화 (목록·상세) */
-const normalizeV2Book = (book) => {
-  if (!book || typeof book !== 'object') return book;
-  return {
-    ...book,
-    ...normalizeBookCore(book),
-    updatedAt: book.updatedAt ?? null,
-    isFavorite: !!book.isFavorite,
-  };
+/** 성공 응답의 목록 result를 항목별 정규화 (data를 그대로 반환) */
+const withNormalizedList = (data, normalize) => {
+  if (data?.isSuccess && Array.isArray(data.result)) data.result = data.result.map(normalize);
+  return data;
 };
 
 const buildBooksQueryString = (params = {}) => {
@@ -102,10 +94,7 @@ export const getBooks = async (params = {}) => {
     });
     return softEmpty;
   }
-  if (data?.isSuccess && Array.isArray(data.result)) {
-    data.result = data.result.map(normalizeV2Book);
-  }
-  return data;
+  return withNormalizedList(data, normalizeV2Book);
 };
 
 /** getBooks 응답에서 책 배열만 추출 (실패 시 빈 배열) */
@@ -200,8 +189,6 @@ export function normalizeChapterPovSummariesResult(raw) {
   };
 }
 
-const chapterPovSummariesInflight = new Map();
-
 export const getChapterPovSummaries = async (bookId, chapterIdx) => {
   const normalizedBookId = toPositiveNumberOrNull(bookId);
   const normalizedChapterIdx = toOneBasedChapterIndexOrNull(chapterIdx);
@@ -212,15 +199,14 @@ export const getChapterPovSummaries = async (bookId, chapterIdx) => {
     throw new Error('chapterIdx는 1 이상의 정수여야 합니다.');
   }
 
-  return withInflight(chapterPovSummariesInflight, `${normalizedBookId}:${normalizedChapterIdx}`, () =>
-    authenticatedRequest(
-      `/v2/books/${normalizedBookId}/chapters/${normalizedChapterIdx}/pov-summaries`,
-      { softFailStatuses: SOFT_FAIL_403_404 }
-    ).catch((error) => {
-      errorUtils.logError('getChapterPovSummaries', error);
-      throw error;
-    })
-  );
+  // 중복 요청 방지는 호출부(useChapterPovSummaries)의 react-query가 담당
+  return authenticatedRequest(
+    `/v2/books/${normalizedBookId}/chapters/${normalizedChapterIdx}/pov-summaries`,
+    { softFailStatuses: SOFT_FAIL_403_404 }
+  ).catch((error) => {
+    errorUtils.logError('getChapterPovSummaries', error);
+    throw error;
+  });
 };
 
 const normalizeBookmarkDto = (b) => {
@@ -259,10 +245,7 @@ const getBookmarks = async (bookId, sort = 'time_desc') => {
       });
       return softEmpty;
     }
-    if (data?.isSuccess && Array.isArray(data.result)) {
-      data.result = data.result.map(normalizeBookmarkDto);
-    }
-    return data;
+    return withNormalizedList(data, normalizeBookmarkDto);
   } catch (error) {
     errorUtils.logError('getBookmarks', error);
     throw error;
@@ -306,7 +289,7 @@ export const createBookmark = async (bookmarkData) => {
     const dataToSend = {
       bookId: normalizedBookId,
       startLocator,
-      color: bookmarkData.color ?? DEFAULT_BOOKMARK_COLOR,
+      color: normalizeBookmarkColor(bookmarkData.color),
       memo: bookmarkData.memo ?? '',
     };
     if (endLocator) {
@@ -419,15 +402,16 @@ export const saveProgress = async (progressData) => {
   }
 };
 
+/** 요청을 만들지 못하면 null, 보냈으면 서버 저장 성공 여부로 resolve되는 Promise (페이지가 닫히면 resolve 안 될 수 있음) */
 export const saveProgressKeepalive = (progressData) => {
   try {
     const payload = buildProgressSavePayload(progressData);
-    if (!payload) return false;
+    if (!payload) return null;
     const token = getStoredAccessToken();
     // pagehide에서는 refresh를 await할 수 없음 — 유효 토큰일 때만 전송
-    if (!token || !isTokenValid(token)) return false;
+    if (!token || !isTokenValid(token)) return null;
 
-    fetch(`${getApiBaseUrl()}/api/v2/progress`, {
+    return fetch(`${getApiBaseUrl()}/api/v2/progress`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -435,11 +419,9 @@ export const saveProgressKeepalive = (progressData) => {
       },
       body: JSON.stringify(payload),
       keepalive: true,
-    }).catch(() => void 0);
-
-    return true;
+    }).then((res) => res.ok, () => false);
   } catch {
-    return false;
+    return null;
   }
 };
 

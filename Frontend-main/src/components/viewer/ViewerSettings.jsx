@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useId } from 'react';
+import { useState, useEffect, useCallback, useId } from 'react';
 import { Check, Eye, Type, X } from 'lucide-react';
 import {
   defaultSettings,
@@ -6,14 +6,51 @@ import {
   VIEWER_MODE_OPTIONS,
   viewerFontStack,
 } from '../../utils/viewer/viewerSession';
-import { useModalFocusTrap } from '../../hooks/common/hooksShared';
+import ModalFrame from '../common/ModalFrame';
 import './ViewerSettings.css';
+
+/** 설정 한 줄: − / 슬라이더 / + / 값. ± 버튼은 step 단위로 이동하고 [min, max]로 제한 */
+function StepSlider({ labelId, title, icon = null, value, min, max, step, decimals, format, decreaseLabel, increaseLabel, onChange }) {
+  const stepBy = (dir) =>
+    onChange(Math.min(max, Math.max(min, Number((value + dir * step).toFixed(decimals)))));
+  return (
+    <div className="viewer-settings-section">
+      <h3 className="viewer-settings-section-title" id={labelId}>
+        {icon}
+        {title}
+      </h3>
+      <div className="viewer-settings-step-row">
+        <button type="button" className="viewer-settings-step-btn" aria-label={decreaseLabel} onClick={() => stepBy(-1)}>
+          -
+        </button>
+        <div>
+          <input
+            type="range"
+            min={min}
+            max={max}
+            step={step}
+            value={value}
+            aria-labelledby={labelId}
+            aria-valuemin={min}
+            aria-valuemax={max}
+            aria-valuenow={value}
+            aria-valuetext={format(value)}
+            onChange={(e) => onChange(Number(e.target.value))}
+          />
+        </div>
+        <button type="button" className="viewer-settings-step-btn" aria-label={increaseLabel} onClick={() => stepBy(1)}>
+          +
+        </button>
+        <span className="viewer-settings-step-value" aria-hidden="true">
+          {format(value)}
+        </span>
+      </div>
+    </div>
+  );
+}
 
 const ViewerSettings = ({ isOpen, onClose, onApplySettings, settings }) => {
   const titleId = useId();
-  const dialogRef = useRef(null);
-
-  useModalFocusTrap(isOpen, dialogRef, onClose);
 
   const [draft, setDraft] = useState(() =>
     normalizeSettings(settings || defaultSettings)
@@ -38,32 +75,15 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, settings }) => {
     setDraft({ ...defaultSettings });
   }, []);
 
-  const handleOutsideClick = useCallback(
-    (e) => {
-      if (e.target === e.currentTarget) {
-        onClose();
-      }
-    },
-    [onClose]
-  );
-
-  if (!isOpen) return null;
-
   return (
-    <div
-      className="viewer-settings-overlay"
-      onClick={handleOutsideClick}
-      role="presentation"
+    <ModalFrame
+      open={isOpen}
+      onClose={onClose}
+      onEscape={onClose}
+      overlayClassName="viewer-settings-overlay"
+      className="viewer-settings-dialog"
+      labelledBy={titleId}
     >
-      <div
-        ref={dialogRef}
-        className="viewer-settings-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        tabIndex={-1}
-        onClick={(e) => e.stopPropagation()}
-      >
         <div className="viewer-settings-header">
           <h2 id={titleId} className="viewer-settings-title">
             뷰어 설정
@@ -105,94 +125,34 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, settings }) => {
           </div>
         </div>
 
-        <div className="viewer-settings-section">
-          <h3 className="viewer-settings-section-title" id="viewer-settings-font-size">
-            <Type size={18} aria-hidden />
-            글꼴 크기
-          </h3>
-          <div className="viewer-settings-step-row">
-            <button
-              type="button"
-              className="viewer-settings-step-btn"
-              aria-label="글꼴 크기 줄이기"
-              onClick={() => handleChange('fontSize', Math.max(80, draft.fontSize - 10))}
-            >
-              -
-            </button>
-            <div>
-              <input
-                type="range"
-                min="80"
-                max="150"
-                step="10"
-                value={draft.fontSize}
-                aria-labelledby="viewer-settings-font-size"
-                aria-valuemin={80}
-                aria-valuemax={150}
-                aria-valuenow={draft.fontSize}
-                aria-valuetext={`${draft.fontSize}%`}
-                onChange={(e) => handleChange('fontSize', parseInt(e.target.value, 10))}
-              />
-            </div>
-            <button
-              type="button"
-              className="viewer-settings-step-btn"
-              aria-label="글꼴 크기 늘리기"
-              onClick={() => handleChange('fontSize', Math.min(150, draft.fontSize + 10))}
-            >
-              +
-            </button>
-            <span className="viewer-settings-step-value" aria-hidden="true">
-              {draft.fontSize}%
-            </span>
-          </div>
-        </div>
+        <StepSlider
+          labelId="viewer-settings-font-size"
+          title="글꼴 크기"
+          icon={<Type size={18} aria-hidden />}
+          value={draft.fontSize}
+          min={80}
+          max={150}
+          step={10}
+          decimals={0}
+          format={(v) => `${v}%`}
+          decreaseLabel="글꼴 크기 줄이기"
+          increaseLabel="글꼴 크기 늘리기"
+          onChange={(v) => handleChange('fontSize', v)}
+        />
 
-        <div className="viewer-settings-section">
-          <h3 className="viewer-settings-section-title" id="viewer-settings-line-height">
-            줄 간격
-          </h3>
-          <div className="viewer-settings-step-row">
-            <button
-              type="button"
-              className="viewer-settings-step-btn"
-              aria-label="줄 간격 줄이기"
-              onClick={() =>
-                handleChange('lineHeight', Math.max(1.0, Number((draft.lineHeight - 0.1).toFixed(1))))
-              }
-            >
-              -
-            </button>
-            <div>
-              <input
-                type="range"
-                min="1.0"
-                max="2.0"
-                step="0.1"
-                value={draft.lineHeight}
-                aria-labelledby="viewer-settings-line-height"
-                aria-valuemin={1}
-                aria-valuemax={2}
-                aria-valuenow={draft.lineHeight}
-                aria-valuetext={draft.lineHeight.toFixed(1)}
-                onChange={(e) => handleChange('lineHeight', parseFloat(e.target.value))}
-              />
-            </div>
-            <button
-              type="button"
-              className="viewer-settings-step-btn"
-              aria-label="줄 간격 늘리기"
-              onClick={() =>
-                handleChange('lineHeight', Math.min(2.0, Number((draft.lineHeight + 0.1).toFixed(1))))
-              }
-            >
-              +
-            </button>
-            <span className="viewer-settings-step-value" aria-hidden="true">
-              {draft.lineHeight.toFixed(1)}
-            </span>
-          </div>
-        </div>
+        <StepSlider
+          labelId="viewer-settings-line-height"
+          title="줄 간격"
+          value={draft.lineHeight}
+          min={1}
+          max={2}
+          step={0.1}
+          decimals={1}
+          format={(v) => v.toFixed(1)}
+          decreaseLabel="줄 간격 줄이기"
+          increaseLabel="줄 간격 늘리기"
+          onChange={(v) => handleChange('lineHeight', v)}
+        />
 
         <p
           className="viewer-settings-preview"
@@ -217,8 +177,7 @@ const ViewerSettings = ({ isOpen, onClose, onApplySettings, settings }) => {
             적용
           </button>
         </div>
-      </div>
-    </div>
+    </ModalFrame>
   );
 };
 

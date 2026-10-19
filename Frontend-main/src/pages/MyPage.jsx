@@ -1,13 +1,15 @@
-import { useState, useMemo, useCallback, useEffect, useId, useRef } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
 import { Book, Plus, Library, Heart, AlertCircle, Grid3X3, List, Upload, LogOut } from 'lucide-react';
 import BookLibrary from '../components/library/BookLibrary';
 import FileUpload from '../components/library/FileUpload';
-import { useBooks } from '../hooks/books/bookHooks';
-import useAuth from '../hooks/auth/useAuth';
-import { useModalFocusTrap, useBodyScrollLock } from '../hooks/common/hooksShared';
-import { EPUB_FILE_CONSTRAINTS } from '../utils/library/libraryUtils';
+import { useBooks } from '../hooks/bookHooks';
+import useAuth from '../hooks/useAuth';
+import ConfirmDialog from '../components/common/ConfirmDialog';
+import { onActivationKey } from '../utils/common/domUtils';
+import { EPUB_FILE_CONSTRAINTS } from '../utils/libraryUtils';
+import { compareLocale } from '../utils/common/valueUtils';
 import './MyPage.css';
 
 const MAX_EPUB_MB = Math.round(EPUB_FILE_CONSTRAINTS.MAX_SIZE / (1024 * 1024));
@@ -19,12 +21,6 @@ const SORT_OPTIONS = [
   { value: 'progress', label: '진행률 높은 순' },
   { value: 'lastRead', label: '최근 읽은 순' },
 ];
-
-function resolveHeaderDisplayName(userNickname, user) {
-  if (userNickname) return userNickname;
-  if (user?.name) return user.name;
-  return '사용자';
-}
 
 function HeaderBrand({ userName = null }) {
   return (
@@ -43,60 +39,15 @@ function HeaderBrand({ userName = null }) {
   );
 }
 
-function LogoutConfirmDialog({ open, onConfirm, onCancel }) {
-  const titleId = useId();
-  const descId = useId();
-  const dialogRef = useRef(null);
-
-  useModalFocusTrap(open, dialogRef, onCancel);
-  useBodyScrollLock(open);
-
-  if (!open) return null;
-
-  return (
-    <div
-      className="logout-confirm-overlay"
-      onClick={onCancel}
-      role="presentation"
-    >
-      <div
-        ref={dialogRef}
-        className="logout-confirm-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        aria-describedby={descId}
-        tabIndex={-1}
-        onClick={(event) => event.stopPropagation()}
-      >
-        <h3 id={titleId} className="logout-confirm-title">
-          로그아웃
-        </h3>
-        <p id={descId} className="logout-confirm-message">
-          정말 로그아웃 하시겠습니까?
-        </p>
-        <div className="logout-confirm-buttons">
-          <button type="button" className="logout-confirm-cancel" onClick={onCancel}>
-            취소
-          </button>
-          <button type="button" className="logout-confirm-logout" onClick={onConfirm}>
-            로그아웃
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Header({ userNickname }) {
+function Header({ displayName }) {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { logout } = useAuth();
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
-  const displayName = resolveHeaderDisplayName(userNickname, user);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   const handleLogoutConfirm = async () => {
-    await logout();
-    setShowLogoutConfirm(false);
+    setLoggingOut(true);
+    await logout(); // 실패해도 throw하지 않고 로컬 인증만 정리
     navigate('/');
   };
 
@@ -113,32 +64,36 @@ function Header({ userNickname }) {
         </button>
       </div>
 
-      <LogoutConfirmDialog
-        open={showLogoutConfirm}
+      <ConfirmDialog
+        isOpen={showLogoutConfirm}
+        title="로그아웃"
+        message="정말 로그아웃 하시겠습니까?"
+        confirmLabel="로그아웃"
+        busy={loggingOut}
         onConfirm={handleLogoutConfirm}
-        onCancel={() => setShowLogoutConfirm(false)}
+        onClose={() => setShowLogoutConfirm(false)}
       />
     </div>
   );
 }
 
-function compareBooks(a, b, sortBy) {
-  switch (sortBy) {
-    case 'title':
-      return a.title.localeCompare(b.title);
-    case 'author':
-      return a.author.localeCompare(b.author);
-    case 'progress':
-      return (b.progress || 0) - (a.progress || 0);
-    case 'lastRead': {
-      const aTime = new Date(a.lastReadAt || a.updatedAt);
-      const bTime = new Date(b.lastReadAt || b.updatedAt);
-      return bTime - aTime;
-    }
-    case 'recent':
-    default:
-      return new Date(b.updatedAt) - new Date(a.updatedAt);
-  }
+const toTime = (value) => new Date(value).getTime();
+
+/** 정렬 기준별 키 추출·비교. 키는 책마다 한 번만 계산 (비교마다 Date 생성 → O(N log N)회 → O(N)회) */
+const BOOK_SORTERS = {
+  title: { key: (b) => b.title, compare: compareLocale },
+  author: { key: (b) => b.author, compare: compareLocale },
+  progress: { key: (b) => b.progress || 0, compare: (a, b) => b - a },
+  lastRead: { key: (b) => toTime(b.lastReadAt || b.updatedAt), compare: (a, b) => b - a },
+  recent: { key: (b) => toTime(b.updatedAt), compare: (a, b) => b - a },
+};
+
+function sortBooks(books, sortBy) {
+  const { key, compare } = BOOK_SORTERS[sortBy] ?? BOOK_SORTERS.recent;
+  return books
+    .map((book) => ({ book, k: key(book) }))
+    .sort((a, b) => compare(a.k, b.k))
+    .map(({ book }) => book);
 }
 
 export default function MyPage() {
@@ -149,7 +104,7 @@ export default function MyPage() {
   const [activeTab, setActiveTab] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchInput, setSearchInput] = useState('');
-  const [isSearching, setIsSearching] = useState(false);
+  const isSearching = searchQuery !== '';
   const [sortBy, setSortBy] = useState('recent');
   const [viewMode, setViewMode] = useState('grid');
 
@@ -159,13 +114,11 @@ export default function MyPage() {
     const term = searchInput.trim();
     if (!term) return;
     setSearchQuery(term);
-    setIsSearching(true);
   }, [searchInput]);
 
   const handleShowAll = useCallback(() => {
     setSearchQuery('');
     setSearchInput('');
-    setIsSearching(false);
   }, []);
 
   const displayName = user?.name || '사용자';
@@ -185,22 +138,13 @@ export default function MyPage() {
   }, [books]);
 
   const filteredBooks = useMemo(() => {
-    let filtered = [...(books || [])];
-
-    if (activeTab === 'favorites') {
-      filtered = filtered.filter((b) => b.isFavorite);
-    }
-
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      filtered = filtered.filter(
-        (book) =>
-          book.title.toLowerCase().includes(q) || book.author.toLowerCase().includes(q)
-      );
-    }
-
-    filtered.sort((a, b) => compareBooks(a, b, sortBy));
-    return filtered;
+    const q = searchQuery.toLowerCase();
+    const filtered = (books || []).filter(
+      (book) =>
+        (activeTab !== 'favorites' || book.isFavorite) &&
+        (!q || book.title.toLowerCase().includes(q) || book.author.toLowerCase().includes(q))
+    );
+    return sortBooks(filtered, sortBy);
   }, [books, activeTab, searchQuery, sortBy]);
 
   const isLibraryEmpty =
@@ -223,7 +167,7 @@ export default function MyPage() {
 
   return (
     <>
-      <Header userNickname={displayName} />
+      <Header displayName={displayName} />
       <div className="mypage-root">
         <div className="mypage-main">
           <section className="hero-banner">
@@ -367,12 +311,7 @@ export default function MyPage() {
                       onClick={openUpload}
                       role="button"
                       tabIndex={0}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          openUpload();
-                        }
-                      }}
+                      onKeyDown={onActivationKey(openUpload)}
                     >
                       <div className="epub-dropzone-icon" aria-hidden>
                         <Upload size={32} strokeWidth={1.5} />

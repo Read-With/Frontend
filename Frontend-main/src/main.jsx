@@ -6,7 +6,7 @@ import './index.css'
 import App from './App.jsx'
 import { errorUtils } from './utils/common/valueUtils.js'
 import { getApiBaseUrl } from './utils/common/urlUtils.js'
-import { AUTH_CLEARED_EVENT } from './utils/security/authTokenStorage.js'
+import { AUTH_CLEARED_EVENT } from './utils/api/authApi';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -21,10 +21,6 @@ const queryClient = new QueryClient({
 
 // 로그아웃·계정 전환 시 이전 사용자 데이터(책·북마크) 노출 방지
 window.addEventListener(AUTH_CLEARED_EVENT, () => queryClient.clear())
-
-if (import.meta.env.DEV) {
-  import('./utils/security/oauthSecurity.js');
-}
 
 // Render 무료 플랜은 15분 무요청 시 슬립 → 앱 진입 즉시 깨우고, 탭이 보이는 동안 10분마다 핑
 // ponytail: 탭이 닫혀 있으면 효과 없음. 항상 깨어 있어야 하면 외부 크론(UptimeRobot 등)으로 /health 핑

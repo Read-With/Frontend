@@ -3,10 +3,8 @@
 .viewer-layout {
   --vt-surface: #ffffff;
   --vt-surface-muted: #f8faf8;
-  --vt-surface-hover: #f9fafb;
   --vt-surface-canvas: #fdfdfd;
   --vt-border: #e2e8f0;
-  --vt-border-hover: #d1d5db;
   --vt-border-strong: #c5d0c5;
   --vt-text: #374151;
   --vt-text-muted: #4b5563;

@@ -3,16 +3,15 @@
 import { resolveChapterIndex, errorUtils, clamp01 } from '../common/valueUtils';
 import { setBounded } from '../common/cache/cacheManager';
 import { resolveApiArtifactUrl } from '../common/urlUtils';
-import { authenticatedFetch } from '../api/authApi';
+import { authenticatedFetch } from '../api/client';
 import { getBookManifest } from '../api/booksApi';
 import DOMPurify from 'dompurify';
+import { getChapterDataFromManifest, getManifestFromCache } from '../common/cache/manifestCache';
 import {
-  getChapterDataFromManifest,
   getEffectiveChapterLengthForProgress,
   locatorFromChapterLocalOffset,
   chapterLocalOffsetFromLocator,
-  getManifestFromCache,
-} from '../common/cache/manifestCache';
+} from '../common/readingProgress';
 
 // --- XHTML 살균 + 로드 LRU 캐시 ---
 

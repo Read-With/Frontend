@@ -9,17 +9,13 @@ import {
   useMemo,
 } from 'react';
 import { errorUtils } from '../../utils/common/valueUtils';
-import {
-  absoluteOffsetFromReadingProgressPercent,
-  locatorFromBookAbsoluteOffset,
-  getManifestFromCache,
-} from '../../utils/common/cache/manifestCache';
+import { getManifestFromCache } from '../../utils/common/cache/manifestCache';
+import { absoluteOffsetFromReadingProgressPercent, locatorFromBookAbsoluteOffset } from '../../utils/common/readingProgress';
 import {
   toReadingLocatorKey,
-  defaultSettings,
   viewerFontStack,
 } from '../../utils/viewer/viewerSession';
-import { resolveServerBookId, resolveViewerBookKey } from '../../utils/viewer/viewerCore';
+import { resolveServerBookId, resolveViewerBookKey } from '../../utils/common/bookNormalize';
 import {
   collectBlockEntries,
   computeLineBoundsFromRuler,
@@ -36,7 +32,376 @@ import './XhtmlViewer.css';
 const SWIPE_THRESHOLD = 50;
 const TAP_SLOP_PX = 12;
 const TAP_ZONE_EDGE = 1 / 3;
+const WHEEL_COOLDOWN_MS = 280;
+const PAGE_KEYS = { ArrowUp: -1, PageUp: -1, ArrowLeft: -1, ArrowDown: 1, PageDown: 1, ArrowRight: 1 };
 
+/**
+ * 페이지 시작·끝을 줄 경계에 맞춤 (줄이 잘려 보이지 않게).
+ * 시작: targetY 이하 마지막 줄 top / 보이는 높이: 끝 이하 마지막 줄 bottom까지
+ */
+function snapPageToLineBounds(lines, pageIdx, pageHeightPx) {
+  const targetY = pageIdx * pageHeightPx;
+  if (!lines.length) return { offsetY: Math.max(0, targetY), visibleHeight: pageHeightPx };
+  const offsetY = lines.findLast((l) => l.top <= targetY)?.top ?? 0;
+  const endY = offsetY + pageHeightPx;
+  const visibleEnd = lines.findLast((l) => l.bottom <= endY)?.bottom ?? endY;
+  const visibleHeight = Math.min(pageHeightPx, Math.max(0, visibleEnd - offsetY)) || pageHeightPx;
+  return { offsetY, visibleHeight };
+}
+
+/**
+ * 페이지 넘김 입력: 키보드(↑↓←→·PageUp/Down), 휠(쿨다운), 스와이프, 탭 영역(좌 1/3 이전·우 1/3 다음·가운데 메뉴).
+ * suppressViewport 중에는 휠·탭 무시 (키보드·스와이프는 유지)
+ */
+function usePagingInput({ containerRef, prevPage, nextPage, suppressViewport, onToggleChrome, xhtmlContent }) {
+  const touchStartX = useRef(0);
+  const touchStartY = useRef(0);
+  const suppressClickRef = useRef(false);
+  const wheelLockRef = useRef(false);
+
+  const handleKeyDown = useCallback((e) => {
+    if (e.target.closest('input, textarea, [contenteditable]')) return;
+    const go = PAGE_KEYS[e.key];
+    if (!go) return;
+    e.preventDefault();
+    if (go < 0) prevPage();
+    else nextPage();
+  }, [prevPage, nextPage]);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return undefined;
+    const onWheel = (e) => {
+      e.preventDefault();
+      if (suppressViewport || wheelLockRef.current) return;
+      const absY = Math.abs(e.deltaY);
+      const absX = Math.abs(e.deltaX);
+      if (absY < 8 && absX < 8) return;
+      const delta = absY >= absX ? e.deltaY : e.deltaX;
+      if (!delta) return;
+      wheelLockRef.current = true;
+      if (delta > 0) nextPage();
+      else prevPage();
+      window.setTimeout(() => {
+        wheelLockRef.current = false;
+      }, WHEEL_COOLDOWN_MS);
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [containerRef, nextPage, prevPage, suppressViewport, xhtmlContent]);
+
+  /** 탭 위치(가로 비율)에 따라 이전/다음/메뉴 토글 */
+  const runTapAction = useCallback((clientX) => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    const ratio = rect?.width > 0 ? (clientX - rect.left) / rect.width : 0.5;
+    if (ratio < TAP_ZONE_EDGE) prevPage();
+    else if (ratio > 1 - TAP_ZONE_EDGE) nextPage();
+    else onToggleChrome?.();
+  }, [containerRef, nextPage, onToggleChrome, prevPage]);
+
+  const handleTouchStart = useCallback((e) => {
+    const t = e.touches?.[0];
+    if (!t) return;
+    touchStartX.current = t.clientX;
+    touchStartY.current = t.clientY;
+  }, []);
+
+  const handleTouchEnd = useCallback((e) => {
+    const t = e.changedTouches?.[0];
+    if (!t) return;
+    const dx = t.clientX - touchStartX.current;
+    const dy = t.clientY - touchStartY.current;
+    if (Math.abs(dx) >= SWIPE_THRESHOLD && Math.abs(dx) > Math.abs(dy)) {
+      suppressClickRef.current = true;
+      if (dx > 0) prevPage();
+      else nextPage();
+      return;
+    }
+    if (Math.abs(dx) <= TAP_SLOP_PX && Math.abs(dy) <= TAP_SLOP_PX) {
+      suppressClickRef.current = true;
+      if (suppressViewport) return;
+      runTapAction(t.clientX);
+    }
+  }, [nextPage, prevPage, runTapAction, suppressViewport]);
+
+  // 터치 직후 합성 click은 무시 (touchEnd에서 이미 처리)
+  const handleClick = useCallback((e) => {
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false;
+      return;
+    }
+    if (suppressViewport) return;
+    runTapAction(e.clientX);
+  }, [runTapAction, suppressViewport]);
+
+  return { handleKeyDown, handleClick, handleTouchStart, handleTouchEnd };
+}
+
+const NOT_FOUND_MESSAGE = '정규화 본문을 찾을 수 없습니다. 잠시 후 다시 시도하거나 재정규화가 필요할 수 있습니다.';
+
+/** bid·manifest 준비 시 본문(XHTML) 로드 */
+function useXhtmlContent(bid, manifestReady) {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [xhtmlContent, setXhtmlContent] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      if (!bid) {
+        setError('책 정보가 없습니다.');
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      setError(null);
+      if (!manifestReady) return;
+      try {
+        const parsed = await loadCachedXhtmlContent(bid, loadCombinedXhtml, parseXhtmlBody);
+        if (!cancelled) setXhtmlContent(parsed);
+      } catch (e) {
+        if (cancelled) return;
+        errorUtils.logError('XhtmlViewer', e, { bookId: bid });
+        setError(
+          e?.status === 404
+            ? NOT_FOUND_MESSAGE
+            : errorUtils.getUserFriendlyMessage(e) || e?.message || '로드 실패'
+        );
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [bid, manifestReady]);
+
+  return { loading, error, xhtmlContent };
+}
+
+/**
+ * 페이지 높이(컨테이너)·본문 높이(ruler)·줄 경계 측정.
+ * typographyKey(여백·글꼴 크기·줄 간격·글꼴)가 바뀌면 다시 잰다.
+ */
+function usePageMetrics(containerRef, rulerRef, xhtmlContent, typographyKey) {
+  const [pageHeight, setPageHeight] = useState(0);
+  const [contentHeight, setContentHeight] = useState(0);
+  const lineBoundsRef = useRef([]);
+  const [lineBoundsVersion, setLineBoundsVersion] = useState(0);
+
+  const recomputeLineBounds = useCallback(() => {
+    if (!rulerRef.current) return;
+    lineBoundsRef.current = computeLineBoundsFromRuler(rulerRef.current);
+    setLineBoundsVersion((v) => v + 1);
+  }, [rulerRef]);
+
+  // 같은 값이면 React가 재렌더를 건너뜀
+  const refreshContentHeight = useCallback(() => {
+    if (rulerRef.current) setContentHeight(rulerRef.current.offsetHeight);
+  }, [rulerRef]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return undefined;
+    const measure = () => setPageHeight(container.clientHeight);
+    const ro = new ResizeObserver(measure);
+    ro.observe(container);
+    measure();
+    return () => ro.disconnect();
+  }, [containerRef, xhtmlContent]);
+
+  useEffect(() => {
+    const ruler = rulerRef.current;
+    if (!ruler) return undefined;
+    refreshContentHeight();
+    const ro = new ResizeObserver(refreshContentHeight);
+    ro.observe(ruler);
+    return () => ro.disconnect();
+  }, [rulerRef, xhtmlContent, typographyKey, refreshContentHeight]);
+
+  useLayoutEffect(() => {
+    if (xhtmlContent && rulerRef.current) recomputeLineBounds();
+  }, [rulerRef, xhtmlContent, contentHeight, typographyKey, recomputeLineBounds]);
+
+  const refreshLayout = useCallback(() => {
+    recomputeLineBounds();
+    refreshContentHeight();
+  }, [recomputeLineBounds, refreshContentHeight]);
+
+  return { pageHeight, contentHeight, lineBoundsRef, lineBoundsVersion, refreshLayout };
+}
+
+/** 총 페이지·현재 페이지가 바뀐 경우만 상위에 알림 */
+function useReportPaging(layoutReady, totalPages, currentPage, onTotalPagesChange, onCurrentPageChange) {
+  const lastReportedRef = useRef({ totalPages: null, currentPage: null });
+
+  useEffect(() => {
+    if (!layoutReady) return;
+    const prev = lastReportedRef.current;
+    if (prev.totalPages !== totalPages) onTotalPagesChange?.(totalPages);
+    if (prev.currentPage !== currentPage) onCurrentPageChange?.(currentPage);
+    lastReportedRef.current = { totalPages, currentPage };
+  }, [totalPages, currentPage, layoutReady, onTotalPagesChange, onCurrentPageChange]);
+}
+
+/**
+ * 보이는 영역의 첫·끝 블록 → reading locator. 같은 위치는 다시 보내지 않음.
+ * 반환하는 lastLocatorRef는 getCurrentLocator용
+ */
+function useViewportLocator({
+  bid,
+  xhtmlContent,
+  layoutReady,
+  contentRef,
+  viewportRef,
+  rulerRef,
+  manifest,
+  pageIndex,
+  totalPages,
+  pageHeight,
+  snap,
+  lineBoundsVersion,
+  onCurrentLineChange,
+}) {
+  const lastLocatorRef = useRef(null);
+  const lastEmittedKeyRef = useRef(null);
+  const prevBidRef = useRef(null);
+  // 본문 DOM은 xhtmlContent가 바뀔 때만 교체됨 — 페이지마다 블록 전체를 다시 querySelectorAll 하지 않음
+  const blockEntriesCacheRef = useRef({ root: null, content: null, entries: [] });
+
+  useEffect(() => {
+    if (prevBidRef.current === bid) return;
+    prevBidRef.current = bid;
+    lastEmittedKeyRef.current = null;
+    lastLocatorRef.current = null;
+  }, [bid]);
+
+  useEffect(() => {
+    if (xhtmlContent) lastEmittedKeyRef.current = null;
+  }, [xhtmlContent]);
+
+  const emitLocator = useCallback((loc) => {
+    if (!loc?.startLocator) return;
+    const key = toReadingLocatorKey(loc.startLocator, loc.endLocator ?? loc.startLocator);
+    if (key === lastEmittedKeyRef.current) return;
+    lastEmittedKeyRef.current = key;
+    lastLocatorRef.current = loc;
+    onCurrentLineChange?.({ anchor: loc });
+  }, [onCurrentLineChange]);
+
+  useEffect(() => {
+    const root = contentRef.current;
+    if (!xhtmlContent || !root || !viewportRef.current || !layoutReady) return;
+
+    const cache = blockEntriesCacheRef.current;
+    if (cache.root !== root || cache.content !== xhtmlContent) {
+      blockEntriesCacheRef.current = { root, content: xhtmlContent, entries: collectBlockEntries(root) };
+    }
+
+    const result = resolveViewportLocatorEmit({
+      blockEntries: blockEntriesCacheRef.current.entries,
+      viewportRect: viewportRef.current.getBoundingClientRect(),
+      rulerRoot: rulerRef.current,
+      manifest,
+      currentPageIndex: pageIndex,
+      totalPages,
+      pageHeight,
+      snapOffsetY: snap.offsetY,
+      snapVisibleHeight: snap.visibleHeight,
+      prevStartLocator: lastLocatorRef.current?.startLocator ?? null,
+    });
+    if (result.kind === 'emit') emitLocator(result.loc);
+  }, [
+    contentRef,
+    viewportRef,
+    rulerRef,
+    xhtmlContent,
+    pageIndex,
+    totalPages,
+    emitLocator,
+    layoutReady,
+    pageHeight,
+    snap.offsetY,
+    snap.visibleHeight,
+    lineBoundsVersion,
+    manifest,
+  ]);
+
+  return lastLocatorRef;
+}
+
+/**
+ * 현재 페이지 인덱스 · 이전/다음 · locator로 이동(displayAt).
+ * 레이아웃이 아직 없을 때 들어온 displayAt은 기억해 두었다가 준비되면 다시 시도
+ */
+function usePageNavigation({ containerRef, rulerRef, metrics, manifest, xhtmlContent }) {
+  const { pageHeight, contentHeight, lineBoundsVersion } = metrics;
+  const [currentPageIndex, setCurrentPageIndex] = useState(0);
+  const pendingDisplayRef = useRef(null);
+
+  const layoutReady = pageHeight > 0;
+  const totalPages = Math.max(1, layoutReady ? Math.ceil(contentHeight / pageHeight) : 1);
+  // 레이아웃 붕괴(전체화면 그래프 등) 시 페이지 인덱스를 0으로 클램프하지 않음
+  const pageIndex = layoutReady
+    ? Math.min(Math.max(0, currentPageIndex), totalPages - 1)
+    : currentPageIndex;
+
+  useEffect(() => {
+    if (layoutReady && currentPageIndex !== pageIndex) setCurrentPageIndex(pageIndex);
+  }, [currentPageIndex, pageIndex, layoutReady]);
+
+  const goPageByDelta = useCallback((delta) => {
+    setCurrentPageIndex((i) => {
+      const next = i + delta;
+      return next < 0 || next >= totalPages ? i : next;
+    });
+  }, [totalPages]);
+  const prevPage = useCallback(() => goPageByDelta(-1), [goPageByDelta]);
+  const nextPage = useCallback(() => goPageByDelta(1), [goPageByDelta]);
+
+  const displayAt = useCallback((target) => {
+    if (!target) return false;
+    pendingDisplayRef.current = target;
+
+    const ruler = rulerRef.current;
+    const pageHeightPx = layoutReady ? pageHeight : containerRef.current?.clientHeight ?? 0;
+    const locator = normalizeLocatorTarget(target);
+    if (!ruler || !(pageHeightPx > 0) || !locator) return false;
+
+    const pageIdx = resolvePageIndexFromLocator({ locator, ruler, manifest, totalPages, pageHeightPx });
+    if (pageIdx == null) return false;
+
+    pendingDisplayRef.current = null;
+    setCurrentPageIndex(pageIdx);
+    return true;
+  }, [containerRef, rulerRef, layoutReady, pageHeight, totalPages, manifest]);
+
+  // 레이아웃(ruler·pageHeight) 준비되면 대기 중이던 resume displayAt 재시도
+  useLayoutEffect(() => {
+    if (pendingDisplayRef.current) displayAt(pendingDisplayRef.current);
+  }, [xhtmlContent, pageHeight, contentHeight, lineBoundsVersion, totalPages, manifest, displayAt]);
+
+  return { layoutReady, totalPages, pageIndex, currentPage: pageIndex + 1, prevPage, nextPage, displayAt };
+}
+
+/** 책 자체 CSS(@scope로 본문에 한정) + 뷰어 설정(여백·글꼴 크기·줄 간격·글꼴) */
+function ViewerContentStyle({ styleCss, settings, padding }) {
+  return (
+    <>
+      {styleCss ? <style>{`@scope (.xhtml-viewer-content) {\n${styleCss}\n}`}</style> : null}
+      <style>{`
+          .xhtml-viewer-content {
+            padding: ${padding.padding}px;
+            padding-bottom: ${padding.paddingBottom}px;
+            font-size: ${settings.fontSize}%;
+            line-height: ${settings.lineHeight};
+            font-family: ${viewerFontStack(settings.fontFamily)};
+          }
+        `}</style>
+    </>
+  );
+}
+
+/** settings는 normalizeSettings를 거친 값 (ViewerPage) */
 const XhtmlViewer = forwardRef(
   (
     {
@@ -45,12 +410,12 @@ const XhtmlViewer = forwardRef(
       onCurrentPageChange,
       onTotalPagesChange,
       onCurrentLineChange,
-      settings = defaultSettings,
-      manifestReady = true,
+      settings,
+      manifestReady,
       /** resume 점프 전 본문 깜빡임 방지(레이아웃·ruler는 유지) */
-      suppressViewport = false,
-      suppressMessage = '로딩 중…',
-      onToggleChrome = null,
+      suppressViewport,
+      suppressMessage,
+      onToggleChrome,
     },
     ref
   ) => {
@@ -58,318 +423,48 @@ const XhtmlViewer = forwardRef(
     const viewportRef = useRef(null);
     const contentRef = useRef(null);
     const rulerRef = useRef(null);
-    const pendingDisplayRef = useRef(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
-    const [xhtmlContent, setXhtmlContent] = useState(null);
-    const [pageHeight, setPageHeight] = useState(0);
-    const [contentHeight, setContentHeight] = useState(0);
-    const [currentPageIndex, setCurrentPageIndex] = useState(0);
-    const touchStartX = useRef(0);
-    const touchStartY = useRef(0);
-    const suppressClickRef = useRef(false);
-    const wheelLockRef = useRef(false);
-    const lastLocatorRef = useRef(null);
-    const lastEmittedViewportLocatorJsonRef = useRef(null);
-    const prevBidRef = useRef(null);
-    const lineBoundsRef = useRef([]);
-    const [lineBoundsVersion, setLineBoundsVersion] = useState(0);
-    const lastReportedPagingRef = useRef({
-      totalPages: null,
-      currentPage: null,
-    });
-
-    const getSnappedOffsetAndHeight = useCallback((pageIdx, pageHeightPx) => {
-      const targetY = pageIdx * pageHeightPx;
-      const lines = lineBoundsRef.current;
-      if (!lines.length) return { offsetY: Math.max(0, targetY), visibleHeight: pageHeightPx };
-      let offsetY = 0;
-      for (let i = lines.length - 1; i >= 0; i--) {
-        if (lines[i].top <= targetY) {
-          offsetY = lines[i].top;
-          break;
-        }
-      }
-      const endY = offsetY + pageHeightPx;
-      let visibleEnd = endY;
-      for (let j = lines.length - 1; j >= 0; j--) {
-        if (lines[j].bottom <= endY) {
-          visibleEnd = lines[j].bottom;
-          break;
-        }
-      }
-      const visibleHeight = Math.min(pageHeightPx, Math.max(0, visibleEnd - offsetY)) || pageHeightPx;
-      return { offsetY, visibleHeight };
-    }, []);
-
-    const layoutReady = typeof pageHeight === 'number' && pageHeight > 0;
-    const totalPages = Math.max(1, layoutReady ? Math.ceil(contentHeight / pageHeight) : 1);
-    // 레이아웃 붕괴(전체화면 그래프 등) 시 페이지 인덱스를 0으로 클램프하지 않음
-    const safePageIndex = layoutReady
-      ? Math.min(Math.max(0, currentPageIndex), Math.max(0, totalPages - 1))
-      : currentPageIndex;
-    const currentPage = safePageIndex + 1;
-
-    const currentSnap = useMemo(
-      () => getSnappedOffsetAndHeight(safePageIndex, pageHeight || 1),
-      // lineBoundsVersion: getSnappedOffsetAndHeight가 ref로 읽는 줄 경계가 바뀌면 재계산
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-      [getSnappedOffsetAndHeight, safePageIndex, pageHeight, lineBoundsVersion]
-    );
-
-    const contentHtml = useMemo(() => (xhtmlContent ? { __html: xhtmlContent.bodyHTML } : { __html: '' }), [xhtmlContent]);
-
-    // 본문 DOM은 xhtmlContent가 바뀔 때만 교체됨 — 페이지마다 블록 전체를 다시 querySelectorAll 하지 않음
-    const blockEntriesCacheRef = useRef({ root: null, content: null, entries: [] });
-    const viewportStyle = useMemo(
-      () => ({ height: currentSnap.visibleHeight || '100%', overflow: 'hidden' }),
-      [currentSnap.visibleHeight]
-    );
-    const contentStyle = useMemo(
-      () => ({ transform: `translateY(-${currentSnap.offsetY}px)` }),
-      [currentSnap.offsetY]
-    );
 
     const bid = useMemo(() => resolveViewerBookKey(book, bookKey), [book, bookKey]);
-
     const manifest = useMemo(() => {
       const cacheId = resolveServerBookId(book, bid);
-      if (!cacheId) return null;
-      return getManifestFromCache(cacheId);
+      return cacheId ? getManifestFromCache(cacheId) : null;
     }, [book, bid]);
+    const contentPadding = useMemo(() => contentPaddingFromMargin(settings.margin), [settings.margin]);
+    const typographyKey =
+      `${contentPadding.padding}|${settings.fontSize}|${settings.lineHeight}|${settings.fontFamily}`;
 
-    const contentPadding = useMemo(
-      () => contentPaddingFromMargin(settings?.margin ?? defaultSettings.margin),
-      [settings?.margin]
+    const { loading, error, xhtmlContent } = useXhtmlContent(bid, manifestReady);
+    const metrics = usePageMetrics(containerRef, rulerRef, xhtmlContent, typographyKey);
+    const { pageHeight, lineBoundsRef, lineBoundsVersion, refreshLayout } = metrics;
+    const nav = usePageNavigation({ containerRef, rulerRef, metrics, manifest, xhtmlContent });
+    const { layoutReady, totalPages, pageIndex, currentPage, prevPage, nextPage, displayAt } = nav;
+
+    const currentSnap = useMemo(
+      () => snapPageToLineBounds(lineBoundsRef.current, pageIndex, pageHeight || 1),
+      // lineBoundsVersion: ref로 읽는 줄 경계가 바뀌면 재계산
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      [pageIndex, pageHeight, lineBoundsVersion]
     );
 
-    const recomputeLineBounds = useCallback(() => {
-      const ruler = rulerRef.current;
-      if (!ruler) return;
-      lineBoundsRef.current = computeLineBoundsFromRuler(ruler);
-      setLineBoundsVersion((v) => v + 1);
-    }, []);
+    const contentHtml = useMemo(() => ({ __html: xhtmlContent?.bodyHTML ?? '' }), [xhtmlContent]);
 
-    const refreshContentHeight = useCallback(() => {
-      const ruler = rulerRef.current;
-      if (!ruler) return;
-      setContentHeight((prev) => {
-        const next = ruler.offsetHeight;
-        return prev === next ? prev : next;
-      });
-    }, []);
+    useReportPaging(layoutReady, totalPages, currentPage, onTotalPagesChange, onCurrentPageChange);
 
-    useEffect(() => {
-      if (prevBidRef.current === bid) return;
-      prevBidRef.current = bid;
-      lastEmittedViewportLocatorJsonRef.current = null;
-      lastLocatorRef.current = null;
-    }, [bid]);
-
-    useEffect(() => {
-      if (!xhtmlContent) return;
-      lastEmittedViewportLocatorJsonRef.current = null;
-    }, [xhtmlContent]);
-
-    useEffect(() => {
-      if (currentPageIndex === safePageIndex) return;
-      if (!layoutReady) return;
-      setCurrentPageIndex(safePageIndex);
-    }, [currentPageIndex, safePageIndex, layoutReady]);
-
-    const emitLocator = useCallback(
-      (loc) => {
-        if (!loc?.startLocator) return;
-        const endForKey = loc.endLocator ?? loc.startLocator;
-        const viewportKey = toReadingLocatorKey(loc.startLocator, endForKey);
-        if (viewportKey === lastEmittedViewportLocatorJsonRef.current) return;
-
-        lastEmittedViewportLocatorJsonRef.current = viewportKey;
-        lastLocatorRef.current = loc;
-        onCurrentLineChange?.({ anchor: loc });
-      },
-      [onCurrentLineChange]
-    );
-
-    useEffect(() => {
-      let cancelled = false;
-      const load = async () => {
-        if (!bid) {
-          setError('책 정보가 없습니다.');
-          setLoading(false);
-          return;
-        }
-        if (!manifestReady) {
-          setLoading(true);
-          setError(null);
-          return;
-        }
-        setLoading(true);
-        setError(null);
-        try {
-          const parsed = await loadCachedXhtmlContent(bid, loadCombinedXhtml, parseXhtmlBody);
-          if (cancelled) return;
-          setXhtmlContent(parsed);
-        } catch (e) {
-          if (!cancelled) {
-            errorUtils.logError('XhtmlViewer', e, { bookId: bid });
-            setError(
-              e?.status === 404
-                ? '정규화 본문을 찾을 수 없습니다. 잠시 후 다시 시도하거나 재정규화가 필요할 수 있습니다.'
-                : errorUtils.getUserFriendlyMessage(e) || e?.message || '로드 실패'
-            );
-          }
-        } finally {
-          if (!cancelled) setLoading(false);
-        }
-      };
-      load();
-      return () => { cancelled = true; };
-    }, [bid, manifestReady]);
-
-    useEffect(() => {
-      const container = containerRef.current;
-      if (!container) return;
-      const ro = new ResizeObserver(() => {
-        const next = container.clientHeight;
-        setPageHeight((prev) => (prev === next ? prev : next));
-      });
-      ro.observe(container);
-      setPageHeight((prev) => {
-        const next = container.clientHeight;
-        return prev === next ? prev : next;
-      });
-      return () => ro.disconnect();
-    }, [xhtmlContent]);
-
-    useEffect(() => {
-      const ruler = rulerRef.current;
-      if (!ruler) return;
-      refreshContentHeight();
-      const ro = new ResizeObserver(() => refreshContentHeight());
-      ro.observe(ruler);
-      return () => ro.disconnect();
-    }, [xhtmlContent, contentPadding.padding, settings?.fontSize, settings?.lineHeight, settings?.fontFamily, refreshContentHeight]);
-
-    useLayoutEffect(() => {
-      if (!xhtmlContent || !rulerRef.current) return;
-      recomputeLineBounds();
-    }, [xhtmlContent, contentHeight, settings?.fontSize, settings?.lineHeight, settings?.fontFamily, contentPadding.padding, recomputeLineBounds]);
-
-    useEffect(() => {
-      if (!layoutReady) return;
-      const prev = lastReportedPagingRef.current;
-      if (prev.totalPages !== totalPages) {
-        onTotalPagesChange?.(totalPages);
-      }
-      if (prev.currentPage !== currentPage) {
-        onCurrentPageChange?.(currentPage);
-      }
-      lastReportedPagingRef.current = { totalPages, currentPage };
-    }, [
-      totalPages,
-      currentPage,
-      layoutReady,
-      onTotalPagesChange,
-      onCurrentPageChange,
-    ]);
-
-    useEffect(() => {
-      if (!xhtmlContent || !contentRef.current || !viewportRef.current) return;
-      if (!layoutReady) return;
-
-      const cache = blockEntriesCacheRef.current;
-      if (cache.root !== contentRef.current || cache.content !== xhtmlContent) {
-        blockEntriesCacheRef.current = {
-          root: contentRef.current,
-          content: xhtmlContent,
-          entries: collectBlockEntries(contentRef.current),
-        };
-      }
-
-      const result = resolveViewportLocatorEmit({
-        blockEntries: blockEntriesCacheRef.current.entries,
-        viewportRect: viewportRef.current.getBoundingClientRect(),
-        rulerRoot: rulerRef.current,
-        manifest,
-        currentPageIndex: safePageIndex,
-        totalPages,
-        pageHeight,
-        snapOffsetY: currentSnap.offsetY,
-        snapVisibleHeight: currentSnap.visibleHeight,
-        prevStartLocator: lastLocatorRef.current?.startLocator ?? null,
-      });
-
-      if (result.kind !== 'emit') return;
-      emitLocator(result.loc);
-    }, [
+    const lastLocatorRef = useViewportLocator({
+      bid,
       xhtmlContent,
-      safePageIndex,
-      totalPages,
-      emitLocator,
       layoutReady,
-      pageHeight,
-      currentSnap.offsetY,
-      currentSnap.visibleHeight,
-      lineBoundsVersion,
+      contentRef,
+      viewportRef,
+      rulerRef,
       manifest,
-    ]);
-
-    const resolvePageHeight = useCallback(() => {
-      if (layoutReady) return pageHeight;
-      return containerRef.current?.clientHeight ?? 0;
-    }, [layoutReady, pageHeight]);
-
-    const goPageByDelta = useCallback((delta) => {
-      if (!delta) return;
-      setCurrentPageIndex((i) => {
-        const next = i + delta;
-        if (next < 0 || next >= totalPages) return i;
-        return next;
-      });
-    }, [totalPages]);
-
-    const prevPage = useCallback(() => goPageByDelta(-1), [goPageByDelta]);
-    const nextPage = useCallback(() => goPageByDelta(1), [goPageByDelta]);
-
-    const displayAt = useCallback((target) => {
-      if (!target) return false;
-      pendingDisplayRef.current = target;
-
-      const ruler = rulerRef.current;
-      if (!ruler) return false;
-
-      const pageHeightPx = resolvePageHeight();
-      if (!(pageHeightPx > 0)) return false;
-
-      const locator = normalizeLocatorTarget(target);
-      if (!locator) return false;
-
-      const pageIdx = resolvePageIndexFromLocator({
-        locator,
-        ruler,
-        manifest,
-        totalPages,
-        pageHeightPx,
-      });
-      if (pageIdx == null) return false;
-
-      pendingDisplayRef.current = null;
-      setCurrentPageIndex(pageIdx);
-      return true;
-    }, [resolvePageHeight, totalPages, manifest]);
-
-    // 레이아웃(ruler·pageHeight) 준비되면 대기 중이던 resume displayAt 재시도
-    useLayoutEffect(() => {
-      const pending = pendingDisplayRef.current;
-      if (!pending) return;
-      displayAt(pending);
-    }, [xhtmlContent, pageHeight, contentHeight, lineBoundsVersion, totalPages, manifest, displayAt]);
-
-    const refreshLayout = useCallback(() => {
-      recomputeLineBounds();
-      refreshContentHeight();
-    }, [recomputeLineBounds, refreshContentHeight]);
+      pageIndex,
+      totalPages,
+      pageHeight,
+      snap: currentSnap,
+      lineBoundsVersion,
+      onCurrentLineChange,
+    });
 
     useImperativeHandle(ref, () => ({
       prevPage,
@@ -377,104 +472,25 @@ const XhtmlViewer = forwardRef(
       getCurrentLocator: () => lastLocatorRef.current,
       moveToProgress: (pct) => {
         const numericBid = Number(bid);
-        if (!Number.isFinite(numericBid) || numericBid <= 0) return false;
-        const abs = absoluteOffsetFromReadingProgressPercent(numericBid, pct);
-        const loc = locatorFromBookAbsoluteOffset(numericBid, abs);
-        if (!loc) return false;
-        return displayAt({ startLocator: loc, endLocator: loc });
+        if (!(numericBid > 0)) return false;
+        const loc = locatorFromBookAbsoluteOffset(
+          numericBid,
+          absoluteOffsetFromReadingProgressPercent(numericBid, pct),
+        );
+        return loc ? displayAt({ startLocator: loc, endLocator: loc }) : false;
       },
       displayAt,
       refreshLayout,
-    }), [prevPage, nextPage, displayAt, refreshLayout, bid]);
+    }), [prevPage, nextPage, displayAt, refreshLayout, bid, lastLocatorRef]);
 
-    const handleKeyDown = useCallback((e) => {
-      if (e.target.closest('input, textarea, [contenteditable]')) return;
-      if (e.key === 'ArrowUp' || e.key === 'PageUp') {
-        e.preventDefault();
-        prevPage();
-        return;
-      }
-      if (e.key === 'ArrowDown' || e.key === 'PageDown') {
-        e.preventDefault();
-        nextPage();
-        return;
-      }
-      if (e.key === 'ArrowLeft') { e.preventDefault(); prevPage(); return; }
-      if (e.key === 'ArrowRight') { e.preventDefault(); nextPage(); }
-    }, [prevPage, nextPage]);
-
-    const WHEEL_COOLDOWN_MS = 280;
-    useEffect(() => {
-      const el = containerRef.current;
-      if (!el) return undefined;
-      const onWheel = (e) => {
-        e.preventDefault();
-        if (suppressViewport || wheelLockRef.current) return;
-        const absY = Math.abs(e.deltaY);
-        const absX = Math.abs(e.deltaX);
-        if (absY < 8 && absX < 8) return;
-        const delta = absY >= absX ? e.deltaY : e.deltaX;
-        if (!delta) return;
-        wheelLockRef.current = true;
-        if (delta > 0) nextPage();
-        else prevPage();
-        window.setTimeout(() => {
-          wheelLockRef.current = false;
-        }, WHEEL_COOLDOWN_MS);
-      };
-      el.addEventListener('wheel', onWheel, { passive: false });
-      return () => el.removeEventListener('wheel', onWheel);
-    }, [nextPage, prevPage, suppressViewport, xhtmlContent]);
-
-    const resolveTapAction = useCallback((clientX) => {
-      const el = containerRef.current;
-      if (!el) return 'chrome';
-      const { left, width } = el.getBoundingClientRect();
-      if (!(width > 0)) return 'chrome';
-      const ratio = (clientX - left) / width;
-      if (ratio < TAP_ZONE_EDGE) return 'prev';
-      if (ratio > 1 - TAP_ZONE_EDGE) return 'next';
-      return 'chrome';
-    }, []);
-
-    const handleTouchStart = useCallback((e) => {
-      const t = e.touches?.[0];
-      if (!t) return;
-      touchStartX.current = t.clientX;
-      touchStartY.current = t.clientY;
-    }, []);
-    const handleTouchEnd = useCallback((e) => {
-      const t = e.changedTouches?.[0];
-      if (!t) return;
-      const dx = t.clientX - touchStartX.current;
-      const dy = t.clientY - touchStartY.current;
-      if (Math.abs(dx) >= SWIPE_THRESHOLD && Math.abs(dx) > Math.abs(dy)) {
-        suppressClickRef.current = true;
-        if (dx > 0) prevPage();
-        else nextPage();
-        return;
-      }
-      if (Math.abs(dx) <= TAP_SLOP_PX && Math.abs(dy) <= TAP_SLOP_PX) {
-        suppressClickRef.current = true;
-        if (suppressViewport) return;
-        const action = resolveTapAction(t.clientX);
-        if (action === 'prev') prevPage();
-        else if (action === 'next') nextPage();
-        else onToggleChrome?.();
-      }
-    }, [nextPage, onToggleChrome, prevPage, resolveTapAction, suppressViewport]);
-
-    const handleClick = useCallback((e) => {
-      if (suppressClickRef.current) {
-        suppressClickRef.current = false;
-        return;
-      }
-      if (suppressViewport) return;
-      const action = resolveTapAction(e.clientX);
-      if (action === 'prev') prevPage();
-      else if (action === 'next') nextPage();
-      else onToggleChrome?.();
-    }, [nextPage, onToggleChrome, prevPage, resolveTapAction, suppressViewport]);
+    const pagingHandlers = usePagingInput({
+      containerRef,
+      prevPage,
+      nextPage,
+      suppressViewport,
+      onToggleChrome,
+      xhtmlContent,
+    });
 
     if (loading) {
       return (
@@ -492,10 +508,6 @@ const XhtmlViewer = forwardRef(
     }
     if (!xhtmlContent) return null;
 
-    const { styleCss } = xhtmlContent;
-    const baseFontSize = settings?.fontSize ?? 100;
-    const lineHeight = settings?.lineHeight ?? 1.5;
-
     return (
       <div
         ref={containerRef}
@@ -504,32 +516,27 @@ const XhtmlViewer = forwardRef(
         role="region"
         aria-label={`책 본문 뷰어, ${currentPage} / ${totalPages} 페이지`}
         aria-busy={suppressViewport || undefined}
-        onKeyDown={handleKeyDown}
-        onClick={handleClick}
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
+        onKeyDown={pagingHandlers.handleKeyDown}
+        onClick={pagingHandlers.handleClick}
+        onTouchStart={pagingHandlers.handleTouchStart}
+        onTouchEnd={pagingHandlers.handleTouchEnd}
       >
-        {styleCss ? (
-          <style>{`@scope (.xhtml-viewer-content) {\n${styleCss}\n}`}</style>
-        ) : null}
-        <style>{`
-          .xhtml-viewer-content {
-            padding: ${contentPadding.padding}px;
-            padding-bottom: ${contentPadding.paddingBottom}px;
-            font-size: ${baseFontSize}%;
-            line-height: ${lineHeight};
-            font-family: ${viewerFontStack(settings?.fontFamily)};
-          }
-        `}</style>
+        <ViewerContentStyle styleCss={xhtmlContent.styleCss} settings={settings} padding={contentPadding} />
         <div ref={rulerRef} className="xhtml-viewer-ruler xhtml-viewer-content" dangerouslySetInnerHTML={contentHtml} aria-hidden />
         <div
           ref={viewportRef}
           style={{
-            ...viewportStyle,
+            height: currentSnap.visibleHeight || '100%',
+            overflow: 'hidden',
             visibility: suppressViewport ? 'hidden' : undefined,
           }}
         >
-          <div ref={contentRef} className="xhtml-viewer-content" style={contentStyle} dangerouslySetInnerHTML={contentHtml} />
+          <div
+            ref={contentRef}
+            className="xhtml-viewer-content"
+            style={{ transform: `translateY(-${currentSnap.offsetY}px)` }}
+            dangerouslySetInnerHTML={contentHtml}
+          />
         </div>
         {suppressViewport ? (
           <div className="xhtml-viewer-suppress" role="status" aria-live="polite">

@@ -1,4 +1,4 @@
-/** relationship-deltas HTTP (누적·매크로 그래프 응답은 graphModel 8번 섹션) */
+/** relationship-deltas HTTP (누적·매크로 그래프 응답은 graphMacro) */
 
 import { toNumberOrNull, toTrimmedStringOrNull, asArray } from '../common/valueUtils';
 import {
@@ -6,15 +6,7 @@ import {
   SOFT_FAIL_403_404,
   requireBookId,
   pickResponseResult,
-} from './authApi';
-
-/** API/캐시 로드 결과 계약 — UI 뷰 상태(no-data 등)와 분리 */
-export const FETCH_STATUS = Object.freeze({
-  OK: 'ok',
-  /** 요청 성공·payload 없음 (관계 없음 등). UI 'no-data'와 다름 */
-  EMPTY: 'empty',
-  ERROR: 'error',
-});
+} from './client';
 
 /** characters 또는 relations가 하나라도 있으면 true */
 export const hasGraphPayload = (data) => {
