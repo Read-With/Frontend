@@ -108,7 +108,8 @@ function tagOAuthError(error, tags = {}) {
   return err;
 }
 
-const EXCHANGE_TIMEOUT_MS = 30000;
+// timeout은 재시도하지 않으므로 콜드 스타트(최대 1분 안팎)를 한 번의 요청 안에 기다림
+const EXCHANGE_TIMEOUT_MS = 90000;
 
 /** 서버 응답(user + 토큰) → AuthProvider.login 형식 */
 function toFrontendUser(result) {
@@ -197,16 +198,19 @@ async function exchangeGoogleAuthCode(code) {
   }
 }
 
+// timeout·504는 제외: 서버가 요청을 받아 code를 이미 소비했을 수 있음
 const isServerNotReady = (err) =>
-  err?.phase === 'network' || err?.phase === 'timeout' || [502, 503, 504].includes(err?.status);
+  err?.phase === 'network' || [502, 503].includes(err?.status);
 
-/** 서버가 깨어날 때까지 무한 재시도 (code를 서버가 아직 소비하지 않은 실패만). 취소되면 null */
+const MAX_EXCHANGE_ATTEMPTS = 30; // 대기 최대 5초씩 → 콜드 스타트 약 2분까지
+
+/** 서버가 깨어날 때까지 재시도 (code를 서버가 아직 소비하지 않은 실패만). 취소되면 null */
 async function exchangeWithRetry(code, isCancelled) {
   for (let attempt = 1; ; attempt += 1) {
     try {
       return await exchangeGoogleAuthCode(code);
     } catch (err) {
-      if (isCancelled() || !isServerNotReady(err)) throw err;
+      if (isCancelled() || !isServerNotReady(err) || attempt >= MAX_EXCHANGE_ATTEMPTS) throw err;
       await sleep(Math.min(1000 * attempt, 5000));
       if (isCancelled()) return null;
     }

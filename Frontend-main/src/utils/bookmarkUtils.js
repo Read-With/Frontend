@@ -204,7 +204,7 @@ export const colorOptions = [
   { key: 'highlight', label: '강조', color: bookmarkColors.highlight, border: bookmarkBorders.highlight },
 ];
 
-const normalizeBookmarkColor = (color) => {
+export const normalizeBookmarkColor = (color) => {
   if (typeof color !== 'string') return DEFAULT_BOOKMARK_COLOR;
   const trimmed = color.trim().toLowerCase();
   return trimmed || DEFAULT_BOOKMARK_COLOR;

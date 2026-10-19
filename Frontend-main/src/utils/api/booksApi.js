@@ -38,6 +38,7 @@ import {
 import { setManifestData, getManifestFromCache } from '../common/cache/manifestCache';
 import { withInflight } from '../common/cache/cacheManager';
 import { normalizeV2Book } from '../common/bookNormalize';
+import { normalizeBookmarkColor } from '../bookmarkUtils';
 
 /** PATCH /v2/bookmarks 로 수정 가능한 필드 */
 const BOOKMARK_UPDATABLE_FIELDS = Object.freeze(['color', 'memo']);
@@ -288,7 +289,7 @@ export const createBookmark = async (bookmarkData) => {
     const dataToSend = {
       bookId: normalizedBookId,
       startLocator,
-      color: bookmarkData.color, // 기본 색은 createBookmarkData가 채움
+      color: normalizeBookmarkColor(bookmarkData.color),
       memo: bookmarkData.memo ?? '',
     };
     if (endLocator) {
@@ -401,15 +402,16 @@ export const saveProgress = async (progressData) => {
   }
 };
 
+/** 요청을 만들지 못하면 null, 보냈으면 서버 저장 성공 여부로 resolve되는 Promise (페이지가 닫히면 resolve 안 될 수 있음) */
 export const saveProgressKeepalive = (progressData) => {
   try {
     const payload = buildProgressSavePayload(progressData);
-    if (!payload) return false;
+    if (!payload) return null;
     const token = getStoredAccessToken();
     // pagehide에서는 refresh를 await할 수 없음 — 유효 토큰일 때만 전송
-    if (!token || !isTokenValid(token)) return false;
+    if (!token || !isTokenValid(token)) return null;
 
-    fetch(`${getApiBaseUrl()}/api/v2/progress`, {
+    return fetch(`${getApiBaseUrl()}/api/v2/progress`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -417,11 +419,9 @@ export const saveProgressKeepalive = (progressData) => {
       },
       body: JSON.stringify(payload),
       keepalive: true,
-    }).catch(() => void 0);
-
-    return true;
+    }).then((res) => res.ok, () => false);
   } catch {
-    return false;
+    return null;
   }
 };
 

@@ -19,8 +19,22 @@ const KEY_REFRESH = 'refreshToken';
 const KEY_GOOGLE_USER = 'google_user';
 
 let memoryAccessToken = null;
+let legacyAccessMigrated = false;
+
+/** 예전 버전이 localStorage에 둔 액세스 토큰 → sessionStorage로 옮기고 삭제 (한 번만). sessionStorage에 더 새 토큰이 있으면 그것을 유지 */
+function migrateLegacyAccessFromLocalStorage() {
+  if (legacyAccessMigrated) return;
+  legacyAccessMigrated = true;
+  const fromLs = readRaw(KEY_ACCESS);
+  if (!fromLs) return;
+  removeKeys('localStorage', KEY_ACCESS);
+  if (!readRaw(KEY_SESSION_ACCESS, 'sessionStorage')) {
+    writeRaw(KEY_SESSION_ACCESS, fromLs, 'sessionStorage');
+  }
+}
 
 export function getStoredAccessToken() {
+  migrateLegacyAccessFromLocalStorage();
   if (memoryAccessToken) return memoryAccessToken;
   const fromSs = readRaw(KEY_SESSION_ACCESS, 'sessionStorage');
   if (fromSs) {

@@ -178,7 +178,10 @@ function useMobilePane(showGraph, isNarrow) {
   return [mobilePane, setMobilePane];
 }
 
-/** 레이아웃이 바뀌면 전환 애니메이션 뒤 resize 이벤트 + (본문이 보이면) 위치 복원 콜백. 첫 렌더는 생략 */
+/**
+ * 레이아웃이 바뀌면 전환 애니메이션 뒤 resize 이벤트 + (본문이 보이면) 위치 복원 콜백. 첫 렌더는 생략.
+ * resize 이벤트는 크기 변화 없이 위치만 바뀐 그래프 패널의 cytoscape 좌표 캐시를 무효화 (ResizeObserver는 위치 이동을 감지 못함)
+ */
 function useLayoutSettle(layoutKey, readerVisible, onSettled) {
   const skipInitialRef = useRef(true);
   const onSettledRef = useLatestRef(onSettled);

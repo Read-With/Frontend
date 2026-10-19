@@ -34,11 +34,14 @@ function settle(resolve, result) {
 }
 
 /** pagehide / beforeunload / visibility hidden 공통 구독 */
-function subscribePageExit(onExit, { onHidden } = {}) {
+function subscribePageExit(onExit, { onHidden, onVisible } = {}) {
   const onVisibility = () => {
-    if (document.visibilityState !== 'hidden') return;
-    onHidden?.();
-    onExit();
+    if (document.visibilityState !== 'hidden') {
+      onVisible?.();
+      return;
+    }
+    // 토큰 갱신을 기다린 뒤 저장 (토큰이 유효하면 바로 진행)
+    Promise.resolve(onHidden?.()).finally(onExit);
   };
   window.addEventListener('pagehide', onExit);
   window.addEventListener('beforeunload', onExit);
@@ -243,23 +246,31 @@ export function useProgressAutoSave({
       refreshLatestPayload();
       const payload = latestPayloadRef.current;
       if (!payload) return;
+      // 이미 저장된 진도와 같으면 보내지 않음 (탭 전환마다 중복 저장 방지)
+      if (payloadFingerprint(payload) === lastPayloadRef.current) return;
 
       pagehideFlushedRef.current = true;
       applyLocalCaches(payload, latestLocationPayloadRef.current);
-      const ok = saveProgressKeepalive(payload);
-      if (ok) {
-        lastPayloadRef.current = payloadFingerprint(payload);
-      } else {
+      const sent = saveProgressKeepalive(payload);
+      if (!sent) {
         errorUtils.logWarning(
           `${LOG_PREFIX} keepalive 저장 요청 생성 실패`,
           String(liveRef.current.bookId ?? ''),
         );
+        return;
       }
+      // 서버 저장이 확인된 뒤에만 저장됨으로 기록 (실패하면 다음 자동 저장이 다시 보냄)
+      const payloadKey = payloadFingerprint(payload);
+      void sent.then((ok) => {
+        if (ok) lastPayloadRef.current = payloadKey;
+      });
     };
 
     const unsubscribe = subscribePageExit(handlePageHide, {
-      onHidden: () => {
-        void ensureSessionAccessToken();
+      onHidden: ensureSessionAccessToken,
+      // 다시 보이면 이후 숨김/종료 때 keepalive를 또 보낼 수 있게
+      onVisible: () => {
+        pagehideFlushedRef.current = false;
       },
     });
     return () => {

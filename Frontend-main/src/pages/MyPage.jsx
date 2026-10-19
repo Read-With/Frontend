@@ -43,10 +43,11 @@ function Header({ displayName }) {
   const navigate = useNavigate();
   const { logout } = useAuth();
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   const handleLogoutConfirm = async () => {
-    await logout();
-    setShowLogoutConfirm(false);
+    setLoggingOut(true);
+    await logout(); // 실패해도 throw하지 않고 로컬 인증만 정리
     navigate('/');
   };
 
@@ -68,6 +69,7 @@ function Header({ displayName }) {
         title="로그아웃"
         message="정말 로그아웃 하시겠습니까?"
         confirmLabel="로그아웃"
+        busy={loggingOut}
         onConfirm={handleLogoutConfirm}
         onClose={() => setShowLogoutConfirm(false)}
       />

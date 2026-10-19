@@ -181,16 +181,17 @@ export function useServerBookMatching(bookId, options = {}) {
 
   const matchQuery = useQuery({
     queryKey: ['canonicalBook', titleKey, authorKey],
+    // 실패는 throw → null로 캐시하지 않고 다음 마운트 때 다시 시도.
+    // 즉시 재시도·재연결 시 재요청은 안 함: 늦게 성공하면 읽는 중에 리다이렉트되어 위치가 초기화됨
     queryFn: async () => {
-      try {
-        let books = queryClient.getQueryData(BOOKS_QUERY_KEY)?.books;
-        if (!Array.isArray(books)) books = await getBooksArray();
-        return findCanonicalBook(books, titleKey, authorKey);
-      } catch {
-        return null;
-      }
+      let books = queryClient.getQueryData(BOOKS_QUERY_KEY)?.books;
+      if (!Array.isArray(books)) books = await getBooksArray();
+      if (!Array.isArray(books)) throw new Error('도서 목록을 불러오지 못했습니다');
+      return findCanonicalBook(books, titleKey, authorKey);
     },
     enabled: canMatch,
+    retry: false,
+    refetchOnReconnect: false,
   });
   const matchedServerBook = canMatch ? matchQuery.data ?? null : null;
 

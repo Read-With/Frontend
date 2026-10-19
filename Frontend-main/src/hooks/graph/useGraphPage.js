@@ -134,7 +134,7 @@ export function useChapterTitleMeta(serverBookId, currentChapter, manifestData) 
 
   const chapterMeta = useMemo(() => {
     const ch =
-      serverBookId != null ? getChapterData(serverBookId, currentChapter) : null;
+      serverBookId != null ? getChapterData(serverBookId, currentChapter, manifestData) : null;
     if (!Number.isFinite(Number(currentChapter)) || Number(currentChapter) < 1) {
       return { chapterDisplayLabel: formatChapterOrdinalLabel(null), chapterTitleTooltip: undefined };
     }
@@ -149,7 +149,7 @@ export function useChapterTitleMeta(serverBookId, currentChapter, manifestData) 
       chapterDisplayLabel: displayName || formatChapterOrdinalLabel(currentChapter),
       chapterTitleTooltip: meta.raw || meta.tooltip || undefined,
     };
-  }, [serverBookId, currentChapter, bookTitle]);
+  }, [serverBookId, currentChapter, bookTitle, manifestData]);
 
   return { bookTitle, chapterMeta };
 }
