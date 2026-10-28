@@ -1,15 +1,14 @@
-# Render 무료 플랜은 15분 무요청 시 슬립(콜드 스타트 50~90초) → 주기적으로 /health 핑
+# Render 무료 플랜 슬립(15분 무요청 시 콜드 스타트 50~90초) 방지 및 수동 헬스체크
+# 주기적 호출은 GitHub Actions 스케줄러 지연 문제로 외부 Cron 서비스(Cron-job.org 등)에서 워크플로우 API 트리거 또는 직접 호출로 대체
 name: Keep backend warm
 
 on:
-  schedule:
-    - cron: "*/5 * * * *"
   workflow_dispatch:
 
 jobs:
   ping:
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: 5
     steps:
       - name: Ping health endpoint with retry
         run: |
